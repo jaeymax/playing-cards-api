@@ -1,6 +1,7 @@
 interface Person{
-   lastname:string,
-   firstname:string,
+   username:string,
+   phone:string,
    email:string,
    password:string,
+   country:string,
 }
