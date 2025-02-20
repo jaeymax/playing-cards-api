@@ -6,7 +6,7 @@ const router = Router();
 
 router.post('/create', createGame);
 
-router.post('/join', joinGame);
+router.get('/join', joinGame); 
 
 
 
