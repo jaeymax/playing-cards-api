@@ -18,10 +18,10 @@ jobs:
       - name: Run tests
         run: npm test
 
-  # deploy:
-  #   needs: build-and-test
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Deploy to server
-  #       run: |
-  #         ssh user@your-server "cd /path/to/app && git pull && npm install && pm2 restart server"
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        run: |
+          curl -X POST "https://api.render.com/deploy/${{ secrets.RENDER_SERVICE_ID }}?key=${{ secrets.RENDER_API_KEY }}"
