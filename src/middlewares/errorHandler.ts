@@ -1,19 +1,24 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from "express";
 
 interface HttpError extends Error {
-    status?: number;
+  status?: number;
 }
 
-const errorHandler = (err: HttpError, req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || 500;
-    const message = err.message || 'Internal Server Error';
+const errorHandler = (
+  err: HttpError,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  const message = err.message || "Internal Server Error";
 
-    res.status(status).json({
-        status,
-        message,
-    });
+  res.status(statusCode).json({
+    message,
+    stack: process.env.NODE_ENV === "production" ? "🥞" : err.stack,
+  });
 
-    next();
+  next();
 };
 
 export default errorHandler;
