@@ -88,7 +88,7 @@ app.use(errorHandler);
 // Websocket's connection to the server to allow bidirectional communication
 const serverSocket = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });

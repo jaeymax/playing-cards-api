@@ -9,8 +9,8 @@ interface AuthRequest extends Request {
 }
 
 const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
-  console.log('request', req.user);
-  
+  console.log("request", req.user);
+
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -36,4 +36,38 @@ const updateUserProfile = async (req: Request, res: Response) => {
   res.status(200).json({ message: "update user profile controller" });
 };
 
-export { getUserProfile, updateUserProfile };
+const getUsers = asyncHandler(async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const offset = (page - 1) * limit;
+
+  const users = await sql`
+    SELECT 
+      id, 
+      username, 
+      image_url, 
+      rating, 
+      location, 
+      games_played, 
+      games_won, 
+      created_at
+    FROM users
+    ORDER BY rating DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+
+  const totalUsers = await sql`SELECT COUNT(*) FROM users`;
+  const total = totalUsers[0].count;
+
+  res.status(200).json({
+    success: true,
+    users,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    },
+  });
+});
+
+export { getUserProfile, updateUserProfile, getUsers };
