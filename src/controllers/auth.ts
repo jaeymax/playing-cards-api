@@ -99,7 +99,7 @@ const registerUser = asyncHandler(
     }
 
     // Check if email was verified
-    const verifiedEmail = await sql`
+   /* const verifiedEmail = await sql`
       SELECT * FROM otp_verification 
       WHERE email = ${email} 
       AND verified = true
@@ -109,6 +109,8 @@ const registerUser = asyncHandler(
       res.status(400);
       throw new Error("Email not verified");
     }
+
+    */
 
     // Check if user already exists
     const existingUser =
