@@ -2,6 +2,7 @@ import express, { Express, Request, Response } from "express";
 import { neon } from "@neondatabase/serverless";
 import { Resend } from "resend";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Server } from "socket.io";
 import http from "http";
@@ -11,12 +12,13 @@ import friendsRoutes from "./routes/friends";
 import errorHandler from "./middlewares/errorHandler";
 //import notFoundMiddleware from './middlewares/notFoundMiddleware';
 import userRoutes from "./routes/users";
+import authMiddleware from "./middlewares/authMiddleware";
 
 dotenv.config();
 
 export const app: Express = express();
 const server = http.createServer(app);
-const resend = new Resend(process.env.RESEND_API_KEY);
+export const resend = new Resend(process.env.RESEND_API_KEY);
 
 const connectDB = () => {
   try {
@@ -75,6 +77,7 @@ const playCard = (playerId: any, card: any) => {};
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/game", gameRoutes);
 app.use("/api/friends", friendsRoutes);
