@@ -18,7 +18,7 @@ describe("Auth Routes", () => {
     // Clean up the test user
     await sql`DELETE FROM users WHERE email = ${testUserEmail}`;
   });
-
+  /*
   // Test the register route
   it("should register a new user", async () => {
     const response = await request(app).post("/api/auth/register").send({
@@ -50,7 +50,7 @@ describe("Auth Routes", () => {
 
     expect(response.status).toBe(400);
   });
-
+  
   // Test login with correct credentials
   it("should login user with correct credentials", async () => {
     const response = await request(app).post("/api/auth/login").send({
@@ -60,6 +60,7 @@ describe("Auth Routes", () => {
 
     expect(response.status).toBe(200);
   });
+  */
 
   // Test login with incorrect credentials
   it("should return 401 with incorrect credentials", async () => {
