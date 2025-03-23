@@ -114,7 +114,7 @@ let clients = new Set<any>();
 
 serverSocket.on("connection", (socket) => {
   console.log(`Connection established with ${socket.id}`);
-  socket.emit("message", "Hello there welcome");
+  //socket.emit("message", "Hello there welcome");
   
   clients.add(socket);
 
