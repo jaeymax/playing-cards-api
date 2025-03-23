@@ -12,7 +12,9 @@ import friendsRoutes from "./routes/friends";
 import errorHandler from "./middlewares/errorHandler";
 //import notFoundMiddleware from './middlewares/notFoundMiddleware';
 import userRoutes from "./routes/users";
+import messageRoute from './routes/messages'
 import authMiddleware from "./middlewares/authMiddleware";
+import sql from "./config/db";
 
 dotenv.config();
 
@@ -20,18 +22,6 @@ export const app: Express = express();
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
-const connectDB = () => {
-  try {
-    const sql = neon(process.env.DATABASE_URI as string);
-    console.log("connected to db");
-    return sql;
-  } catch (err) {
-    console.log(err);
-    process.exit(-1);
-  }
-};
-
-const sql = connectDB();
 
 const getUsers = async () => {
   try {
@@ -82,6 +72,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/game", gameRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/users", userRoutes);
+app.use('/api/messages', messageRoute);
 //app.use(notFoundMiddleware);
 app.use(errorHandler);
 
@@ -118,9 +109,32 @@ server.listen(port, () => {
 });
 
 // Websockets connection and all websockets event related logic
+
+let clients = new Set<any>();
+
 serverSocket.on("connection", (socket) => {
   console.log(`Connection established with ${socket.id}`);
   socket.emit("message", "Hello there welcome");
+  
+  clients.add(socket);
+
+  socket.on("message", async (message) => {
+    console.log(`Message received: ${message}`);
+
+    //store the message in global_chat_messages table
+    try {
+      await sql`insert into global_chat_messages (user_id, message) values (${message.sender_id}, ${message.text})`;
+    } catch (error:any) {
+      console.error('Error storing message:', error.message);
+    }
+   ``
+    clients.forEach((client) => {
+      if (client !== socket) {
+        client.emit("message", message);
+      }
+    });
+
+  });
 
   socket.on("create_game", () => {});
 
@@ -130,5 +144,7 @@ serverSocket.on("connection", (socket) => {
 
   socket.on("get_game_state", () => {});
 
-  socket.on("disconnect", () => {});
+  socket.on("disconnect", () => {
+    clients.delete(socket);
+    });
 });
