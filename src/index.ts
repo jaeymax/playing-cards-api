@@ -127,7 +127,7 @@ serverSocket.on("connection", (socket) => {
     } catch (error:any) {
       console.error('Error storing message:', error.message);
     }
-   ``
+   
     clients.forEach((client) => {
       if (client !== socket) {
         client.emit("message", message);
