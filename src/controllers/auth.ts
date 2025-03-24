@@ -287,7 +287,7 @@ const forgotPassword = asyncHandler(
     const user = await sql`SELECT * FROM users WHERE email = ${email}`;
     if (user.length === 0) {
       res.status(404);
-      throw new Error("User not found");
+      throw new Error("This email address is not registered. Please use a different email.");
     }
 
     // Generate reset token
@@ -326,8 +326,8 @@ const forgotPassword = asyncHandler(
 
 const resetPassword = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword) {
+    const { token, password } = req.body;
+    if (!token || !password) {
       res.status(400);
       throw new Error("Please provide all required fields");
     }
@@ -348,7 +348,7 @@ const resetPassword = asyncHandler(
 
     // Hash the new password
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     // Update user's password
     await sql`
