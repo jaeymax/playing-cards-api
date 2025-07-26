@@ -1,8 +1,9 @@
 import express from "express";
 import sql from "../config/db";
+import asyncHandler from "express-async-handler";
 const router = express.Router();
 
-router.get("/global", async (req, res) => {
+router.get("/global", asyncHandler(async (req, res) => {
   const messages = await sql`
         SELECT 
             m.id,
@@ -16,12 +17,12 @@ router.get("/global", async (req, res) => {
         ORDER BY m.created_at ASC
     `;
   res.json(messages);
-});
+}));
 
-router.post("/global", async (req, res) => {
+router.post("/global", asyncHandler(async (req, res) => {
   const { user_id, message } = req.body;
   await sql`insert into global_chat_messages (user_id, message) values (${user_id}, ${message})`;
   res.status(201).json({ message: "Message sent successfully" });
-});
+}));
 
 export default router;

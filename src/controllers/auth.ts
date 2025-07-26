@@ -308,6 +308,8 @@ const forgotPassword = asyncHandler(
     // Create reset URL
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
+    console.log(resetUrl)
+
     // Send email using Resend
     await resend.emails.send({
       from: "onboarding@resend.dev",
