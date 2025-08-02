@@ -2,9 +2,9 @@ import { Server, Socket } from "socket.io";
 import sql from "./config/db";
 import { matchmaker } from "./index";
 import { games} from "./index";
-import { dealCards, shuffleDeck } from "./utils/gameFunctions";
+import { dealCards, getNextPlayerPosition, playCard, shuffleDeck } from "./utils/gameFunctions";
 
-let clients = new Set<Socket>();
+export let clients = new Set<Socket>();
 
 export const initializeSocketHandler = (serverSocket: Server) => {
   serverSocket.on("connection", (socket: Socket) => {
@@ -46,11 +46,26 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       });
     });
 
+    socket.on("playCard", ({game_code, card_id, player_id}) => {
+      console.log("Playing card...", game_code, card_id, player_id);
+      const game = games.get(game_code);
+      if (!game) {
+        console.error(`Game with code ${game_code} not found`);
+        return;
+      }
+
+      playCard(game, card_id, player_id, socket);
+
+     
+    
+
+    });
+
+
     socket.on("create_game", () => {});
 
     socket.on("join_game", () => {});
 
-    socket.on("play_card", () => {});
 
     socket.on("getGameData", (code) => {
       const game = games.get(code);

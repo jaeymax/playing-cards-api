@@ -86,15 +86,15 @@ class Matchmaker extends EventEmitter {
       const result = await sql.transaction((sql) => [
         sql`
           INSERT INTO games (code, created_by, status, player_count, current_player_position) 
-          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 1) 
+          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 0) 
           RETURNING id
         `,
         sql`
           WITH new_game_id AS (SELECT lastval() AS game_id)
           INSERT INTO game_players (game_id, user_id, position, is_dealer)
           VALUES 
-            ((SELECT game_id FROM new_game_id), ${userId1}::integer, 1, true),
-            ((SELECT game_id FROM new_game_id), ${userId2}::integer, 2, false)
+            ((SELECT game_id FROM new_game_id), ${userId1}::integer, 0, true),
+            ((SELECT game_id FROM new_game_id), ${userId2}::integer, 1, false)
           RETURNING 
             user_id as id,
             id as player_id,

@@ -35,7 +35,7 @@ CREATE TABLE games (
     code VARCHAR(10) UNIQUE NOT NULL, -- Unique game identifier for invites
     created_by INTEGER NOT NULL REFERENCES users(id),
     status VARCHAR(20) NOT NULL CHECK (status IN ('waiting', 'in_progress', 'completed', 'abandoned', 'cancelled')) DEFAULT 'waiting',
-    current_player_position INTEGER NOT NULL DEFAULT 1,
+    current_player_position INTEGER NOT NULL DEFAULT 0,
     player_count SMALLINT NOT NULL CHECK (player_count BETWEEN 2 AND 4) DEFAULT 2,
     current_lead_suit VARCHAR(10) CHECK (current_lead_suit IN ('Clubs', 'Diamonds', 'Hearts', 'Spades', NULL)) DEFAULT NULL,
     round_number INTEGER NOT NULL DEFAULT 1,
