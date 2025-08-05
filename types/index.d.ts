@@ -59,5 +59,7 @@ export interface Game {
   created_at: string;
   started_at: string;
   ended_at: string;
+  completed_tricks: any[];
+  current_trick: any;
 }
  

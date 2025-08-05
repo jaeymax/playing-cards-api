@@ -129,7 +129,7 @@ export const playCard = (game: any, card_id: number, player_id: number, socket:a
   
   // Move to next player or complete trick if needed
   if(game.current_trick.cards.length === game.players.length){
-    completeTrick(game);
+    completeTrick(game, socket);
   }else{
     getNextPlayerPosition(game);
   }
@@ -159,14 +159,14 @@ const isHigherCard = (card: any, current_trick: any) => {
 }
 
 
-const completeTrick = (game: any) => {
+const completeTrick = (game: any, socket: any) => {
   const {current_trick} = game;
   game.completed_tricks.push(current_trick);
   console.log('completed tricks', game.completed_tricks);
   
   // chec if it's the final trick (all cards played)
   if(allCardsPlayed(game)){
-     endGame(game);
+     endGame(game, socket);
      return;
   }
   
@@ -180,7 +180,7 @@ const completeTrick = (game: any) => {
   game.round_number++;
 }
 
-const endGame = (game: any) => {
+const endGame = (game: any, socket: any) => {
   const final_trick = game.completed_tricks[game.completed_tricks.length - 1];
   const winning_card = final_trick.cards.find((card: any) => card.player_position === final_trick.leader_position);
   console.log('endGame');
@@ -190,8 +190,16 @@ const endGame = (game: any) => {
   game.status = "ended";
   game.ended_at = new Date();
 
+  
+  if(winning_card.card.rank == '6' || winning_card.card.rank == '7'){
+    points = calculateSpecialPoints(game.completed_tricks, game.completed_tricks.length - 1, '');
+  }
+  
   const winner = game.players.find((player: any) => player.position === final_trick.leader_position);
   winner.score += points;
+  clients.forEach((client: any) => {
+    client.emit("gameEnded", {winner: winner});
+  });
 
   console.log("game", game.players)
 }
@@ -232,3 +240,24 @@ const getRank = (card: any) => {
 const getCardValue = (card: any) => {
   return card.card.value;
 };
+
+const calculateSpecialPoints = (completed_tricks: any, trick_number:number, next_card_suit:string):number => {
+  if(trick_number <= 0)return 0;
+
+  const trick = completed_tricks[trick_number];
+
+  const winning_card = trick.cards.find((card: any) => card.player_position === trick.leader_position);
+  const winning_card_suit = getSuit(winning_card);
+  const winning_card_rank = getRank(winning_card);
+
+  if(winning_card_suit === next_card_suit){
+    return 0;
+  }
+
+  if(winning_card_rank == '6')return 3 + calculateSpecialPoints(completed_tricks, trick_number - 1, winning_card_suit);
+  
+  if(winning_card_rank == '7')return 2 + calculateSpecialPoints(completed_tricks, trick_number - 1, winning_card_suit);
+
+  return 0;
+
+}

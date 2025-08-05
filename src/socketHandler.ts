@@ -62,7 +62,41 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
 
-    socket.on("create_game", () => {});
+    socket.on("readyForNextHand", ({code, winningPlayer}) => {
+      const game = games.get(code);
+      if (!game) {
+        console.error(`Game with code ${code} not found`);
+        return;
+      }
+
+      game.current_player_position = winningPlayer.position;
+      game.status = "inProgress";
+      game.started_at = new Date().toISOString();
+      game.round_number = 1;
+      game.current_trick = null;
+      game.completed_tricks = [];
+
+      // set winning player to dealer
+      let next_dealer = game.players.find((player:any)=> player.id == winningPlayer.id)
+
+      game.players.forEach((player)=>player.is_dealer=false);
+
+      if(next_dealer){
+        next_dealer.is_dealer = true;
+      }
+
+      // reset game cards
+      game.cards.forEach((card)=>{
+        card.hand_position = -1;
+        card.player_id = 0;
+        card.status = 'in_deck';
+        
+      })
+
+      clients.forEach((client: any) => {
+        client.emit("startNewHand", game);
+      });
+    });
 
     socket.on("join_game", () => {});
 
