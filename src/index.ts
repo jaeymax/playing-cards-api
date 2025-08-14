@@ -41,7 +41,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoute);
 app.use("/api/cards", cardRoutes);
 app.use("/api/matchmaking", matchmakingRoutes);
-//app.use(notFoundMiddleware);
+
 app.use(errorHandler);
 
 // Websocket's connection to the server to allow bidirectional communication
