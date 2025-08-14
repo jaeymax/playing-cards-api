@@ -1,24 +1,38 @@
 import { games } from "../index";
-import { clients } from "../socketHandler";
+import { serverSocket } from "../index";
 
-export const dealCards = (gameCode: string) => {
-  const game = games.get(gameCode);
-  if (!game) {
-    console.error(`Game with code ${gameCode} not found`);
-    return;
+export const getDealingSequence = (game:any) =>{
+
+  const dealingSequence:any[] = []
+
+  const dealerPosition = game.players.find((player:any)=>player.is_dealer == true)?.position;
+
+  let currentPlayerPosition = dealerPosition;
+
+  while(true){
+    let nextPlayerPosition = (currentPlayerPosition + 1) % game.player_count;
+    const player = game.players.find((player:any)=>player.position == nextPlayerPosition).id;
+    dealingSequence.push(player);
+    currentPlayerPosition = nextPlayerPosition;
+    if(nextPlayerPosition == dealerPosition)break;
   }
-  //console.log("Dealing cards...");
 
-  // sort in reverse order accordion to playing position
-  const gamePlayers = game.players.sort((a, b) => b.position - a.position).map((player) => player.id);
+
+  return dealingSequence;
+}
+
+export const dealCards = (game:any) => {
+  const gamePlayers = getDealingSequence(game);
+  console.log('dealing_sequence', getDealingSequence(game));
   let cardIndex = 0;
 
   for (let player of gamePlayers) {
+    // player here represents a player's id
     for (let hand_position = 0; hand_position < 3; hand_position++) {
       game.cards[cardIndex].player_id = player; // Assign cards to players
       game.cards[cardIndex].status = "in_hand"; // Set status to in_hand
       game.cards[cardIndex].animation_state = "dealing"
-      game.cards[cardIndex].hand_position = hand_position; // Set hand position
+      game.cards[cardIndex].hand_position = hand_position;
       cardIndex++;
     }
   }
@@ -35,8 +49,8 @@ export const dealCards = (gameCode: string) => {
 
   const remainingCards = game.cards.slice(cardIndex);
   if (remainingCards.length > 0) {
-    remainingCards.forEach((card) => {
-      card.player_id = game.players.find((player) => player.is_dealer)?.id || 0; // Assign to dealer (first player)
+    remainingCards.forEach((card:any) => {
+      card.player_id = game.players.find((player:any) => player.is_dealer)?.id || 0; // Assign to dealer (first player)
       card.status = "in_drawpile"; // Set status to in_drawpile
      // card.hand_position = -1;
       card.animation_state = "idle";
@@ -44,17 +58,12 @@ export const dealCards = (gameCode: string) => {
   }
 };
 
-export const shuffleDeck = (gameCode: string) => {
-  const game = games.get(gameCode);
-  if (!game) {
-    console.error(`Game with code ${gameCode} not found`);
-    return;
-  }
+export const shuffleDeck = (game:any) => {
   //console.log("Shuffling deck...", game.cards);
-  game.cards.forEach((card) => {
+  game.cards.forEach((card:any) => {
     card.player_id = 0; // Reset player_id for shuffling
-    card.status = "in_deck"; // Reset status to in_drawpile
-    //card.hand_position = -1;
+    card.status = "in_deck"; 
+    card.hand_position = -1;
     card.animation_state = "shuffling"; 
   });
 
@@ -119,11 +128,11 @@ export const playCard = (game: any, card_id: number, player_id: number, socket:a
      game.current_trick.leader_position = player.position;
   }
 
-  //console.log(`${player.user.username}'s hand`, player_hand);
-  
-  // update current leader if needed
-  clients.forEach((client: any) => {
-    client.emit("playedCard", {card_id, player_id, trick_number: game.round_number});
+
+  serverSocket.to(game.code).emit("playedCard", {
+    card_id,
+    player_id,
+    trick_number: game.round_number
   });
 
   
@@ -134,11 +143,7 @@ export const playCard = (game: any, card_id: number, player_id: number, socket:a
     getNextPlayerPosition(game);
   }
   
-  clients.forEach((client: any) => {
-    client.emit("updatedGameData", game);
-  });
-
-
+  serverSocket.to(game.code).emit("updatedGameData", game);
 };
 
 const isHigherCard = (card: any, current_trick: any) => {
@@ -164,7 +169,7 @@ const completeTrick = (game: any, socket: any) => {
   game.completed_tricks.push(current_trick);
   console.log('completed tricks', game.completed_tricks);
   
-  // chec if it's the final trick (all cards played)
+  
   if(allCardsPlayed(game)){
      endGame(game, socket);
      return;
@@ -197,8 +202,11 @@ const endGame = (game: any, socket: any) => {
   
   const winner = game.players.find((player: any) => player.position === final_trick.leader_position);
   winner.score += points;
-  clients.forEach((client: any) => {
-    client.emit("gameEnded", {winner: winner});
+
+  serverSocket.to(game.code).emit("gameEnded", {
+    winner: {...winner, 
+      points, 
+    }
   });
 
   console.log("game", game.players)
@@ -217,11 +225,7 @@ export const getPlayerHand = (game: any, player_id: number) => {
 };
 
 export const getNextPlayerPosition = (game: any) => {
-  //console.log('game', game);
-  
-  //console.log('game.current_player_position before', game.current_player_position);
   game.current_player_position = (game.current_player_position + 1) % game.players.length;
-  //console.log('game.current_player_position after', game.current_player_position);
   return game.current_player_position;
 };
 
@@ -260,4 +264,12 @@ const calculateSpecialPoints = (completed_tricks: any, trick_number:number, next
 
   return 0;
 
+}
+
+export const gameExists = (gameCode: string) => {
+  return games.has(gameCode);
+}
+
+export const getGameByCode = (gameCode: string) => {
+  return games.get(gameCode);
 }

@@ -6,9 +6,13 @@ import { generateTokens, verifyRefreshToken } from "../utils/generateToken";
 import sql from "../config/db";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { verifyGoogleToken } from "../services/authService";
+import { OAuth2Client, TokenPayload } from "google-auth-library";
 
 // Email configuration
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
 
 const generateOTP = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -100,7 +104,7 @@ const registerUser = asyncHandler(
     }
 
     // Check if email was verified
-     const verifiedEmail = await sql`
+    const verifiedEmail = await sql`
       SELECT * FROM otp_verification 
       WHERE email = ${email} 
       AND verified = true
@@ -110,8 +114,6 @@ const registerUser = asyncHandler(
       res.status(400);
       throw new Error("Email not verified");
     }
-
-    
 
     // Check if user already exists
     const existingUser =
@@ -287,7 +289,9 @@ const forgotPassword = asyncHandler(
     const user = await sql`SELECT * FROM users WHERE email = ${email}`;
     if (user.length === 0) {
       res.status(404);
-      throw new Error("This email address is not registered. Please use a different email.");
+      throw new Error(
+        "This email address is not registered. Please use a different email."
+      );
     }
 
     // Generate reset token
@@ -308,7 +312,7 @@ const forgotPassword = asyncHandler(
     // Create reset URL
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
-    console.log(resetUrl)
+    console.log(resetUrl);
 
     // Send email using Resend
     await resend.emails.send({
@@ -369,6 +373,227 @@ const resetPassword = asyncHandler(
   }
 );
 
+const createGuest = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const randomNum = Math.floor(1000 + Math.random() * 9000);
+      const guestUsername = `Guest${randomNum}`;
+      const guestEmail = `guest_${Date.now()}_${randomNum}@example.com`;
+      const password = Math.random().toString(36).slice(-12);
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const user = await sql`
+      INSERT INTO users (username, email, password_hash, is_guest, created_at)
+      VALUES (${guestUsername}, ${guestEmail}, ${passwordHash}, true, NOW())
+      RETURNING id, username, image_url, rating, games_played, games_won, is_guest
+    `;
+
+      const { accessToken, refreshToken } = generateTokens(user[0].id);
+
+      // Store refresh token
+      await sql`
+      INSERT INTO refresh_tokens (user_id, token, expires_at)
+      VALUES (${user[0].id}, ${refreshToken}, NOW() + INTERVAL '7 days')
+    `;
+
+      res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      res.json({
+        token: accessToken,
+        user: user[0],
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500);
+      throw new Error("Could not create guest");
+    }
+  }
+);
+
+const upgradeGuest = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const id = req.user.userId; // guest user's id
+    const { username, email, password } = req.body;
+
+    if (!username || !email || !password) {
+      res.status(400);
+      throw new Error("Username, email and password required");
+    }
+
+    try {
+      // Check for existing username/email
+      const conflict = await sql`
+      SELECT id FROM users 
+      WHERE (username = ${username} OR email = ${email}) 
+      AND id != ${id}
+    `;
+
+      if (conflict.length > 0) {
+        res.status(400);
+        throw new Error("Username or email already in use");
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Update user
+      const updatedUser = await sql`
+      UPDATE users
+      SET 
+        username = ${username}, 
+        email = ${email}, 
+        password_hash = ${passwordHash}, 
+        is_guest = false, 
+        updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING id, username, email, image_url, rating, games_played, games_won, is_guest
+    `;
+
+      // Generate new tokens
+      const { accessToken, refreshToken } = generateTokens(updatedUser[0].id);
+
+      // Store refresh token
+      await sql`
+      INSERT INTO refresh_tokens (user_id, token, expires_at)
+      VALUES (${updatedUser[0].id}, ${refreshToken}, NOW() + INTERVAL '30 days')
+    `;
+
+      // Set refresh token cookie
+      res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      });
+
+      res.json({
+        token: accessToken,
+        user: updatedUser[0],
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500);
+      throw new Error("Upgrade failed");
+    }
+  }
+);
+
+const googleSignup = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    
+    if (!code) {
+      res.status(400);
+      throw new Error("No code token provided");
+    }
+
+    const {tokens} = await client.getToken({code, redirect_uri:"postmessage"});
+    
+    if (!tokens.id_token) {
+      throw new Error('No ID token received from Google');
+    }
+    const ticket = await client.verifyIdToken({idToken: tokens.id_token, audience: process.env.GOOGLE_CLIENT_ID});
+
+    const payload = ticket.getPayload() as TokenPayload;
+
+    const {name, email, picture} = payload;
+    // Check if already exists
+    const existingUser = await sql`SELECT id FROM users WHERE email = ${email}`;
+    if (existingUser.length > 0) {
+      res.status(409);
+      throw new Error("Email already registered");
+    }
+
+    // Create unique username
+    let baseUsername = name?.replace(/\s+/g, "").toLowerCase();
+    let username = baseUsername;
+    let counter = 1;
+
+    while (true) {
+      const exists =
+        await sql`SELECT 1 FROM users WHERE username = ${username}`;
+      if (exists.length === 0) break;
+      username = `${baseUsername}${counter}`;
+      counter++;
+    }
+
+    // Insert user
+    const user = await sql`
+    INSERT INTO users (username, email, password_hash, image_url, is_guest)
+    VALUES (${username}, ${email}, NULL, ${
+      picture || "https://github.com/shadcn.png"
+    }, false)
+    RETURNING *
+  `;
+
+    const { accessToken, refreshToken } = generateTokens(user[0].id);
+
+    // Store refresh token
+    await sql`
+    INSERT INTO refresh_tokens (user_id, token, expires_at)
+    VALUES (${user[0].id}, ${refreshToken}, NOW() + INTERVAL '7 days')
+  `;
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({ token: accessToken, user: user[0] });
+  }
+);
+
+const googleLogin = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.body;
+    
+    if (!code) {
+      res.status(400);
+      throw new Error("No code token provided");
+    }
+
+    const {tokens} = await client.getToken({code, redirect_uri:"postmessage"});
+    
+    if (!tokens.id_token) {
+      throw new Error('No ID token received from Google');
+    }
+    const ticket = await client.verifyIdToken({idToken: tokens.id_token, audience: process.env.GOOGLE_CLIENT_ID});
+
+    const payload = ticket.getPayload() as TokenPayload;
+
+    const email = payload.email;
+
+    const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+    if (users.length === 0) {
+      res.status(404);
+      throw new Error("No account found. Please sign up.");
+    }
+
+    const { accessToken, refreshToken } = generateTokens(users[0].id);
+
+    // Store refresh token
+    await sql`
+    INSERT INTO refresh_tokens (user_id, token, expires_at)
+    VALUES (${users[0].id}, ${refreshToken}, NOW() + INTERVAL '7 days')
+  `;
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({ token: accessToken, user: users[0] });
+  }
+);
+
 export {
   registerUser,
   loginUser,
@@ -378,4 +603,8 @@ export {
   logoutUser,
   forgotPassword,
   resetPassword,
+  createGuest,
+  upgradeGuest,
+  googleSignup,
+  googleLogin,
 };

@@ -86,7 +86,7 @@ class Matchmaker extends EventEmitter {
       const result = await sql.transaction((sql) => [
         sql`
           INSERT INTO games (code, created_by, status, player_count, current_player_position) 
-          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 0) 
+          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 1) 
           RETURNING id
         `,
         sql`
