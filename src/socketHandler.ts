@@ -43,6 +43,8 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         const game = getGameByCode(code);
         dealCards(game);
         serverSocket.to(code).emit("dealtCards", game?.cards);
+      }else{
+        socket.emit("game-not-found");
       }
 
     });
@@ -53,6 +55,8 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         const game = getGameByCode(code);
         shuffleDeck(game);
         serverSocket.to(code).emit("shuffledDeck", game?.cards);
+      } else {
+        socket.emit("game-not-found");
       }
      
     });
@@ -62,8 +66,9 @@ export const initializeSocketHandler = (serverSocket: Server) => {
      if(gameExists(game_code)){
         const game = getGameByCode(game_code);
       playCard(game, card_id, player_id, socket);
-     }
-
+     }else{
+        socket.emit("game-not-found");
+      }
     });
 
 
@@ -96,8 +101,9 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
         serverSocket.to(code).emit('startNewHand', game);
 
+      }else{
+        socket.emit("game-not-found");
       }
-
 
     });
 
@@ -106,8 +112,6 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       if (gameExists(code)) {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
-      } else {
-        socket.emit("error", { message: "Game not found" });
       }
     });
 
@@ -116,7 +120,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       if (game) {
         socket.emit("gameData", game);
       } else {
-        socket.emit("error", { message: "Game not found" });
+        socket.emit("game-not-found");
       }
     });
 
