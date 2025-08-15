@@ -17,6 +17,8 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       return;
     }
 
+  
+
     console.log(`User connected: ${userId} (socket ${socket.id})`);
     userSocketMap.set(userId, socket.id);
     
@@ -99,8 +101,15 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
     });
 
-    socket.on("join_game", () => {});
-
+    socket.on("join-room", (code) => {
+      console.log(`User ${userId} joining game: ${code}`);
+      if (gameExists(code)) {
+        socket.join(code);
+        serverSocket.to(code).emit("userJoined", { userId, code });
+      } else {
+        socket.emit("error", { message: "Game not found" });
+      }
+    });
 
     socket.on("getGameData", (code) => {
       const game = getGameByCode(code);

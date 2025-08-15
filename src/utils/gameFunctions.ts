@@ -128,7 +128,9 @@ export const playCard = (game: any, card_id: number, player_id: number, socket:a
      game.current_trick.leader_position = player.position;
   }
 
+  
 
+  console.log(`Room ${game.code} has ${serverSocket.sockets.adapter.rooms.get(game.code)?.size} players connected`);
   serverSocket.to(game.code).emit("playedCard", {
     card_id,
     player_id,
