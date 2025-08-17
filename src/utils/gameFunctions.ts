@@ -147,6 +147,10 @@ export const playCard = async (game: any, card_id: number, player_id: number, so
   }else{
     getNextPlayerPosition(game);
   }
+
+  // Bot game logic here...
+
+  
   
   serverSocket.to(game.code).emit("updatedGameData", game);
   await saveGame(game.code, game);

@@ -43,6 +43,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         const game = await getGameByCode(code);
         dealCards(game);
         serverSocket.to(code).emit("dealtCards", game?.cards);
+        serverSocket.to(code).emit("updatedGameData", game);
        await saveGame(code, game);
       }else{
         socket.emit("game-not-found");
