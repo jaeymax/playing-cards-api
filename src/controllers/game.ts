@@ -229,13 +229,60 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
       RETURNING *
     `;
 
+    const players = await sql`
+    SELECT 
+      gp.id,
+      gp.game_id,
+      gp.score,
+      gp.position,
+      gp.is_dealer,
+      gp.status,
+      json_build_object(
+        'id', u.id,
+        'username', u.username,
+        'image_url', u.image_url
+      ) as user
+    FROM game_players gp
+    JOIN users u ON u.id = gp.user_id
+    WHERE gp.game_id = ${newGame.id}
+    ORDER BY gp.position
+  `;
+
+  const carrds = await sql`
+  SELECT 
+    gc.id,
+    gc.game_id,
+    gc.player_id,
+    gc.status,
+    gc.hand_position,
+    gc.trick_number,
+    gc.pos_x,
+    gc.pos_y,
+    gc.rotation,
+    gc.z_index,
+    gc.animation_state,
+    json_build_object(
+      'card_id', c.card_id,
+      'suit', c.suit,
+      'value', c.value,
+      'rank', c.rank,
+      'image_url', c.image_url
+    ) as card
+  FROM game_cards gc
+  JOIN cards c ON c.card_id = gc.card_id
+  WHERE gc.game_id = ${newGame.id}
+`;
+
     const game = {
       ...newGame,
-      players: [result[0][0], result[1][0]],
-      cards: gameCards,
+      players: players,
+      cards: carrds,
     };
 
+    console.log("Game created successfully:", game);
     await saveGame(gameCode, game);
+    console.log('game saved to memeory', gameCode)
+
 
     res.status(201).json({
       success: true,
