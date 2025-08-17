@@ -1,4 +1,4 @@
-import { games } from "../index";
+import { games, redis } from "../index";
 import { serverSocket } from "../index";
 
 export const getDealingSequence = (game:any) =>{
@@ -21,7 +21,7 @@ export const getDealingSequence = (game:any) =>{
   return dealingSequence;
 }
 
-export const dealCards = (game:any) => {
+export const dealCards = async (game:any) => {
   const gamePlayers = getDealingSequence(game);
   console.log('dealing_sequence', getDealingSequence(game));
   let cardIndex = 0;
@@ -56,9 +56,11 @@ export const dealCards = (game:any) => {
       card.animation_state = "idle";
     });
   }
+
+  
 };
 
-export const shuffleDeck = (game:any) => {
+export const shuffleDeck = async (game:any) => {
   //console.log("Shuffling deck...", game.cards);
   game.cards.forEach((card:any) => {
     card.player_id = 0; // Reset player_id for shuffling
@@ -68,9 +70,10 @@ export const shuffleDeck = (game:any) => {
   });
 
   game.cards.sort(() => Math.random() - 0.5);
+  
 };
 
-export const playCard = (game: any, card_id: number, player_id: number, socket:any) => {
+export const playCard = async (game: any, card_id: number, player_id: number, socket:any) => {
   
   const player = game.players.find((player: any) => player.id === player_id );
   if(player.position !== game.current_player_position){
@@ -146,6 +149,7 @@ export const playCard = (game: any, card_id: number, player_id: number, socket:a
   }
   
   serverSocket.to(game.code).emit("updatedGameData", game);
+  await saveGame(game.code, game);
 };
 
 const isHigherCard = (card: any, current_trick: any) => {
@@ -166,7 +170,7 @@ const isHigherCard = (card: any, current_trick: any) => {
 }
 
 
-const completeTrick = (game: any, socket: any) => {
+const completeTrick = async (game: any, socket: any) => {
   const {current_trick} = game;
   game.completed_tricks.push(current_trick);
   console.log('completed tricks', game.completed_tricks);
@@ -185,9 +189,10 @@ const completeTrick = (game: any, socket: any) => {
 
   game.current_player_position = current_trick.leader_position;
   game.round_number++;
+  await saveGame(game.code, game);
 }
 
-const endGame = (game: any, socket: any) => {
+const endGame = async(game: any, socket: any) => {
   const final_trick = game.completed_tricks[game.completed_tricks.length - 1];
   const winning_card = final_trick.cards.find((card: any) => card.player_position === final_trick.leader_position);
   console.log('endGame');
@@ -211,6 +216,7 @@ const endGame = (game: any, socket: any) => {
     }
   });
 
+  await saveGame(game.code, game);
   console.log("game", game.players)
 }
 
@@ -268,10 +274,36 @@ const calculateSpecialPoints = (completed_tricks: any, trick_number:number, next
 
 }
 
-export const gameExists = (gameCode: string) => {
-  return games.has(gameCode);
+// export const gameExists = (gameCode: string) => {
+//   return games.has(gameCode);
+// }
+
+export const gameExists = async (gameCode: string) => {
+  const value = await redis.exists(gameCode);
+  return value === 1; // Redis returns 1 if the key exists, 0 if it does not
 }
 
-export const getGameByCode = (gameCode: string) => {
-  return games.get(gameCode);
+// export const getGameByCode = (gameCode: string) => {
+//   return games.get(gameCode);
+// }
+
+export async function saveGame(gameCode:string, gameData:object){
+  try {
+    await redis.set(gameCode, JSON.stringify(gameData));
+  } catch (error) {
+    console.error("Error saving game to Redis:", error);
+  }
+}
+
+export async function getGameByCode(gameCode: string) {
+  try {
+    const gameData = await redis.get(gameCode);
+    if (gameData) {
+      return JSON.parse(gameData);
+    }
+    return null;
+  } catch (error) {
+    console.error("Error loading game from Redis:", error);
+    return null;
+  }
 }

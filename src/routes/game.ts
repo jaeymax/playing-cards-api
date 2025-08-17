@@ -1,13 +1,10 @@
 import { Router } from "express";
-import { createGame, joinGame } from "../controllers/game";
-
+import { createGame, createBotGame, joinGame } from "../controllers/game";
 
 const router = Router();
 
-router.post('/create', createGame);
-
-router.get('/join', joinGame); 
-
-
+router.post("/create", createGame);
+router.post("/create-bot", createBotGame);
+router.get("/join", joinGame);
 
 export default router;

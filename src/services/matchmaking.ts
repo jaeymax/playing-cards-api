@@ -117,12 +117,6 @@ class Matchmaker extends EventEmitter {
 
       const dealer = players.find((player)=> player.is_dealer);
 
-      //console.log("gamePlayers", players);
-      // create game_cards entries
-      //console.log('dealer', dealer);
-      //console.log('cards', cards);
-      
-
       cards.forEach( async(card)=>{
         await sql`INSERT INTO game_cards (game_id, card_id, player_id, hand_position) 
         VALUES (${gameId}, ${card.card_id}, ${dealer?.player_id}, ${-1})`

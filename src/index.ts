@@ -17,12 +17,14 @@ import matchmakingRoutes from "./routes/matchmaking";
 import Matchmaker from "./services/matchmaking";
 import { initializeSocketHandler } from "./socketHandler";
 import type { Game } from "../types";
+import Redis from "ioredis";
 
 dotenv.config();
 
 export const app: Express = express();
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
+export const redis = new Redis(process.env.REDIS_URL as string);
 
 export const games = new Map<string, Game>();
 
@@ -35,7 +37,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use("/api/auth", authRoutes);
-app.use("/api/game", gameRoutes);
+app.use("/api/games", gameRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoute);

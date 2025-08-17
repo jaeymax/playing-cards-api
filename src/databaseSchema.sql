@@ -40,6 +40,9 @@ CREATE TABLE games (
     current_lead_suit VARCHAR(10) CHECK (current_lead_suit IN ('Clubs', 'Diamonds', 'Hearts', 'Spades', NULL)) DEFAULT NULL,
     round_number INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    win_points INTEGER DEFAULT 20,
+    include_sixes BOOLEAN DEFAULT true, -- Whether to include 6s in the game
+    include_aces BOOLEAN DEFAULT false, -- Whether to include Aces in the game
     started_at TIMESTAMP WITH TIME ZONE,
     ended_at TIMESTAMP WITH TIME ZONE,
     UNIQUE (code)

@@ -4,6 +4,7 @@ import sql from "../config/db";
 import { matchmaker } from "../index";
 import { games } from "../index";
 import type { Game } from "../../types";
+import { saveGame } from "../utils/gameFunctions";
 
 export const joinQueue = asyncHandler(async (req: Request, res: Response) => {
   const { userId, rating } = req.body;
@@ -38,61 +39,10 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
   try {
     await sql
       .transaction((sql) => [
-        // Update game status
         sql`UPDATE games SET status = 'in_progress' WHERE id = ${gameId}`,
         sql`UPDATE games SET started_at = NOW() WHERE id = ${gameId}`,
-        // Get players from game_players table
-      //   sql`
-      //   SELECT id as player_id, user_id, position 
-      //   FROM game_players 
-      //   WHERE game_id = ${gameId}
-      //   ORDER BY position
-      // `,
-
-        // Get all cards for the game
-       // sql`SELECT card_id FROM cards ORDER BY RANDOM()`,
       ])
-      // .then(async ([r, k, gamePlayers, cards]) => {
-      //   const cardIds = cards.map((c) => c.card_id);
-
-      //   // Deal 5 cards to each player
-      //   let cardIndex = 0;
-      //   for (const player of gamePlayers) {
-      //     for (let hand_position = 0; hand_position < 3; hand_position++) {
-      //       await sql`
-      //       INSERT INTO game_cards (game_id, card_id, player_id, status, hand_position, animation_state) 
-      //       VALUES (${gameId}, ${cardIds[cardIndex]}, ${player.player_id}, 'in_hand', ${hand_position}, 'dealing')
-      //     `;
-      //       cardIndex++;
-      //     }
-      //   }
-
-      //   for (const player of gamePlayers) {
-      //     for (let hand_position = 3; hand_position < 5; hand_position++) {
-      //       await sql`
-      //       INSERT INTO game_cards (game_id, card_id, player_id, status, hand_position, animation_state) 
-      //       VALUES (${gameId}, ${cardIds[cardIndex]}, ${player.player_id}, 'in_hand', ${hand_position}, 'dealing')
-      //     `;
-      //       cardIndex++;
-      //     }
-      //   }
-
-      //   // Put remaining cards in draw pile
-      //   const remainingCards = cardIds.slice(cardIndex);
-      //   if (remainingCards.length > 0) {
-      //     await sql`
-      //     INSERT INTO game_cards (game_id, card_id, player_id, status)
-      //     SELECT 
-      //       ${gameId},
-      //       card_id,
-      //       ${gamePlayers[0].player_id}, -- Assign to dealer (first player)
-      //       'in_drawpile'
-      //     FROM unnest(${remainingCards}::integer[]) AS card_id
-      //   `;
-      //   }
-      // });
-
-    // After dealing cards, fetch complete game data
+  
     const gameData = await sql`
       SELECT 
         g.id,
@@ -101,7 +51,6 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
         g.status,
         g.player_count,
         g.current_player_position,
-        g.current_lead_suit,
         g.round_number,
         g.created_at,
         g.started_at,
@@ -160,8 +109,7 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
       cards: cards,
     };
 
-    //console.log("Game started:", game);
-    // Store game in the games map
+    await saveGame(gameCode[0].code, game);
     games.set(gameCode[0].code, game as Game);
 
     res.json({

@@ -1,7 +1,7 @@
 import { Server, Socket } from "socket.io";
 import sql from "./config/db";
 import { matchmaker } from "./index";
-import { dealCards, playCard, shuffleDeck } from "./utils/gameFunctions";
+import { dealCards, playCard, saveGame, shuffleDeck } from "./utils/gameFunctions";
 import { gameExists } from "./utils/gameFunctions";
 import { getGameByCode } from "./utils/gameFunctions";
 import { Game } from "../types";
@@ -37,44 +37,46 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
     });
 
-    socket.on("dealCards", (code) => {
+    socket.on("dealCards", async (code) => {
       console.log(`Deal cards request for game code: ${code}`);
-      if(gameExists(code)){
-        const game = getGameByCode(code);
+      if( await gameExists(code)){
+        const game = await getGameByCode(code);
         dealCards(game);
         serverSocket.to(code).emit("dealtCards", game?.cards);
+       await saveGame(code, game);
       }else{
         socket.emit("game-not-found");
       }
 
     });
 
-    socket.on("shuffleDeck", (code) => {
+    socket.on("shuffleDeck", async (code) => {
       console.log(`Shuffle deck request for game code: ${code}`);
-      if(gameExists(code)){
-        const game = getGameByCode(code);
+      if( await gameExists(code)){
+        const game = await getGameByCode(code);
         shuffleDeck(game);
         serverSocket.to(code).emit("shuffledDeck", game?.cards);
+        await saveGame(code, game);
       } else {
         socket.emit("game-not-found");
       }
      
     });
 
-    socket.on("playCard", ({game_code, card_id, player_id}) => {
+    socket.on("playCard", async ({game_code, card_id, player_id}) => {
       console.log("Playing card...", game_code, card_id, player_id);
-     if(gameExists(game_code)){
-        const game = getGameByCode(game_code);
-      playCard(game, card_id, player_id, socket);
-     }else{
+      if(await gameExists(game_code)){
+        const game = await getGameByCode(game_code);
+        playCard(game, card_id, player_id, socket);
+      }else{
         socket.emit("game-not-found");
       }
     });
 
 
-    socket.on("readyForNextHand", ({code, winningPlayer}) => {
-      if(gameExists(code)){
-      const game = getGameByCode(code) as Game;
+    socket.on("readyForNextHand", async ({code, winningPlayer}) => {
+      if( await gameExists(code)){
+        const game = await getGameByCode(code) as Game;
         game.current_player_position = (winningPlayer.position + 1) % game.player_count;
         game.status = "inProgress";
         game.started_at = new Date().toISOString();
@@ -99,6 +101,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
           
         })
 
+        await saveGame(code, game);
         serverSocket.to(code).emit('startNewHand', game);
 
       }else{
@@ -107,16 +110,16 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
     });
 
-    socket.on("join-room", (code) => {
+    socket.on("join-room", async (code) => {
       console.log(`User ${userId} joining game: ${code}`);
-      if (gameExists(code)) {
+      if ( await gameExists(code)) {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
       }
     });
 
-    socket.on("getGameData", (code) => {
-      const game = getGameByCode(code);
+    socket.on("getGameData", async (code) => {
+      const game = await getGameByCode(code);
       if (game) {
         socket.emit("gameData", game);
       } else {
