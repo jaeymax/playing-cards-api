@@ -50,6 +50,7 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
         g.created_by,
         g.status,
         g.player_count,
+        g.current_hand_number,
         g.current_player_position,
         g.round_number,
         g.created_at,

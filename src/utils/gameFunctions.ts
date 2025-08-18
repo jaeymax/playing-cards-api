@@ -214,11 +214,27 @@ const endGame = async(game: any, socket: any) => {
   const winner = game.players.find((player: any) => player.position === final_trick.leader_position);
   winner.score += points;
 
-  serverSocket.to(game.code).emit("gameEnded", {
-    winner: {...winner, 
-      points, 
-    }
-  });
+  if(winner.score >= game.win_points){
+    setTimeout(() => {
+      serverSocket.to(game.code).emit("gameOver", {
+        winner: {...winner, 
+          points, 
+          hand_number: game.current_hand_number
+        }
+      });
+    }, 1000);
+  }
+  else{
+    setTimeout(() => {
+      serverSocket.to(game.code).emit("gameEnded", {
+        winner: {...winner, 
+          points, 
+          hand_number: game.current_hand_number
+        }
+      });
+    }, 1000); // Delay to allow last card animation to complete
+  }
+
 
   await saveGame(game.code, game);
   console.log("game", game.players)
@@ -293,7 +309,7 @@ export const gameExists = async (gameCode: string) => {
 
 export async function saveGame(gameCode:string, gameData:object){
   try {
-    await redis.set(gameCode, JSON.stringify(gameData));
+    await redis.set(gameCode, JSON.stringify(gameData), 'EX', 3600); // Set expiration time to 1 hour
   } catch (error) {
     console.error("Error saving game to Redis:", error);
   }

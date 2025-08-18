@@ -53,6 +53,7 @@ export interface Game {
   player_count: number;
   current_player_position: number;
   players: GamePlayer[];
+  current_hand_number: number;
   cards: GameCard[];
   current_lead_suit: string | null;
   round_number: number;

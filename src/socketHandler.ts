@@ -82,6 +82,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         game.status = "inProgress";
         game.started_at = new Date().toISOString();
         game.round_number = 1;
+        game.current_hand_number ++;
         game.current_trick = null;
         game.completed_tricks = [];
 
@@ -111,11 +112,59 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
     });
 
+    socket.on("rematch", async ({code, winningPlayer}) => {
+      if( await gameExists(code)){
+        const game = await getGameByCode(code) as Game;
+        console.log('winningPlayer', winningPlayer);
+        game.current_player_position = (winningPlayer.position + 1) % game.player_count;
+        game.status = "in_progress";
+        game.started_at = new Date().toISOString();
+        game.round_number = 1;
+        game.current_hand_number = 1;
+        game.current_trick = null;
+        game.completed_tricks = [];
+
+        // set winning player to dealer
+        let next_dealer = game.players.find((player:any)=> player.id == winningPlayer.id)
+
+        game.players.forEach((player)=>player.is_dealer=false);
+        game.players.forEach((player)=>player.score=0);
+
+        if(next_dealer){
+          next_dealer.is_dealer = true;
+        }
+
+        // reset game cards
+        game.cards.forEach((card)=>{
+          card.hand_position = -1;
+          card.player_id = 0;
+          card.status = 'in_deck';
+          
+        })
+
+        await saveGame(code, game);
+        serverSocket.to(code).emit('rematch', game);
+
+      }else{
+        socket.emit("game-not-found");
+      }
+
+    });
+
+
     socket.on("join-room", async (code) => {
       console.log(`User ${userId} joining game: ${code}`);
       if ( await gameExists(code)) {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
+      }
+    });
+
+    socket.on("leave-room", async (code) => {
+      console.log(`User ${userId} leaving game: ${code}`);
+      if (await gameExists(code)) {
+        socket.leave(code);
+        serverSocket.to(code).emit("userLeft", { userId, code });
       }
     });
 
