@@ -1,3 +1,4 @@
+import sql from "../config/db";
 import { games, redis } from "../index";
 import { serverSocket } from "../index";
 
@@ -16,7 +17,6 @@ export const getDealingSequence = (game:any) =>{
     currentPlayerPosition = nextPlayerPosition;
     if(nextPlayerPosition == dealerPosition)break;
   }
-
 
   return dealingSequence;
 }
@@ -61,7 +61,6 @@ export const dealCards = async (game:any) => {
 };
 
 export const shuffleDeck = async (game:any) => {
-  //console.log("Shuffling deck...", game.cards);
   game.cards.forEach((card:any) => {
     card.player_id = 0; // Reset player_id for shuffling
     card.status = "in_deck"; 
@@ -70,7 +69,7 @@ export const shuffleDeck = async (game:any) => {
   });
 
   game.cards.sort(() => Math.random() - 0.5);
-  
+  console.log('shuffled deck')
 };
 
 export const playCard = async (game: any, card_id: number, player_id: number, socket:any) => {
@@ -143,14 +142,10 @@ export const playCard = async (game: any, card_id: number, player_id: number, so
   
   // Move to next player or complete trick if needed
   if(game.current_trick.cards.length === game.players.length){
-    completeTrick(game, socket);
+    completeTrick(game);
   }else{
     getNextPlayerPosition(game);
   }
-
-  // Bot game logic here...
-
-  
   
   serverSocket.to(game.code).emit("updatedGameData", game);
   await saveGame(game.code, game);
@@ -174,14 +169,14 @@ const isHigherCard = (card: any, current_trick: any) => {
 }
 
 
-const completeTrick = async (game: any, socket: any) => {
+const completeTrick = async (game: any) => {
   const {current_trick} = game;
   game.completed_tricks.push(current_trick);
-  console.log('completed tricks', game.completed_tricks);
+  //console.log('completed tricks', game.completed_tricks);
   
   
   if(allCardsPlayed(game)){
-     endGame(game, socket);
+     endGame(game);
      return;
   }
   
@@ -196,10 +191,9 @@ const completeTrick = async (game: any, socket: any) => {
   await saveGame(game.code, game);
 }
 
-const endGame = async(game: any, socket: any) => {
+const endGame = async(game: any) => {
   const final_trick = game.completed_tricks[game.completed_tricks.length - 1];
   const winning_card = final_trick.cards.find((card: any) => card.player_position === final_trick.leader_position);
-  console.log('endGame');
 
   let points = 1;
 
@@ -237,7 +231,7 @@ const endGame = async(game: any, socket: any) => {
 
 
   await saveGame(game.code, game);
-  console.log("game", game.players)
+  //console.log("game", game.players)
 }
 
 
@@ -294,18 +288,11 @@ const calculateSpecialPoints = (completed_tricks: any, trick_number:number, next
 
 }
 
-// export const gameExists = (gameCode: string) => {
-//   return games.has(gameCode);
-// }
-
 export const gameExists = async (gameCode: string) => {
   const value = await redis.exists(gameCode);
   return value === 1; // Redis returns 1 if the key exists, 0 if it does not
 }
 
-// export const getGameByCode = (gameCode: string) => {
-//   return games.get(gameCode);
-// }
 
 export async function saveGame(gameCode:string, gameData:object){
   try {
@@ -324,6 +311,36 @@ export async function getGameByCode(gameCode: string) {
     return null;
   } catch (error) {
     console.error("Error loading game from Redis:", error);
+    return null;
+  }
+}
+
+export async function createGamePlayer(gameId:number, userId:number, position:number){
+  try{
+    const player = await sql`INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
+         VALUES (
+           ${gameId}, 
+           ${userId}, 
+           ${position}, 
+            false,
+           'active'
+         )
+         RETURNING 
+           id,
+           game_id,
+           score,
+           position,
+           is_dealer,
+           status,
+           (SELECT json_build_object(
+             'id', id,
+             'username', username,
+             'image_url', image_url
+           ) FROM users WHERE id = user_id) as user`
+ 
+     return player[0];
+  }catch(error){
+    console.log('Failed to create game player', error)
     return null;
   }
 }

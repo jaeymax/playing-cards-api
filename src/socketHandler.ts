@@ -1,7 +1,7 @@
 import { Server, Socket } from "socket.io";
 import sql from "./config/db";
 import { matchmaker } from "./index";
-import { dealCards, playCard, saveGame, shuffleDeck } from "./utils/gameFunctions";
+import { createGamePlayer, dealCards, playCard, saveGame, shuffleDeck } from "./utils/gameFunctions";
 import { gameExists } from "./utils/gameFunctions";
 import { getGameByCode } from "./utils/gameFunctions";
 import { Game } from "../types";
@@ -79,7 +79,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       if( await gameExists(code)){
         const game = await getGameByCode(code) as Game;
         game.current_player_position = (winningPlayer.position + 1) % game.player_count;
-        game.status = "inProgress";
+        game.status = "in_progress";
         game.started_at = new Date().toISOString();
         game.round_number = 1;
         game.current_hand_number ++;
@@ -157,6 +157,37 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       if ( await gameExists(code)) {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
+      }
+    });
+
+    socket.on("playerJoin", async ({userId, gameCode}) => {
+      console.log(`User ${userId} joining game: ${gameCode}`);
+      if ( await gameExists(gameCode)) {
+        const game = await getGameByCode(gameCode);
+        
+        const userAlreadyJoined = game.players.find(((player:any)=>player.user.id === userId));
+        console.log(`${serverSocket.sockets.adapter.rooms.get(gameCode)?.size} players connected`)
+
+        if(userAlreadyJoined){
+          socket.join(gameCode);
+          console.log('userAlreadyJoined', userAlreadyJoined?.user?.username);
+          return;
+        }
+
+        if(game.players.length == game.player_count){
+           console.log(`Room ${game.code} is full`);
+           return;
+        }
+
+
+
+        const player = await createGamePlayer(game.id, userId, game.players.length);
+
+         if(player){
+           game.players.push(player);
+           await saveGame(gameCode, game);
+           serverSocket.to(gameCode).emit('gameData', game)
+         }
       }
     });
 

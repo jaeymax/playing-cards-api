@@ -5,13 +5,7 @@ import { games } from "../index";
 import { saveGame } from "../utils/gameFunctions";
 
 const createGame = asyncHandler(async (req: Request, res: Response) => {
-  const {
-    userId,
-    winPoints,
-    numPlayers,
-    includeSixes = true,
-    includeAces = false,
-  } = req.body;
+  const { userId, winPoints, numPlayers, includeSixes, includeAces } = req.body;
 
   if (!userId || !numPlayers || !winPoints) {
     res.status(400).json({
@@ -21,44 +15,37 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    // Generate unique game code
     const gameCode = Math.random().toString(36).substring(2, 12);
     const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
 
+
+    const [newGame] = await sql`
+      INSERT INTO games (
+        code, 
+        created_by, 
+        player_count,
+        include_sixes,
+        include_aces,
+        win_points,
+        status
+      ) 
+      VALUES (
+        ${gameCode}, 
+        ${userId},
+        ${numPlayers},
+        ${includeSixes},
+        ${includeAces},
+        ${winPoints},
+        'waiting'
+      ) 
+      RETURNING *
+    `;
+
     const result = await sql.transaction((sql) => [
-      // Create new game
       sql`
-        INSERT INTO games (
-          code, 
-          created_by, 
-          player_count, 
-          include_sixes,
-          include_aces,
-          win_points,
-          status
-        ) 
+        INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
         VALUES (
-          ${gameCode}, 
-          ${userId}, 
-          ${numPlayers},
-          ${includeSixes},
-          ${includeAces},
-          ${winPoints},
-          'waiting'
-        ) 
-        RETURNING *
-      `,
-      // Add creator as first player and dealer
-      sql`
-        INSERT INTO game_players (
-          game_id, 
-          user_id, 
-          position, 
-          is_dealer,
-          status
-        )
-        VALUES (
-          (SELECT lastval()), 
+          ${newGame.id}, 
           ${userId}, 
           0, 
           true,
@@ -67,7 +54,7 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
         RETURNING 
           id,
           game_id,
-          user_id,
+          score,
           position,
           is_dealer,
           status,
@@ -77,27 +64,49 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
             'image_url', image_url
           ) FROM users WHERE id = user_id) as user
       `,
-      // Add all cards to the game, assigned to dealer
-      sql`
-        INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
-        SELECT 
-          (SELECT lastval()),
-          unnest(${cards.map((c) => c.card_id)}::integer[]),
-          (SELECT id FROM game_players WHERE game_id = (SELECT lastval()) AND is_dealer = true),
-          -1,
-          'in_deck'
-        RETURNING *
-      `,
     ]);
 
+
+    const humanPlayerId = result[0][0].id;
+
+    const gameCards = await sql`
+      INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
+      SELECT 
+        ${newGame.id},
+        unnest(${cards.map((c) => c.card_id)}::integer[]),
+        ${humanPlayerId},
+        -1,
+        'in_deck'
+      RETURNING 
+          id,
+          game_id,
+          player_id,
+          status,
+          hand_position,
+          trick_number,
+          pos_x,
+          pos_y,
+          rotation,
+          z_index,
+          animation_state,
+          (SELECT json_build_object(
+           'card_id', card_id,
+            'suit', suit,
+            'value', value,
+            'rank', rank,
+            'image_url', image_url
+          ) FROM cards WHERE card_id = game_cards.card_id) as card
+    `;
+
+
     const game = {
-      ...result[0][0],
-      players: [result[1][0]],
-      cards: result[2],
+      ...newGame,
+      players: [result[0][0]],
+      cards: gameCards,
     };
 
-    // Store game in memory
-    //await saveGame(gameCode, game);
+    console.log('game created successfully:', game);
+    await saveGame(gameCode, game);
 
     res.status(201).json({
       success: true,
@@ -166,7 +175,7 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
       RETURNING *
     `;
 
-    // Now use the actual game ID for related inserts
+    
     const result = await sql.transaction((sql) => [
       // Add human player as dealer
       sql`
@@ -181,7 +190,7 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
         RETURNING 
           id,
           game_id,
-          user_id,
+          score,
           position,
           is_dealer,
           status,
@@ -204,7 +213,7 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
         RETURNING 
           id,
           game_id,
-          user_id,
+          score,
           position,
           is_dealer,
           status,
@@ -216,7 +225,7 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
       `,
     ]);
 
-    // After players are created, add cards
+    
     const humanPlayerId = result[0][0].id;
     const gameCards = await sql`
       INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
@@ -226,63 +235,37 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
         ${humanPlayerId},
         -1,
         'in_deck'
-      RETURNING *
+      RETURNING 
+          id,
+          game_id,
+          player_id,
+          status,
+          hand_position,
+          trick_number,
+          pos_x,
+          pos_y,
+          rotation,
+          z_index,
+          animation_state,
+          (SELECT json_build_object(
+           'card_id', card_id,
+            'suit', suit,
+            'value', value,
+            'rank', rank,
+            'image_url', image_url
+          ) FROM cards WHERE card_id = game_cards.card_id) as card
     `;
 
-    const players = await sql`
-    SELECT 
-      gp.id,
-      gp.game_id,
-      gp.score,
-      gp.position,
-      gp.is_dealer,
-      gp.status,
-      json_build_object(
-        'id', u.id,
-        'username', u.username,
-        'image_url', u.image_url
-      ) as user
-    FROM game_players gp
-    JOIN users u ON u.id = gp.user_id
-    WHERE gp.game_id = ${newGame.id}
-    ORDER BY gp.position
-  `;
-
-  const carrds = await sql`
-  SELECT 
-    gc.id,
-    gc.game_id,
-    gc.player_id,
-    gc.status,
-    gc.hand_position,
-    gc.trick_number,
-    gc.pos_x,
-    gc.pos_y,
-    gc.rotation,
-    gc.z_index,
-    gc.animation_state,
-    json_build_object(
-      'card_id', c.card_id,
-      'suit', c.suit,
-      'value', c.value,
-      'rank', c.rank,
-      'image_url', c.image_url
-    ) as card
-  FROM game_cards gc
-  JOIN cards c ON c.card_id = gc.card_id
-  WHERE gc.game_id = ${newGame.id}
-`;
 
     const game = {
       ...newGame,
-      players: players,
-      cards: carrds,
+      players: [result[0][0], result[1][0]],
+      cards: gameCards,
     };
-
-    console.log("Game created successfully:", game);
+    
+    //console.log("Game created successfully:", game);
     await saveGame(gameCode, game);
-    console.log('game saved to memeory', gameCode)
-
+    console.log("game saved to memory", gameCode);
 
     res.status(201).json({
       success: true,
