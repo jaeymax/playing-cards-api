@@ -197,7 +197,8 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
           (SELECT json_build_object(
             'id', id,
             'username', username,
-            'image_url', image_url
+            'image_url', image_url,
+            'is_bot', is_bot
           ) FROM users WHERE id = user_id) as user
       `,
       // Add bot player
@@ -220,7 +221,8 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
           (SELECT json_build_object(
             'id', id,
             'username', username,
-            'image_url', image_url
+            'image_url', image_url,
+            'is_bot', is_bot
           ) FROM users WHERE id = user_id) as user
       `,
     ]);

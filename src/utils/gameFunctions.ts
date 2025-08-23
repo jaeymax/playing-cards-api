@@ -120,6 +120,7 @@ export const playCard = async (game: any, card_id: number, player_id: number, so
   }
 
   played_card.status = "played";
+  played_card.trick_number = game.round_number;
   game.current_trick.cards.push({
     ...card,
     player_position: player.position
@@ -148,7 +149,6 @@ export const playCard = async (game: any, card_id: number, player_id: number, so
   }
   
   serverSocket.to(game.code).emit("updatedGameData", game);
-  await saveGame(game.code, game);
 };
 
 const isHigherCard = (card: any, current_trick: any) => {
@@ -188,7 +188,6 @@ const completeTrick = async (game: any) => {
 
   game.current_player_position = current_trick.leader_position;
   game.round_number++;
-  await saveGame(game.code, game);
 }
 
 const endGame = async(game: any) => {
@@ -230,7 +229,7 @@ const endGame = async(game: any) => {
   }
 
 
-  await saveGame(game.code, game);
+  
   //console.log("game", game.players)
 }
 
