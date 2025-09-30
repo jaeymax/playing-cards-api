@@ -40,7 +40,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use("/api/auth", authRoutes);
-app.use("/api/games", authMiddleware, gameRoutes);
+app.use("/api/games", gameRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoute);
