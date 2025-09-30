@@ -49,6 +49,7 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
         g.code,
         g.created_by,
         g.status,
+        g.win_points,
         g.player_count,
         g.current_hand_number,
         g.current_player_position,

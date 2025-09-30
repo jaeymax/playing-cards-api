@@ -5,7 +5,7 @@ import asyncHandler from "express-async-handler";
 class Matchmaker extends EventEmitter {
   private interval: ReturnType<typeof setInterval> | null = null;
   private readonly checkInterval: number = 5000;
-  private readonly ratingRange: number = 200;
+  private readonly ratingRange: number = 0;
 
   constructor() {
     super();
@@ -48,7 +48,7 @@ class Matchmaker extends EventEmitter {
             ABS(a.rating - b.rating) AS rating_diff
           FROM matchmaking_queue a
           JOIN matchmaking_queue b ON a.user_id < b.user_id
-          WHERE ABS(a.rating - b.rating) <= ${this.ratingRange}
+          WHERE ABS(a.rating - b.rating) >= ${this.ratingRange}
           ORDER BY rating_diff, a.joined_at
           LIMIT 1
         )

@@ -21,6 +21,7 @@
     "@types/passport": "^1.0.17",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.7.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -29,6 +30,8 @@
     "google-auth-library": "^10.2.1",
     "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "multer-storage-cloudinary": "^4.0.0",
     "redis": "^4.7.0",
     "resend": "^4.1.2",
     "socket.io": "^4.7.5"
