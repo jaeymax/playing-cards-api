@@ -30,6 +30,7 @@
     "google-auth-library": "^10.2.1",
     "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
+    "mixpanel": "^0.18.1",
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "redis": "^4.7.0",

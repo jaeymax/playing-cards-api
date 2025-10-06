@@ -23,6 +23,13 @@ import type { Game } from "../types";
 import Redis from "ioredis";
 import sql from "./config/db";
 import authMiddleware from "./middlewares/authMiddleware";
+import  Mixpanel  from "mixpanel";
+
+export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
+
+
+
+
 
 dotenv.config();
 

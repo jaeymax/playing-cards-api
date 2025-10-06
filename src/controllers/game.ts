@@ -3,6 +3,7 @@ import asyncHandler from "express-async-handler";
 import sql from "../config/db";
 import { games } from "../index";
 import { saveGame } from "../utils/gameFunctions";
+import { mixpanel } from "..";
 
 const createGame = asyncHandler(async (req: Request, res: Response) => {
   const { userId, winPoints, numPlayers, includeSixes, includeAces } = req.body;
@@ -104,6 +105,14 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
       players: [result[0][0]],
       cards: gameCards,
     };
+
+    mixpanel.track("Game Created", {
+      distinct_id: userId,
+      game_code: gameCode,
+      num_players: numPlayers,
+      win_points: winPoints,
+      "game_type":"invite friend"
+    });
 
     console.log('game created successfully:', game);
     await saveGame(gameCode, game);
@@ -259,11 +268,20 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
     `;
 
 
+
     const game = {
       ...newGame,
       players: [result[0][0], result[1][0]],
       cards: gameCards,
     };
+
+    mixpanel.track("Game Created", {
+      distinct_id: userId,
+      game_code: gameCode,
+      num_players: numBots + 1,
+      win_points: winPoints,
+      "game_type":"bot game"
+    });
     
     //console.log("Game created successfully:", game);
     await saveGame(gameCode, game);

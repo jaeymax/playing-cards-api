@@ -5,6 +5,7 @@ import { matchmaker } from "../index";
 import { games } from "../index";
 import type { Game } from "../../types";
 import { saveGame } from "../utils/gameFunctions";
+import { mixpanel } from "..";
 
 export const joinQueue = asyncHandler(async (req: Request, res: Response) => {
   const { userId, rating } = req.body;
@@ -110,6 +111,13 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
       players: players,
       cards: cards,
     };
+
+    mixpanel.track("Game Started", {
+      distinct_id: gameData[0].created_by,
+      game_code: gameCode[0].code,
+      num_players: players.length,
+      "game_type":"play now"
+    });
 
     await saveGame(gameCode[0].code, game);
     games.set(gameCode[0].code, game as Game);

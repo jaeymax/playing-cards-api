@@ -8,6 +8,7 @@ import { Resend } from "resend";
 import crypto from "crypto";
 import { verifyGoogleToken } from "../services/authService";
 import { OAuth2Client, TokenPayload } from "google-auth-library";
+import { mixpanel } from "..";
 
 // Email configuration
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -146,6 +147,12 @@ const registerUser = asyncHandler(
       VALUES (${newUser[0].id}, ${refreshToken}, NOW() + INTERVAL '7 days')
     `;
 
+    mixpanel.track("User Registered", {
+      distinct_id: newUser[0].id,
+      username: newUser[0].username,
+      email: newUser[0].email,
+    });
+
     // Set refresh token in HTTP-only cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -199,6 +206,12 @@ const loginUser = asyncHandler(
       INSERT INTO refresh_tokens (user_id, token, expires_at)
       VALUES (${user.id}, ${refreshToken}, NOW() + INTERVAL '7 days')
     `;
+
+    mixpanel.track("User Logged In", {
+      distinct_id: user.id,
+      username: user.username,
+      email: user.email,
+    });
 
     // Set refresh token in HTTP-only cookie
     res.cookie("refreshToken", refreshToken, {
@@ -264,6 +277,10 @@ const logoutUser = asyncHandler(
         WHERE token = ${refreshToken}
       `;
     }
+
+    mixpanel.track("User Logged Out", {
+      distinct_id: req.user?.userId,
+    });
 
     // Clear the refresh token cookie
     res.cookie("refreshToken", "", {

@@ -28,7 +28,7 @@ const getRecentMatchHistory = asyncHandler(
     AND g.status = 'completed'
     GROUP BY g.id, gp.score
     ORDER BY g.ended_at DESC
-    LIMIT 5
+    LIMIT 3
   `;
 
     res.json(recentGames);
@@ -36,7 +36,7 @@ const getRecentMatchHistory = asyncHandler(
 );
 
 const getMatchHistory = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.params.userId || req.user?.id;
+  const userId = req.params.userId || req.user?.userId;
 
   const games = await sql`
     SELECT 

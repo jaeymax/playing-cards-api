@@ -1,5 +1,5 @@
 import sql from "../config/db";
-import { games, redis } from "../index";
+import { games, mixpanel, redis } from "../index";
 import { serverSocket } from "../index";
 
 export const getDealingSequence = (game: any) => {
@@ -211,6 +211,12 @@ const endGame = async (game: any) => {
   game.status = "ended";
   game.ended_at = new Date();
 
+  mixpanel.track("game_completed", {
+    distinct_id: game.id,
+    game_code: game.code,
+    num_players: game.players.length,
+  });
+
   if (winning_card.card.rank == "6" || winning_card.card.rank == "7") {
     points = calculateSpecialPoints(
       game.completed_tricks,
@@ -235,14 +241,28 @@ const endGame = async (game: any) => {
     // Update game status
     await sql`UPDATE games SET status = 'completed', ended_at = NOW() WHERE id = ${game.id}`;
   
-    // Update all players' scores in the database
+    // Update all players scores and games_played in the database
     for (const player of game.players) {
       await sql`
         UPDATE game_players 
         SET score = ${player.score}
         WHERE game_id = ${game.id} AND user_id = ${player.user.id}
       `;
+
+      // update games_played for each user
+      await sql`
+        UPDATE users 
+        SET games_played = games_played + 1
+        WHERE id = ${player.user.id}
+      `;
     }
+
+    // Update user's game_wons count
+    await sql`
+      UPDATE users 
+      SET games_won = games_won + 1
+      WHERE id = ${winner.user.id}
+    `;
 
 
   } else {
