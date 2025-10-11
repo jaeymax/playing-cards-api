@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const game_1 = require("../controllers/game");
+const cards_1 = require("../controllers/cards");
 const router = (0, express_1.Router)();
-router.post("/create", game_1.createGame);
-router.post("/create-bot", game_1.createBotGame);
-router.get("/join", game_1.joinGame);
+router.get("/", cards_1.getAllCards);
+router.get("/:id", cards_1.getCardById);
+router.get("/suit/:suit", cards_1.getCardsBySuit);
 exports.default = router;

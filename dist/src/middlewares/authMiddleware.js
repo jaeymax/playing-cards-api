@@ -6,17 +6,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const authMiddleware = (req, res, next) => {
     var _a;
+    console.log('here');
+    console.log(req.header('Authorization'));
     const token = (_a = req.header('Authorization')) === null || _a === void 0 ? void 0 : _a.replace('Bearer ', '');
     if (!token) {
         return res.status(401).send({ error: 'Access denied. No token provided.' });
     }
     try {
-        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_ACCESS_SECRET);
         req.user = decoded;
+        console.log(req.user);
         next();
     }
     catch (err) {
-        res.status(400).send({ error: 'Invalid token.' });
+        res.status(403).send({ error: 'Invalid token.' });
     }
 };
 exports.default = authMiddleware;

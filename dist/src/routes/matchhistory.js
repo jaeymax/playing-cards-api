@@ -4,13 +4,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const users_1 = require("../controllers/users");
+const matchhistory_1 = require("../controllers/matchhistory");
 const authMiddleware_1 = __importDefault(require("../middlewares/authMiddleware"));
 const router = (0, express_1.Router)();
-// Protected route for getting own profile - should come first
-router.get("/me", authMiddleware_1.default, users_1.getUserProfile);
-router.get('/', users_1.getUsers);
-// Generic routes for any user ID - should come after specific routes
-router.get("/:id", users_1.getUserProfile);
-router.put("/:id", users_1.updateUserProfile);
+router.get("/", authMiddleware_1.default, matchhistory_1.getMatchHistory);
+router.get('/recent', authMiddleware_1.default, matchhistory_1.getRecentMatchHistory);
 exports.default = router;
