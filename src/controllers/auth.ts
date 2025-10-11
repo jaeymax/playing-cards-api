@@ -405,13 +405,54 @@ const forgotPassword = asyncHandler(
 
     // Send email using Resend
     await resend.emails.send({
-      from: "onboarding@resend.dev",
+      from: "SparPlay <noreply@sparplay.com>",
       to: email,
-      subject: "Password Reset Request",
+      subject: "Reset Your SparPlay Password",
       html: `
-        <p>You requested a password reset.</p>
-        <p>Click this link to reset your password: <a href="${resetUrl}">${resetUrl}</a></p>
-        <p>This link will expire in 15 minutes.</p>
+       <div style="font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 0px 0;">
+    <div style="max-width: 520px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+      
+      <!-- Header -->
+      <div style="background-color: #5c2ed1; color: #ffffff; padding: 18px 24px; font-size: 20px; font-weight: bold;">
+        SparPlay
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 32px 24px; color: #333;">
+        <h2 style="margin-top: 0; font-weight: 600; font-size: 22px;">Reset Your Password</h2>
+        <p style="font-size: 15px; color: #555;">
+          Hi there,<br><br>
+          We received a request to reset your password for your <strong>SparPlay</strong> account.
+          Click the button below to set a new password.
+        </p>
+
+        <!-- CTA Button -->
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${resetUrl}" 
+             style="background-color: #5c2ed1; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;">
+             Reset Password
+          </a>
+        </div>
+
+        <p style="font-size: 14px; color: #777;">
+          This link will expire in <strong>15 minutes</strong> for your security.<br>
+          If you didn’t request a password reset, you can safely ignore this email.
+        </p>
+
+        <div style="margin-top: 28px; padding: 16px; background-color: #f4f4f4; border: 1px solid #ddd; border-radius: 6px;">
+          <p style="font-size: 13px; color: #666; margin: 0;">
+            If the button above doesn’t work, copy and paste this link into your browser:<br>
+            <a href="${resetUrl}" style="color: #5c2ed1; word-break: break-all;">${resetUrl}</a>
+          </p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="background-color: #fafafa; padding: 16px; text-align: center; font-size: 12px; color: #888;">
+        © ${new Date().getFullYear()} SparPlay. All rights reserved.
+      </div>
+    </div>
+  </div>
       `,
     });
 
