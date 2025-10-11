@@ -1,6 +1,7 @@
 import sql from "../config/db";
 import { games, mixpanel, redis } from "../index";
 import { serverSocket } from "../index";
+import { updateRatings } from "../utils/rating";
 
 export const getDealingSequence = (game: any) => {
   const dealingSequence: any[] = [];
@@ -230,7 +231,7 @@ const endGame = async (game: any) => {
   );
   winner.score += points;
 
-  if (winner.score >= game.win_points) {
+  if (winner.score >= 1) {
     setTimeout(() => {
       serverSocket.to(game.code).emit("gameOver", {
         winner: { ...winner, points, hand_number: game.current_hand_number },
@@ -263,6 +264,14 @@ const endGame = async (game: any) => {
       SET games_won = games_won + 1
       WHERE id = ${winner.user.id}
     `;
+
+    if(game.is_rated){
+        //update ratings
+      const players =  updateRatings(game.players, winner.user.id);
+      for(let player of players){
+        await sql`UPDATE users SET rating = ${player.user.rating} WHERE id = ${player.user.id}`;
+      }
+    }
 
 
   } else {

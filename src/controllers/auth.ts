@@ -47,10 +47,34 @@ const sendOTPEmail = asyncHandler(
 
     // Send email using Resend
     await resend.emails.send({
-      from: "onboarding@resend.dev",
+      from: "SparPlay <noreply@sparplay.com>",
       to: email,
-      subject: "Your OTP for Registration",
-      text: `Your OTP is: ${otp}. This code will expire in 15 minutes.`,
+      subject: "Your SparPlay OTP Code",
+      html: `  <div style="font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 0px 0;">
+    <div style="max-width: 480px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+      <div style="background-color: #5c2ed1; color: #ffffff; padding: 16px 24px; font-size: 20px; font-weight: bold;">
+        SparPlay
+      </div>
+      <div style="padding: 32px 24px; color: #333333;">
+        <h2 style="margin-top: 0; font-weight: 600; font-size: 22px;">Your One-Time Password (OTP)</h2>
+        <p style="font-size: 15px; color: #555555;">
+          Use the code below to complete your registration on <strong>SparPlay</strong>. 
+          This code is valid for <strong>15 minutes</strong>.
+        </p>
+        <div style="background-color: #f4f4f4; border: 1px solid #ddd; padding: 16px; text-align: center; border-radius: 6px; margin: 24px 0;">
+          <span style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #5c2ed1;">
+            ${otp}
+          </span>
+        </div>
+        <p style="font-size: 14px; color: #777;">
+          Didn’t request this code? You can safely ignore this message.
+        </p>
+      </div>
+      <div style="background-color: #fafafa; padding: 16px; text-align: center; font-size: 12px; color: #888;">
+        © ${new Date().getFullYear()} SparPlay. All rights reserved.
+      </div>
+    </div>
+  </div>`,
     });
 
     res.status(200).json({ message: "OTP sent successfully" });
@@ -161,6 +185,54 @@ const registerUser = asyncHandler(
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
+    await resend.emails.send({
+      from: "SparPlay <noreply@sparplay.com>",
+      to: email,
+      subject: "Welcome to SparPlay",
+      html: `
+      <div style="font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 0px 0;">
+        <div style="max-width: 520px; margin: auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          
+          <!-- Header -->
+          <div style="background-color: #5c2ed1; color: #ffffff; padding: 18px 24px; font-size: 20px; font-weight: bold;">
+            SparPlay
+          </div>
+          
+          <!-- Body -->
+          <div style="padding: 32px 24px; color: #333333;">
+            <h2 style="margin-top: 0; font-weight: 600; font-size: 22px;">Welcome to SparPlay!</h2>
+            <p style="font-size: 15px; color: #555;">
+              Hi ${username},<br><br>
+              We're thrilled to have you join the <strong>SparPlay</strong> community — the home of the ultimate online Spar card game.
+            </p>
+            <p style="font-size: 15px; color: #555;">
+              You can now play against friends, challenge other players worldwide, and climb the leaderboard to become a Spar legend!
+            </p>
+    
+            <!-- CTA Button -->
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="https://www.sparplay.com" 
+                 style="background-color: #5c2ed1; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;">
+                 Play Now
+              </a>
+            </div>
+    
+            <p style="font-size: 14px; color: #777;">
+              If you didn’t create a SparPlay account, you can safely ignore this message.
+            </p>
+          </div>
+    
+          <!-- Footer -->
+          <div style="background-color: #fafafa; padding: 16px; text-align: center; font-size: 12px; color: #888;">
+            © ${new Date().getFullYear()} SparPlay. All rights reserved.
+          </div>
+        </div>
+      </div>
+      `
+    });
+    
+    console.log("Welcome email sent to:", email); 
+  
     res.status(201).json({
       message: "User registered successfully",
       ...newUser[0],

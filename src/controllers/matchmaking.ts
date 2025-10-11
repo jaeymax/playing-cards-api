@@ -57,6 +57,7 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
         g.round_number,
         g.created_at,
         g.started_at,
+        g.is_rated,
         g.ended_at
       FROM games g
       WHERE g.id = ${gameId}
@@ -73,7 +74,8 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
         json_build_object(
           'id', u.id,
           'username', u.username,
-          'image_url', u.image_url
+          'image_url', u.image_url,
+          'rating', u.rating
         ) as user
       FROM game_players gp
       JOIN users u ON u.id = gp.user_id

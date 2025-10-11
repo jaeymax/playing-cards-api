@@ -85,8 +85,8 @@ class Matchmaker extends EventEmitter {
 
       const result = await sql.transaction((sql) => [
         sql`
-          INSERT INTO games (code, created_by, status, player_count, current_player_position) 
-          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 1) 
+          INSERT INTO games (code, created_by, status, player_count, current_player_position, is_rated) 
+          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 1, true) 
           RETURNING id
         `,
         sql`
@@ -101,7 +101,8 @@ class Matchmaker extends EventEmitter {
             position,
             is_dealer,
             (SELECT username FROM users WHERE users.id = user_id) as username,
-            (SELECT image_url FROM users WHERE users.id = user_id) as image_url
+            (SELECT image_url FROM users WHERE users.id = user_id) as image_url,
+            (SELECT rating FROM users WHERE users.id = user_id) as rating
         `,
         sql`
           DELETE FROM matchmaking_queue 

@@ -19,10 +19,15 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
   }
 
   const users = await sql`
-        SELECT id, username, email, image_url, games_played, games_won, rating, location, created_at, updated_at
-        FROM users
-        WHERE id = ${userId}
-    `;
+    WITH UserRank AS (
+      SELECT id, username, email, image_url, games_played, games_won, rating, location, created_at, updated_at,
+             RANK() OVER (ORDER BY rating DESC) as rank
+      FROM users Where is_guest = false and is_bot = false
+    )
+    SELECT *
+    FROM UserRank
+    WHERE id = ${userId}
+  `;
 
   if (users.length === 0) {
     res.status(404);
