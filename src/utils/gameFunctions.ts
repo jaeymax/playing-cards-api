@@ -231,7 +231,7 @@ const endGame = async (game: any) => {
   );
   winner.score += points;
 
-  if (winner.score >= 1) {
+  if (winner.score >= game.win_points) {
     setTimeout(() => {
       serverSocket.to(game.code).emit("gameOver", {
         winner: { ...winner, points, hand_number: game.current_hand_number },
