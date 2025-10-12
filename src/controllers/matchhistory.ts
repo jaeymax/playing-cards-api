@@ -15,6 +15,7 @@ const getRecentMatchHistory = asyncHandler(
       g.status,
       g.ended_at,
       g.player_count,
+      g.is_rated,
       gp.score,
       json_agg(json_build_object(
         'username', u.username,
@@ -45,6 +46,7 @@ const getMatchHistory = asyncHandler(async (req: Request, res: Response) => {
       g.status,
       g.ended_at,
       g.player_count,
+      g.is_rated,
       gp.score,
       json_agg(json_build_object(
         'username', u.username,

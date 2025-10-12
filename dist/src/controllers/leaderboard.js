@@ -19,7 +19,9 @@ const getTopPlayers = (0, express_async_handler_1.default)((req, res) => __await
     //res.json({message:"get Leaderboard controller"});
     // select * from users where is_guest = false AND is_bot = false ORDER by rating DESC;
     const topPlayers = yield (0, db_1.default) `
-          SELECT username, image_url, rating FROM users 
+          SELECT username, image_url, rating,
+          RANK() OVER (ORDER BY rating DESC) as rank
+          FROM users 
           WHERE is_guest = false 
           AND is_bot = false 
           ORDER BY rating DESC
@@ -29,9 +31,13 @@ const getTopPlayers = (0, express_async_handler_1.default)((req, res) => __await
 }));
 exports.getTopPlayers = getTopPlayers;
 const getLeaderboard = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    // select * from users where is_guest = false AND is_bot = false ORDER by rating DESC;
     const leaderboard = yield (0, db_1.default) `
-        SELECT * FROM users 
+        SELECT 
+            username, 
+            image_url, 
+            rating,
+            RANK() OVER (ORDER BY rating DESC) as rank
+        FROM users 
         WHERE is_guest = false 
         AND is_bot = false 
         ORDER BY rating DESC

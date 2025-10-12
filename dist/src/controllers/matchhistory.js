@@ -26,6 +26,7 @@ const getRecentMatchHistory = (0, express_async_handler_1.default)((req, res) =>
       g.status,
       g.ended_at,
       g.player_count,
+      g.is_rated,
       gp.score,
       json_agg(json_build_object(
         'username', u.username,
@@ -54,6 +55,7 @@ const getMatchHistory = (0, express_async_handler_1.default)((req, res) => __awa
       g.status,
       g.ended_at,
       g.player_count,
+      g.is_rated,
       gp.score,
       json_agg(json_build_object(
         'username', u.username,
