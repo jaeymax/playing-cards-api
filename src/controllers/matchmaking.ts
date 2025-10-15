@@ -68,6 +68,7 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
         gp.id,
         gp.game_id,
         gp.score,
+        gp.games_won,
         gp.position,
         gp.is_dealer,
         gp.status,

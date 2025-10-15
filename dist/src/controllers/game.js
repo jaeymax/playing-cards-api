@@ -63,6 +63,7 @@ const createGame = (0, express_async_handler_1.default)((req, res) => __awaiter(
           id,
           game_id,
           score,
+          games_won,
           position,
           is_dealer,
           status,
@@ -108,9 +109,9 @@ const createGame = (0, express_async_handler_1.default)((req, res) => __awaiter(
             game_code: gameCode,
             num_players: numPlayers,
             win_points: winPoints,
-            "game_type": "invite friend"
+            game_type: "invite friend",
         });
-        console.log('game created successfully:', game);
+        console.log("game created successfully:", game);
         yield (0, gameFunctions_1.saveGame)(gameCode, game);
         res.status(201).json({
             success: true,
@@ -184,6 +185,7 @@ const createBotGame = (0, express_async_handler_1.default)((req, res) => __await
           id,
           game_id,
           score,
+          games_won,
           position,
           is_dealer,
           status,
@@ -208,6 +210,7 @@ const createBotGame = (0, express_async_handler_1.default)((req, res) => __await
           id,
           game_id,
           score,
+          games_won,
           position,
           is_dealer,
           status,
@@ -254,7 +257,7 @@ const createBotGame = (0, express_async_handler_1.default)((req, res) => __await
             game_code: gameCode,
             num_players: numBots + 1,
             win_points: winPoints,
-            "game_type": "bot game"
+            game_type: "bot game",
         });
         //console.log("Game created successfully:", game);
         yield (0, gameFunctions_1.saveGame)(gameCode, game);

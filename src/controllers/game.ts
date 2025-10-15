@@ -19,7 +19,6 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
     const gameCode = Math.random().toString(36).substring(2, 12);
     const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
 
-
     const [newGame] = await sql`
       INSERT INTO games (
         code, 
@@ -56,6 +55,7 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
           id,
           game_id,
           score,
+          games_won,
           position,
           is_dealer,
           status,
@@ -66,7 +66,6 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
           ) FROM users WHERE id = user_id) as user
       `,
     ]);
-
 
     const humanPlayerId = result[0][0].id;
 
@@ -99,7 +98,6 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
           ) FROM cards WHERE card_id = game_cards.card_id) as card
     `;
 
-
     const game = {
       ...newGame,
       players: [result[0][0]],
@@ -111,10 +109,10 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
       game_code: gameCode,
       num_players: numPlayers,
       win_points: winPoints,
-      "game_type":"invite friend"
+      game_type: "invite friend",
     });
 
-    console.log('game created successfully:', game);
+    console.log("game created successfully:", game);
     await saveGame(gameCode, game);
 
     res.status(201).json({
@@ -184,7 +182,6 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
       RETURNING *
     `;
 
-    
     const result = await sql.transaction((sql) => [
       // Add human player as dealer
       sql`
@@ -200,6 +197,7 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
           id,
           game_id,
           score,
+          games_won,
           position,
           is_dealer,
           status,
@@ -224,6 +222,7 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
           id,
           game_id,
           score,
+          games_won,
           position,
           is_dealer,
           status,
@@ -236,7 +235,6 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
       `,
     ]);
 
-    
     const humanPlayerId = result[0][0].id;
     const gameCards = await sql`
       INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
@@ -267,8 +265,6 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
           ) FROM cards WHERE card_id = game_cards.card_id) as card
     `;
 
-
-
     const game = {
       ...newGame,
       players: [result[0][0], result[1][0]],
@@ -280,9 +276,9 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
       game_code: gameCode,
       num_players: numBots + 1,
       win_points: winPoints,
-      "game_type":"bot game"
+      game_type: "bot game",
     });
-    
+
     //console.log("Game created successfully:", game);
     await saveGame(gameCode, game);
     console.log("game saved to memory", gameCode);

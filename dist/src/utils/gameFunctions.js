@@ -194,6 +194,8 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
     const winner = game.players.find((player) => player.position === final_trick.leader_position);
     winner.score += points;
     if (winner.score >= game.win_points) {
+        // new line to increment games_won
+        winner.games_won += 1;
         setTimeout(() => {
             index_2.serverSocket.to(game.code).emit("gameOver", {
                 winner: Object.assign(Object.assign({}, winner), { points, hand_number: game.current_hand_number }),
@@ -328,6 +330,7 @@ function createGamePlayer(gameId, userId, position) {
            id,
            game_id,
            score,
+           games_won,
            position,
            is_dealer,
            status,

@@ -71,6 +71,7 @@ exports.startGame = (0, express_async_handler_1.default)((req, res) => __awaiter
         gp.id,
         gp.game_id,
         gp.score,
+        gp.games_won,
         gp.position,
         gp.is_dealer,
         gp.status,

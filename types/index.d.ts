@@ -27,6 +27,7 @@ export interface GamePlayer {
   score: number;
   position: number;
   is_dealer: boolean;
+  games_won: number;
   status: string;
 }
 

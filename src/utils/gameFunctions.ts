@@ -232,11 +232,14 @@ const endGame = async (game: any) => {
   winner.score += points;
 
   if (winner.score >= game.win_points) {
+    // new line to increment games_won
+    winner.games_won += 1;
     setTimeout(() => {
       serverSocket.to(game.code).emit("gameOver", {
         winner: { ...winner, points, hand_number: game.current_hand_number },
       });
     }, 1000);
+
 
 
     // Update game status
@@ -407,6 +410,7 @@ export async function createGamePlayer(
            id,
            game_id,
            score,
+           games_won,
            position,
            is_dealer,
            status,

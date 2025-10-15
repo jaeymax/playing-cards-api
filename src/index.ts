@@ -10,6 +10,7 @@ import gameRoutes from "./routes/game";
 import friendsRoutes from "./routes/friends";
 import errorHandler from "./middlewares/errorHandler";
 //import notFoundMiddleware from './middlewares/notFoundMiddleware';
+import {PutObjectCommand, S3Client} from "@aws-sdk/client-s3"
 import userRoutes from "./routes/users";
 import messageRoute from "./routes/messages";
 import cardRoutes from "./routes/cards";
@@ -59,6 +60,30 @@ app.use("/api/profile", profileRoutes);
 
 
 app.use(errorHandler);
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
+  },
+});
+
+
+async function uploadFileToS3(bucketName: string, fileName: string, fileContent: Buffer) {
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: fileName,
+    Body: fileContent,
+  });
+
+  try {
+    const response = await s3Client.send(command);
+    console.log(`File uploaded successfully. ${response.$metadata.httpStatusCode}`);
+  } catch (error) {
+    console.error("Error uploading file:", error);
+  }
+}
 
 // Websocket's connection to the server to allow bidirectional communication
 export const serverSocket = new Server(server, {

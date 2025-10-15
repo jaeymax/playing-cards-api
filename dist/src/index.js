@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -16,6 +25,7 @@ const game_1 = __importDefault(require("./routes/game"));
 const friends_1 = __importDefault(require("./routes/friends"));
 const errorHandler_1 = __importDefault(require("./middlewares/errorHandler"));
 //import notFoundMiddleware from './middlewares/notFoundMiddleware';
+const client_s3_1 = require("@aws-sdk/client-s3");
 const users_1 = __importDefault(require("./routes/users"));
 const messages_1 = __importDefault(require("./routes/messages"));
 const cards_1 = __importDefault(require("./routes/cards"));
@@ -50,6 +60,29 @@ exports.app.use("/api/matchhistory", matchhistory_1.default);
 exports.app.use("/api/leaderboard", leaderboard_1.default);
 exports.app.use("/api/profile", profile_1.default);
 exports.app.use(errorHandler_1.default);
+const s3Client = new client_s3_1.S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
+});
+function uploadFileToS3(bucketName, fileName, fileContent) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const command = new client_s3_1.PutObjectCommand({
+            Bucket: bucketName,
+            Key: fileName,
+            Body: fileContent,
+        });
+        try {
+            const response = yield s3Client.send(command);
+            console.log(`File uploaded successfully. ${response.$metadata.httpStatusCode}`);
+        }
+        catch (error) {
+            console.error("Error uploading file:", error);
+        }
+    });
+}
 // Websocket's connection to the server to allow bidirectional communication
 exports.serverSocket = new socket_io_1.Server(server, {
     cors: {
