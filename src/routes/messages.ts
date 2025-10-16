@@ -25,4 +25,30 @@ router.post("/global", asyncHandler(async (req, res) => {
   res.status(201).json({ message: "Message sent successfully" });
 }));
 
+router.get("/games/:code", asyncHandler(async (req, res) => {
+  const { code } = req.params;
+  const messages = await sql`
+        SELECT 
+            m.id,
+            m.message,
+            m.created_at as timestamp,
+            u.id as user_id,
+            u.username,
+            u.image_url as avatar
+        FROM game_chat_messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.game_code = ${code}
+        ORDER BY m.created_at ASC
+    `;
+  res.json(messages);
+}));
+
+router.post("/game/:code", asyncHandler(async (req, res) => {
+  const { code } = req.params;
+  const { user_id, message } = req.body;
+  await sql`insert into game_chat_messages (game_code, user_id, message) values (${code}, ${user_id}, ${message})`;
+  res.status(201).json({ message: "Message sent successfully" });
+}));
+
+
 export default router;

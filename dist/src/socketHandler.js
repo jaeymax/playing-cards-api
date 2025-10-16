@@ -202,6 +202,19 @@ const initializeSocketHandler = (serverSocket) => {
                 socket.emit("queue_error", { message: "Failed to leave queue" });
             }
         }));
+        // game_chat_messages
+        socket.on('sendMessage', (_a) => __awaiter(void 0, [_a], void 0, function* ({ game_code, user_id, avatar, username, message, timestamp }) {
+            console.log(`Message received in game ${game_code} from user ${user_id}: ${message}`);
+            //store the message in game_chat_messages table
+            try {
+                yield (0, db_1.default) `insert into game_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+            }
+            catch (error) {
+                console.error("Error storing game message:", error.message);
+            }
+            // Broadcast the message to all clients in the game room
+            socket.to(game_code).emit("chatMessage", { user_id, username, avatar, timestamp, message, game_code });
+        }));
         socket.on("disconnect", () => {
             console.log(`User ${userId} disconnected`);
             exports.userSocketMap.delete(userId);

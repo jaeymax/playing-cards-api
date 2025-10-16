@@ -228,6 +228,23 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       }
     });
 
+    // game_chat_messages
+    socket.on('sendMessage', async ({game_code, user_id, avatar, username, message, timestamp})=>{
+      console.log(`Message received in game ${game_code} from user ${user_id}: ${message}`);
+
+      //store the message in game_chat_messages table
+      try {
+        await sql`insert into game_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+      } catch (error: any) {
+        console.error("Error storing game message:", error.message);
+      }
+
+      // Broadcast the message to all clients in the game room
+      socket.to(game_code).emit("chatMessage", {user_id, username, avatar, timestamp, message, game_code});
+
+    });
+
+
     socket.on("disconnect", () => {
       console.log(`User ${userId} disconnected`)
       userSocketMap.delete(userId);
