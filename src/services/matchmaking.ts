@@ -9,7 +9,7 @@ class Matchmaker extends EventEmitter {
 
   constructor() {
     super();
-    this.start();
+    //this.start();
   }
 
   addToQueue = async (userId: number, rating: number): Promise<void> => {

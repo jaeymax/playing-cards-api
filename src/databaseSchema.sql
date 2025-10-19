@@ -144,3 +144,35 @@ CREATE TABLE game_cards (
 --     winning_card_id INTEGER REFERENCES cards(card_id),
 --     winning_player_id INTEGER REFERENCES game_players(id)
 -- );
+
+CREATE TABLE tournaments (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR(20) CHECK (status IN ('upcoming', 'ongoing', 'completed', 'cancelled')) DEFAULT 'upcoming',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    winner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    prize INTEGER DEFAULT 0
+);
+
+CREATE TABLE tournament_participants (
+    id SERIAL PRIMARY KEY,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) CHECK (status IN ('registered', 'eliminated', 'winner')) DEFAULT 'registered',
+    UNIQUE(tournament_id, user_id) -- Prevent duplicate registrations
+);
+
+CREATE TABLE tournament_matches (
+    id SERIAL PRIMARY KEY,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    round_number INTEGER NOT NULL,
+    status VARCHAR(20) CHECK (status IN ('scheduled', 'in_progress', 'completed', 'forfeited')) DEFAULT 'scheduled',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tournament_id, game_id) -- Prevent duplicate game entries in a tournament
+);
