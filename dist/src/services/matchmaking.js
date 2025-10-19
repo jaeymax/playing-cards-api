@@ -44,7 +44,7 @@ class Matchmaker extends events_1.EventEmitter {
                 // throw error; // Re-throw the original error for proper handling
             }
         });
-        this.start();
+        //this.start();
     }
     checkMatches() {
         return __awaiter(this, void 0, void 0, function* () {
