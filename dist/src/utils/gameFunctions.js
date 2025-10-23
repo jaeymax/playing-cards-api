@@ -171,8 +171,8 @@ const completeTrick = (game) => __awaiter(void 0, void 0, void 0, function* () {
     }
     game.current_trick = {
         cards: [],
-        leading_suit: "",
-        leader_position: 0,
+        leading_suit: current_trick.leading_suit,
+        leader_position: current_trick.leader_position,
     };
     game.current_player_position = current_trick.leader_position;
     game.round_number++;

@@ -31,6 +31,7 @@ const messages_1 = __importDefault(require("./routes/messages"));
 const cards_1 = __importDefault(require("./routes/cards"));
 const matchmaking_1 = __importDefault(require("./routes/matchmaking"));
 const leaderboard_1 = __importDefault(require("./routes/leaderboard"));
+const tournament_1 = __importDefault(require("./routes/tournament"));
 const matchhistory_1 = __importDefault(require("./routes/matchhistory"));
 const profile_1 = __importDefault(require("./routes/profile"));
 const matchmaking_2 = __importDefault(require("./services/matchmaking"));
@@ -59,6 +60,7 @@ exports.app.use("/api/matchmaking", matchmaking_1.default);
 exports.app.use("/api/matchhistory", matchhistory_1.default);
 exports.app.use("/api/leaderboard", leaderboard_1.default);
 exports.app.use("/api/profile", profile_1.default);
+exports.app.use("/api/tournament", tournament_1.default);
 exports.app.use(errorHandler_1.default);
 const s3Client = new client_s3_1.S3Client({
     region: process.env.AWS_REGION,
