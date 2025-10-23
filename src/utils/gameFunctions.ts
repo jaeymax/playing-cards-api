@@ -193,8 +193,8 @@ const completeTrick = async (game: any) => {
 
   game.current_trick = {
     cards: [],
-    leading_suit: "",
-    leader_position: 0,
+    leading_suit: current_trick.leading_suit,
+    leader_position: current_trick.leader_position,
   };
 
   game.current_player_position = current_trick.leader_position;

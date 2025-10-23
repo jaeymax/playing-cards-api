@@ -16,6 +16,7 @@ import messageRoute from "./routes/messages";
 import cardRoutes from "./routes/cards";
 import matchmakingRoutes from "./routes/matchmaking";
 import leaderboardRoutes from "./routes/leaderboard";
+import tournamentRoutes from "./routes/tournament";
 import matchhistoryRoutes from "./routes/matchhistory";
 import profileRoutes from "./routes/profile";
 import Matchmaker from "./services/matchmaking";
@@ -57,6 +58,7 @@ app.use("/api/matchmaking", matchmakingRoutes);
 app.use("/api/matchhistory", matchhistoryRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/tournament", tournamentRoutes);
 
 
 app.use(errorHandler);

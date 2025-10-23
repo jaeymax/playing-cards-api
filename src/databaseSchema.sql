@@ -152,6 +152,7 @@ CREATE TABLE tournaments (
     start_date TIMESTAMP WITH TIME ZONE NOT NULL,
     end_date TIMESTAMP WITH TIME ZONE NOT NULL,
     status VARCHAR(20) CHECK (status IN ('upcoming', 'ongoing', 'completed', 'cancelled')) DEFAULT 'upcoming',
+    format VARCHAR(50) NOT NULL, -- e.g., 'single_elimination', 'round_robin'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     winner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -172,7 +173,8 @@ CREATE TABLE tournament_matches (
     tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     round_number INTEGER NOT NULL,
-    status VARCHAR(20) CHECK (status IN ('scheduled', 'in_progress', 'completed', 'forfeited')) DEFAULT 'scheduled',
+    status VARCHAR(20) CHECK (status IN ('pending', 'in_progress', 'completed', 'forfeited')) DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    winner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     UNIQUE(tournament_id, game_id) -- Prevent duplicate game entries in a tournament
 );
