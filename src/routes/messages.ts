@@ -31,6 +31,7 @@ router.get("/games/:code", asyncHandler(async (req, res) => {
         SELECT 
             m.id,
             m.message,
+            m.type,
             m.created_at as timestamp,
             u.id as user_id,
             u.username,

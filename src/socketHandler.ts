@@ -229,19 +229,28 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
     // game_chat_messages
-    socket.on('sendMessage', async ({game_code, user_id, avatar, username, message, timestamp})=>{
+    socket.on('sendMessage', async ({game_code, user_id, type, avatar, username, message, timestamp})=>{
       console.log(`Message received in game ${game_code} from user ${user_id}: ${message}`);
 
       //store the message in game_chat_messages table
       try {
-        await sql`insert into game_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+        await sql`insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${type}, ${timestamp})`;
       } catch (error: any) {
         console.error("Error storing game message:", error.message);
       }
 
       // Broadcast the message to all clients in the game room
-      socket.to(game_code).emit("chatMessage", {user_id, username, avatar, timestamp, message, game_code});
+      socket.to(game_code).emit("chatMessage", {user_id, type:"text", username, avatar, timestamp, message, game_code});
+      console.log({user_id, username, avatar, timestamp, message, game_code})
 
+    });
+
+    socket.on("voiceMessage", async ({user_id, username, avatar, mime_type, timestamp, audio, game_code})=>{
+      console.log(`Voice message received in game ${game_code} from user ${user_id}`);
+
+      // Broadcast the voice message to all clients in the game room
+      socket.to(game_code).emit("voiceMessage", {user_id, username, type:"audio", avatar, mime_type, timestamp, audio, game_code});
+      console.log({user_id, username, avatar, mime_type, timestamp, audio, game_code});
     });
 
 

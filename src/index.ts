@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Server } from "socket.io";
-import http from "http";
+import https from "https";
 import authRoutes from "./routes/auth";
 import gameRoutes from "./routes/game";
 import friendsRoutes from "./routes/friends";
@@ -26,6 +26,7 @@ import Redis from "ioredis";
 import sql from "./config/db";
 import authMiddleware from "./middlewares/authMiddleware";
 import  Mixpanel  from "mixpanel";
+import fs from "fs";
 
 export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
 
@@ -36,13 +37,20 @@ export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
 dotenv.config();
 
 export const app: Express = express();
-const server = http.createServer(app);
+
+const options = {
+  key: fs.readFileSync("certs/192.168.43.218-key.pem"),
+  cert: fs.readFileSync("certs/192.168.43.218.pem"),
+}
+
+const server = https.createServer(options, app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
 export const redis = new Redis(process.env.REDIS_URL as string);
 
 export const games = new Map<string, Game>();
 
 //Middlewares
+
 
 app.use(cors());
 app.use(express.json());
@@ -98,7 +106,7 @@ export const serverSocket = new Server(server, {
 const port = process.env.PORT || 5000;
 
 server.listen(port, () => {
-  console.log(`[server]: Server is running at http://localhost:${port}`);
+  console.log(`[server]: Server is running at https://localhost:${port}`);
 });
 
 export const matchmaker = new Matchmaker();
