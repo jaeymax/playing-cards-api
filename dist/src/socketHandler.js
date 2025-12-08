@@ -203,17 +203,24 @@ const initializeSocketHandler = (serverSocket) => {
             }
         }));
         // game_chat_messages
-        socket.on('sendMessage', (_a) => __awaiter(void 0, [_a], void 0, function* ({ game_code, user_id, avatar, username, message, timestamp }) {
+        socket.on('sendMessage', (_a) => __awaiter(void 0, [_a], void 0, function* ({ game_code, user_id, type, avatar, username, message, timestamp }) {
             console.log(`Message received in game ${game_code} from user ${user_id}: ${message}`);
             //store the message in game_chat_messages table
             try {
-                yield (0, db_1.default) `insert into game_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+                yield (0, db_1.default) `insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${type}, ${timestamp})`;
             }
             catch (error) {
                 console.error("Error storing game message:", error.message);
             }
             // Broadcast the message to all clients in the game room
-            socket.to(game_code).emit("chatMessage", { user_id, username, avatar, timestamp, message, game_code });
+            socket.to(game_code).emit("chatMessage", { user_id, type: "text", username, avatar, timestamp, message, game_code });
+            console.log({ user_id, username, avatar, timestamp, message, game_code });
+        }));
+        socket.on("voiceMessage", (_a) => __awaiter(void 0, [_a], void 0, function* ({ user_id, username, avatar, mime_type, timestamp, audio, game_code }) {
+            console.log(`Voice message received in game ${game_code} from user ${user_id}`);
+            // Broadcast the voice message to all clients in the game room
+            socket.to(game_code).emit("voiceMessage", { user_id, username, type: "audio", avatar, mime_type, timestamp, audio, game_code });
+            console.log({ user_id, username, avatar, mime_type, timestamp, audio, game_code });
         }));
         socket.on("disconnect", () => {
             console.log(`User ${userId} disconnected`);

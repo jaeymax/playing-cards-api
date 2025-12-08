@@ -19,7 +19,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const cors_1 = __importDefault(require("cors"));
 const socket_io_1 = require("socket.io");
-const http_1 = __importDefault(require("http"));
+const https_1 = __importDefault(require("https"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const game_1 = __importDefault(require("./routes/game"));
 const friends_1 = __importDefault(require("./routes/friends"));
@@ -38,10 +38,15 @@ const matchmaking_2 = __importDefault(require("./services/matchmaking"));
 const socketHandler_1 = require("./socketHandler");
 const ioredis_1 = __importDefault(require("ioredis"));
 const mixpanel_1 = __importDefault(require("mixpanel"));
+const fs_1 = __importDefault(require("fs"));
 exports.mixpanel = mixpanel_1.default.init(process.env.MIXPANEL_TOKEN);
 dotenv_1.default.config();
 exports.app = (0, express_1.default)();
-const server = http_1.default.createServer(exports.app);
+const options = {
+    key: fs_1.default.readFileSync("certs/192.168.43.218-key.pem"),
+    cert: fs_1.default.readFileSync("certs/192.168.43.218.pem"),
+};
+const server = https_1.default.createServer(options, exports.app);
 exports.resend = new resend_1.Resend(process.env.RESEND_API_KEY);
 exports.redis = new ioredis_1.default(process.env.REDIS_URL);
 exports.games = new Map();
@@ -94,7 +99,7 @@ exports.serverSocket = new socket_io_1.Server(server, {
 });
 const port = process.env.PORT || 5000;
 server.listen(port, () => {
-    console.log(`[server]: Server is running at http://localhost:${port}`);
+    console.log(`[server]: Server is running at https://localhost:${port}`);
 });
 exports.matchmaker = new matchmaking_2.default();
 (0, socketHandler_1.initializeSocketHandler)(exports.serverSocket);

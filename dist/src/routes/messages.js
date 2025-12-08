@@ -42,6 +42,7 @@ router.get("/games/:code", (0, express_async_handler_1.default)((req, res) => __
         SELECT 
             m.id,
             m.message,
+            m.type,
             m.created_at as timestamp,
             u.id as user_id,
             u.username,
