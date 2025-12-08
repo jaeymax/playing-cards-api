@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Server } from "socket.io";
 import https from "https";
+import http from "http";
 import authRoutes from "./routes/auth";
 import gameRoutes from "./routes/game";
 import friendsRoutes from "./routes/friends";
@@ -38,12 +39,12 @@ dotenv.config();
 
 export const app: Express = express();
 
-const options = {
-  key: fs.readFileSync("certs/192.168.43.218-key.pem"),
-  cert: fs.readFileSync("certs/192.168.43.218.pem"),
-}
+// const options = {
+//   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
+//   cert: fs.readFileSync("certs/192.168.43.218.pem"),
+// }
 
-const server = https.createServer(options, app);
+const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
 export const redis = new Redis(process.env.REDIS_URL as string);
 
