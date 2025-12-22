@@ -1,18 +1,26 @@
-interface Person{
-   username:string,
-   phone:string,
-   email:string,
-   password:string,
-   country:string,
+import { Request } from "express";
+
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    userId: number;
+  };
 }
 
-export interface Card{
-   card_id: number;
-   suit: string;
-   value: number;
-   rank: string;
-   image_url: string;
- }
+interface Person {
+  username: string;
+  phone: string;
+  email: string;
+  password: string;
+  country: string;
+}
+
+export interface Card {
+  card_id: number;
+  suit: string;
+  value: number;
+  rank: string;
+  image_url: string;
+}
 
 export interface GamePlayerUser {
   id: number;
@@ -64,4 +72,3 @@ export interface Game {
   completed_tricks: any[];
   current_trick: any;
 }
- 

@@ -150,6 +150,9 @@ CREATE TABLE tournaments (
     name VARCHAR(100) NOT NULL,
     description TEXT,
     start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    registration_closing_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_current BOOLEAN DEFAULT false,
+    registration_fee NUMERIC(10,2) DEFAULT '0.00'
     end_date TIMESTAMP WITH TIME ZONE NOT NULL,
     status VARCHAR(20) CHECK (status IN ('upcoming', 'ongoing', 'completed', 'cancelled')) DEFAULT 'upcoming',
     format VARCHAR(50) NOT NULL, -- e.g., 'single_elimination', 'round_robin'
@@ -172,9 +175,23 @@ CREATE TABLE tournament_matches (
     id SERIAL PRIMARY KEY,
     tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-    round_number INTEGER NOT NULL,
+    round_id INTEGER NOT NULL REFERENCES tournament_rounds(id) ON DELETE CASCADE,
+    player1_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    player2_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
     status VARCHAR(20) CHECK (status IN ('pending', 'in_progress', 'completed', 'forfeited')) DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     winner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    match_order INTEGER NOT NULL, -- position in bracket
     UNIQUE(tournament_id, game_id) -- Prevent duplicate game entries in a tournament
+);
+
+CREATE TABLE tournament_rounds (
+    id SERIAL PRIMARY KEY,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    round_number INTEGER NOT NULL,
+    status VARCHAR(20)
+      CHECK (status IN ('pending', 'ongoing', 'completed'))
+      DEFAULT 'pending',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tournament_id, round_number)
 );
