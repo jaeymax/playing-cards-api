@@ -4,10 +4,10 @@ export function updateRatings(players:any[], winnerId:number, k = 30) {
     const winner = players.find(p => p.user.id === winnerId);
     const losers = players.filter(p => p.user.id !== winnerId);
 
-    console.log('Winner:', winner);
-    console.log('Losers:', losers);
+    //console.log('Winner:', winner);
+    //console.log('Losers:', losers);
 
-    console.log('Before ratings update:', players);
+    //console.log('Before ratings update:', players);
   
     let expectedTotal = 0;
   
@@ -24,7 +24,7 @@ export function updateRatings(players:any[], winnerId:number, k = 30) {
     winner.user.rating = winner.user.rating + k * ((losers.length) - expectedTotal);
     winner.user.rating = Math.round(winner.user.rating);
 
-    console.log('After ratings update:', players);
+    //console.log('After ratings update:', players);
   
     return players;
 }

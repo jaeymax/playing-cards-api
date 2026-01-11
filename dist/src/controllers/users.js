@@ -25,7 +25,7 @@ const getUserProfile = (0, express_async_handler_1.default)((req, res) => __awai
     }
     const users = yield (0, db_1.default) `
     WITH UserRank AS (
-      SELECT id, username, email, image_url, games_played, games_won, rating, location, created_at, updated_at,
+      SELECT id, username, email, phone, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at,
              RANK() OVER (ORDER BY rating DESC) as rank
       FROM users WHERE is_bot = false
     )

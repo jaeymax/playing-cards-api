@@ -61,6 +61,10 @@ export interface Game {
   status: string;
   player_count: number;
   current_player_position: number;
+  turn_started_at:number;
+  turn_ends_at:number;
+  current_turn_user_id:number;
+  turn_timeout_seconds:number;
   players: GamePlayer[];
   current_hand_number: number;
   cards: GameCard[];

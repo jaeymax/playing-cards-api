@@ -34,6 +34,7 @@ CREATE TABLE games (
     id SERIAL PRIMARY KEY,
     code VARCHAR(10) UNIQUE NOT NULL, -- Unique game identifier for invites
     created_by INTEGER NOT NULL REFERENCES users(id),
+    is_rated BOOLEAN DEFAULT false,
     status VARCHAR(20) NOT NULL CHECK (status IN ('waiting', 'in_progress', 'completed', 'abandoned', 'cancelled')) DEFAULT 'waiting',
     current_player_position INTEGER NOT NULL DEFAULT 0,
     player_count SMALLINT NOT NULL CHECK (player_count BETWEEN 2 AND 4) DEFAULT 2,
@@ -45,6 +46,10 @@ CREATE TABLE games (
     include_aces BOOLEAN DEFAULT false, -- Whether to include Aces in the game
     started_at TIMESTAMP WITH TIME ZONE,
     ended_at TIMESTAMP WITH TIME ZONE,
+    current_turn_user_id INTEGER REFERENCES users(id),
+    turn_started_at TIMESTAMP WITH TIME ZONE,
+    turn_timeout_seconds INTEGER DEFAULT 30,
+    forfeited_by INTEGER REFERENCES users(id),
     UNIQUE (code)
 );
 
@@ -61,10 +66,11 @@ CREATE TABLE friends (
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- User receiving the notification
-  type VARCHAR(50) CHECK (type IN ('friend_request', 'game_invite', 'game_update', 'system_message')) NOT NULL,
+  type VARCHAR(50) CHECK (type IN ('friend', 'challenge', 'reward', 'tournament', 'system')) NOT NULL,
   message TEXT NOT NULL, -- The notification content
-  /*metadata JSONB DEFAULT '{}'::jsonb, -- Extra data (e.g., game_id, friend_id)*/
+  title VARCHAR(100) NOT NULL,
   is_read BOOLEAN DEFAULT FALSE, -- Whether the user has seen it
+  action TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -177,7 +183,7 @@ CREATE TABLE tournament_matches (
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     round_id INTEGER NOT NULL REFERENCES tournament_rounds(id) ON DELETE CASCADE,
     player1_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-    player2_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    player2_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     status VARCHAR(20) CHECK (status IN ('pending', 'in_progress', 'completed', 'forfeited')) DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     winner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -194,4 +200,49 @@ CREATE TABLE tournament_rounds (
       DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (tournament_id, round_number)
+);
+
+CREATE TABLE wallets (
+     id SERIAL PRIMARY KEY,
+     user_id INTEGER UNIQUE references users(id) ON DELETE CASCADE,
+     balance NUMERIC(12, 2) DEFAULT 0.00,
+     currency VARCHAR(3) DEFAULT 'GHS',
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);  
+
+CREATE TABLE wallet_transactions(
+    id SERIAL INTEGER PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(20) CHECK (type IN ('tournament_prize', 'withdrawal', 'refund')),
+    amount  NUMERIC(12, 2) NOT NULL,
+    reference VARCHAR(100),
+    status VARCHAR(20) CHECK (status IN ('pending', 'completed', 'failed')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE payout_methods (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    type VARCHAR(20) CHECK (type IN ('mobile_money', 'bank_transfer')) NOT NULL,
+
+    provider VARCHAR(20) NOT NULL, -- MTN, VODAFONE, AIRTELTIGO
+
+    account_number VARCHAR(50) NOT NULL,
+    account_name VARCHAR(100) NOT NULL,
+
+    recipient_code VARCHAR(100) NOT NULL, -- From Paystack
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(user_id)
+);
+
+CREATE TABLE tournament_rules (
+    id SERIAL PRIMARY KEY,
+    tournament_id NOT NULL INTEGER REFERENCES tournaments(id) ON DELETE CASCADE,
+    title VARCHAR(20) NOT NULL,
+    message TEXT NOT NULL
 );

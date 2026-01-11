@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.matchmaker = exports.serverSocket = exports.games = exports.redis = exports.resend = exports.app = exports.mixpanel = void 0;
+exports.matchForfeiter = exports.matchmaker = exports.serverSocket = exports.FRONTEND_URL = exports.games = exports.redis = exports.resend = exports.app = exports.mixpanel = void 0;
 const express_1 = __importDefault(require("express"));
 const resend_1 = require("resend");
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -31,13 +31,18 @@ const messages_1 = __importDefault(require("./routes/messages"));
 const cards_1 = __importDefault(require("./routes/cards"));
 const matchmaking_1 = __importDefault(require("./routes/matchmaking"));
 const leaderboard_1 = __importDefault(require("./routes/leaderboard"));
-const tournament_1 = __importDefault(require("./routes/tournament"));
+const tournaments_1 = __importDefault(require("./routes/tournaments"));
+const notifications_1 = __importDefault(require("./routes/notifications"));
 const matchhistory_1 = __importDefault(require("./routes/matchhistory"));
 const profile_1 = __importDefault(require("./routes/profile"));
+const wallet_1 = __importDefault(require("./routes/wallet"));
+const payout_1 = __importDefault(require("./routes/payout"));
+const webhook_1 = __importDefault(require("./routes/webhook"));
 const matchmaking_2 = __importDefault(require("./services/matchmaking"));
 const socketHandler_1 = require("./socketHandler");
 const ioredis_1 = __importDefault(require("ioredis"));
 const mixpanel_1 = __importDefault(require("mixpanel"));
+const matchForfeiter_1 = __importDefault(require("./services/matchForfeiter"));
 exports.mixpanel = mixpanel_1.default.init(process.env.MIXPANEL_TOKEN);
 dotenv_1.default.config();
 exports.app = (0, express_1.default)();
@@ -49,8 +54,10 @@ const server = http_1.default.createServer(exports.app);
 exports.resend = new resend_1.Resend(process.env.RESEND_API_KEY);
 exports.redis = new ioredis_1.default(process.env.REDIS_URL);
 exports.games = new Map();
+exports.FRONTEND_URL = process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL_PROD : process.env.FRONTEND_URL_DEV;
 //Middlewares
 exports.app.use((0, cors_1.default)());
+exports.app.use("/api/webhooks", webhook_1.default);
 exports.app.use(express_1.default.json());
 exports.app.use(express_1.default.urlencoded({ extended: false }));
 exports.app.use((0, cookie_parser_1.default)());
@@ -64,7 +71,11 @@ exports.app.use("/api/matchmaking", matchmaking_1.default);
 exports.app.use("/api/matchhistory", matchhistory_1.default);
 exports.app.use("/api/leaderboard", leaderboard_1.default);
 exports.app.use("/api/profile", profile_1.default);
-exports.app.use("/api/tournament", tournament_1.default);
+exports.app.use("/api/tournaments", tournaments_1.default);
+exports.app.use("/api/notifications", notifications_1.default);
+exports.app.use("/api/wallet", wallet_1.default);
+exports.app.use("/api/payout-method", payout_1.default);
+//app.use(notFoundMiddleware);
 exports.app.use(errorHandler_1.default);
 const s3Client = new client_s3_1.S3Client({
     region: process.env.AWS_REGION,
@@ -101,9 +112,11 @@ server.listen(port, () => {
     console.log(`[server]: Server is running at https://localhost:${port}`);
 });
 exports.matchmaker = new matchmaking_2.default();
+exports.matchForfeiter = new matchForfeiter_1.default(exports.serverSocket, exports.redis);
 (0, socketHandler_1.initializeSocketHandler)(exports.serverSocket);
 // Cleanup on server shutdown
 process.on("SIGTERM", () => {
     exports.matchmaker.stop();
+    // matchForfeiter.stop();
     // ...existing cleanup code..
 });

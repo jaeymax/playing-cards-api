@@ -18,8 +18,12 @@ import cardRoutes from "./routes/cards";
 import matchmakingRoutes from "./routes/matchmaking";
 import leaderboardRoutes from "./routes/leaderboard";
 import tournamentRoutes from "./routes/tournaments";
+import notificationRoutes from "./routes/notifications";
 import matchhistoryRoutes from "./routes/matchhistory";
 import profileRoutes from "./routes/profile";
+import walletRoutes from "./routes/wallet";
+import payoutRoutes from "./routes/payout";
+import webhookRoutes from "./routes/webhook";
 import Matchmaker from "./services/matchmaking";
 import { initializeSocketHandler } from "./socketHandler";
 import type { Game } from "../types";
@@ -28,6 +32,9 @@ import sql from "./config/db";
 import authMiddleware from "./middlewares/authMiddleware";
 import  Mixpanel  from "mixpanel";
 import fs from "fs";
+import MatchForfeiter from "./services/matchForfeiter";
+
+
 
 export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
 
@@ -48,12 +55,14 @@ const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
 export const redis = new Redis(process.env.REDIS_URL as string);
 
-export const games = new Map<string, Game>();
 
+export const games = new Map<string, Game>();
+export const FRONTEND_URL = process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL_PROD : process.env.FRONTEND_URL_DEV;
 //Middlewares
 
 
 app.use(cors());
+app.use("/api/webhooks", webhookRoutes);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -68,6 +77,10 @@ app.use("/api/matchhistory", matchhistoryRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/tournaments", tournamentRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/wallet", walletRoutes);
+app.use("/api/payout-method", payoutRoutes);
+//app.use(notFoundMiddleware);
 
 
 app.use(errorHandler);
@@ -111,11 +124,14 @@ server.listen(port, () => {
 });
 
 export const matchmaker = new Matchmaker();
+export const matchForfeiter = new MatchForfeiter(serverSocket, redis);
+
 
 initializeSocketHandler(serverSocket);
 
 // Cleanup on server shutdown
 process.on("SIGTERM", () => {
   matchmaker.stop();
+ // matchForfeiter.stop();
   // ...existing cleanup code..
 });

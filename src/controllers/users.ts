@@ -20,7 +20,7 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   const users = await sql`
     WITH UserRank AS (
-      SELECT id, username, email, image_url, games_played, games_won, rating, location, created_at, updated_at,
+      SELECT id, username, email, phone, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at,
              RANK() OVER (ORDER BY rating DESC) as rank
       FROM users WHERE is_bot = false
     )

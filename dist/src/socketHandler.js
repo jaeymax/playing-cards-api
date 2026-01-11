@@ -77,9 +77,10 @@ const initializeSocketHandler = (serverSocket) => {
             }
         }));
         socket.on("readyForNextHand", (_a) => __awaiter(void 0, [_a], void 0, function* ({ code, winningPlayer }) {
+            var _b, _c;
             if (yield (0, gameFunctions_2.gameExists)(code)) {
                 const game = yield (0, gameFunctions_3.getGameByCode)(code);
-                game.current_player_position = (winningPlayer.position + 1) % game.player_count;
+                game.current_player_position = (winningPlayer.position);
                 game.status = "in_progress";
                 game.started_at = new Date().toISOString();
                 game.round_number = 1;
@@ -98,6 +99,10 @@ const initializeSocketHandler = (serverSocket) => {
                     card.player_id = 0;
                     card.status = 'in_deck';
                 });
+                game.turn_started_at = Date.now();
+                game.turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
+                game.current_turn_user_id = (_c = (_b = game.players.find((player) => player.position == game.current_player_position)) === null || _b === void 0 ? void 0 : _b.user) === null || _c === void 0 ? void 0 : _c.id;
+                yield index_1.redis.zadd('forfeit:index', game.turn_ends_at, game.code);
                 yield (0, gameFunctions_1.saveGame)(code, game);
                 serverSocket.to(code).emit('startNewHand', game);
             }
@@ -109,7 +114,7 @@ const initializeSocketHandler = (serverSocket) => {
             if (yield (0, gameFunctions_2.gameExists)(code)) {
                 const game = yield (0, gameFunctions_3.getGameByCode)(code);
                 console.log('winningPlayer', winningPlayer);
-                game.current_player_position = (winningPlayer.position + 1) % game.player_count;
+                game.current_player_position = winningPlayer.position;
                 game.status = "in_progress";
                 game.started_at = new Date().toISOString();
                 game.round_number = 1;
@@ -130,6 +135,7 @@ const initializeSocketHandler = (serverSocket) => {
                     card.status = 'in_deck';
                 });
                 yield (0, gameFunctions_1.saveGame)(code, game);
+                console.log('rematch', game.players);
                 serverSocket.to(code).emit('rematch', game);
             }
             else {
@@ -142,6 +148,10 @@ const initializeSocketHandler = (serverSocket) => {
                 socket.join(code);
                 serverSocket.to(code).emit("userJoined", { userId, code });
             }
+        }));
+        socket.on("joinTournamentRoom", (_a) => __awaiter(void 0, [_a], void 0, function* ({ tournamentId, userId }) {
+            console.log(`User ${userId} joining tournament room: ${tournamentId}`);
+            socket.join(`tournament_${tournamentId}`);
         }));
         socket.on("playerJoin", (_a) => __awaiter(void 0, [_a], void 0, function* ({ userId, gameCode }) {
             var _b, _c;
@@ -175,6 +185,7 @@ const initializeSocketHandler = (serverSocket) => {
             }
         }));
         socket.on("getGameData", (code) => __awaiter(void 0, void 0, void 0, function* () {
+            console.log('request for game data', code);
             const game = yield (0, gameFunctions_3.getGameByCode)(code);
             if (game) {
                 socket.emit("gameData", game);

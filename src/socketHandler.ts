@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import sql from "./config/db";
-import { matchmaker } from "./index";
+import { matchmaker, redis } from "./index";
 import { createGamePlayer, dealCards, playCard, saveGame, shuffleDeck } from "./utils/gameFunctions";
 import { gameExists } from "./utils/gameFunctions";
 import { getGameByCode } from "./utils/gameFunctions";
@@ -79,7 +79,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     socket.on("readyForNextHand", async ({code, winningPlayer}) => {
       if( await gameExists(code)){
         const game = await getGameByCode(code) as Game;
-        game.current_player_position = (winningPlayer.position + 1) % game.player_count;
+        game.current_player_position = (winningPlayer.position);
         game.status = "in_progress";
         game.started_at = new Date().toISOString();
         game.round_number = 1;
@@ -104,6 +104,10 @@ export const initializeSocketHandler = (serverSocket: Server) => {
           
         })
 
+        game.turn_started_at = Date.now();
+        game.turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
+        game.current_turn_user_id = game.players.find((player:any)=>player.position == game.current_player_position)?.user?.id as number;
+        await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
         await saveGame(code, game);
         serverSocket.to(code).emit('startNewHand', game);
 
@@ -117,7 +121,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       if( await gameExists(code)){
         const game = await getGameByCode(code) as Game;
         console.log('winningPlayer', winningPlayer);
-        game.current_player_position = (winningPlayer.position + 1) % game.player_count;
+        game.current_player_position = winningPlayer.position ;
         game.status = "in_progress";
         game.started_at = new Date().toISOString();
         game.round_number = 1;
@@ -144,6 +148,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         })
 
         await saveGame(code, game);
+        console.log('rematch', game.players);
         serverSocket.to(code).emit('rematch', game);
 
       }else{
@@ -159,6 +164,11 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
       }
+    });
+
+    socket.on("joinTournamentRoom", async ({tournamentId, userId}) => {
+      console.log(`User ${userId} joining tournament room: ${tournamentId}`);
+      socket.join(`tournament_${tournamentId}`);
     });
 
     socket.on("playerJoin", async ({userId, gameCode}) => {
@@ -201,6 +211,8 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
     socket.on("getGameData", async (code) => {
+
+      console.log('request for game data', code);
       const game = await getGameByCode(code);
       if (game) {
         socket.emit("gameData", game);
