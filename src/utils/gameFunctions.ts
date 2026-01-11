@@ -270,7 +270,7 @@ const endGame = async (game: any) => {
   );
   winner.score += points;
 
-  if (winner.score >= 3) {
+  if (winner.score >= game.win_points) {
     // new line to increment games_won
 
     const entry = await redis.zrem("forfeit:index", game.code);
