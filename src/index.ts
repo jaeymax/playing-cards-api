@@ -32,7 +32,7 @@ import sql from "./config/db";
 import authMiddleware from "./middlewares/authMiddleware";
 import  Mixpanel  from "mixpanel";
 import fs from "fs";
-import MatchForfeiter from "./services/matchForfeiter";
+//import MatchForfeiter from "./services/matchForfeiter";
 
 
 
