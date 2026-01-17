@@ -124,14 +124,14 @@ server.listen(port, () => {
 });
 
 export const matchmaker = new Matchmaker();
-export const matchForfeiter = new MatchForfeiter(serverSocket, redis);
+//export const matchForfeiter = new MatchForfeiter(serverSocket, redis);
 
 
 initializeSocketHandler(serverSocket);
 
 // Cleanup on server shutdown
 process.on("SIGTERM", () => {
-  matchmaker.stop();
+//  matchmaker.stop();
  // matchForfeiter.stop();
   // ...existing cleanup code..
 });
