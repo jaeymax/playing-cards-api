@@ -175,6 +175,10 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       console.log(`User ${userId} joining game: ${gameCode}`);
       if ( await gameExists(gameCode)) {
         const game = await getGameByCode(gameCode);
+
+        if(game){
+
+        
         
         const userAlreadyJoined = game.players.find(((player:any)=>player.user.id === userId));
         console.log(`${serverSocket.sockets.adapter.rooms.get(gameCode)?.size} players connected`)
@@ -200,6 +204,9 @@ export const initializeSocketHandler = (serverSocket: Server) => {
            serverSocket.to(gameCode).emit('gameData', game)
          }
       }
+
+    }
+
     });
 
     socket.on("leave-room", async (code) => {

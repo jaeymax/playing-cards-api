@@ -8,8 +8,8 @@ declare module 'express-serve-static-core' {
 }
 
 const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
-    console.log('here');
-    console.log(req.header('Authorization'));
+    //console.log('here');
+    //console.log(req.header('Authorization'));
     
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
@@ -20,7 +20,7 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET as string);
         req.user = decoded;
-        console.log(req.user);
+      //  console.log(req.user);
         
         next();
     } catch (err) {

@@ -9,8 +9,6 @@ interface AuthRequest extends Request {
 }
 
 const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
-  console.log("request", req.user);
-
   const userId = req.user?.userId;
 
   if (!userId) {

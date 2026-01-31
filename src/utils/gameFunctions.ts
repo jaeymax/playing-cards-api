@@ -1,3 +1,4 @@
+import { Game } from "../../types";
 import sql from "../config/db";
 import { games, mixpanel, redis } from "../index";
 import { serverSocket } from "../index";
@@ -65,7 +66,7 @@ export const dealCards = async (game: any) => {
   game.turn_started_at = Date.now();
   game.turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
   game.current_player_position = (game.current_player_position + 1) % game.player_count;
-  game.current_turn_user_id = game.players.find((player:any)=>player.position == game.current_player_position)?.user?.id;
+  game.current_turn_user_id = game.players.find((player: any) => player.position == game.current_player_position)?.user?.id;
   await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
 };
 
@@ -148,8 +149,7 @@ export const playCard = async (
   }
 
   console.log(
-    `Room ${game.code} has ${
-      serverSocket.sockets.adapter.rooms.get(game.code)?.size
+    `Room ${game.code} has ${serverSocket.sockets.adapter.rooms.get(game.code)?.size
     } players connected`
   );
   serverSocket.to(game.code).emit("playedCard", {
@@ -157,7 +157,7 @@ export const playCard = async (
     player_id,
     trick_number: game.round_number,
   });
-  
+
   game.turn_started_at = Date.now();
   const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
   game.turn_ends_at = turn_ends_at
@@ -171,7 +171,7 @@ export const playCard = async (
   }
 
 
-  const before_player = game.players.find((p:any)=>p.user.id == game.current_turn_user_id)?.user.username;
+  const before_player = game.players.find((p: any) => p.user.id == game.current_turn_user_id)?.user.username;
   //console.log('before', game.current_turn_user_id, before_player)
 
   const current_turn_user_id = game.players.find(
@@ -180,7 +180,7 @@ export const playCard = async (
 
   game.current_turn_user_id = current_turn_user_id;
 
-  const after_player = game.players.find((p:any)=>p.user.id == game.current_turn_user_id).user.username;
+  const after_player = game.players.find((p: any) => p.user.id == game.current_turn_user_id).user.username;
   //console.log('after', game.current_turn_user_id, after_player)
   await saveGame(game.code, game);
   // await sql`UPDATE games SET current_turn_user_id = ${current_turn_user_id}, turn_started_at = NOW() WHERE id = ${game.id}`;
@@ -348,7 +348,7 @@ const endGame = async (game: any) => {
       console.log("ongoingMatches", ongoingMatches[0].ongoing_count);
 
       // if no ongoing matches remain, check active participants
-      console.log("type", typeof ongoingMatches[0].ongoing_count);
+      //  console.log("type", typeof ongoingMatches[0].ongoing_count);
       if (ongoingMatches[0].ongoing_count == 0) {
         // proceed to check active participants
         // count all active participants in the tournament
@@ -385,7 +385,7 @@ const endGame = async (game: any) => {
           }
 
           // send a notification message to the winner in db
-         await sql`
+          await sql`
             INSERT INTO notifications (user_id, type, title, message, action)
             VALUES (
               ${winnerParticipant[0].user_id},
@@ -411,8 +411,15 @@ const endGame = async (game: any) => {
       //update ratings
       const players = updateRatings(game.players, winner.user.id);
       for (let player of players) {
-        await sql`UPDATE users SET rating = ${player.user.rating} WHERE id = ${player.user.id}`;
+        const oldRating = await sql`SELECT rating from users WHERE id = ${player.user.id}`
+        const newRating = player.user.rating;
+        console.log(`player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`)
+        await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+        const ratingChange = newRating - oldRating[0].rating;
+        // character suit there question // 
+        await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`
       }
+
     }
   } else {
     setTimeout(() => {
@@ -481,7 +488,7 @@ const calculateSpecialPoints = (
     return 0;
   }
 
-  if (winning_card_rank == "6"){
+  if (winning_card_rank == "6") {
     return (
       3 +
       calculateSpecialPoints(
@@ -493,18 +500,18 @@ const calculateSpecialPoints = (
     );
   }
 
-  if (winning_card_rank == "7"){
+  if (winning_card_rank == "7") {
     // check if the 7 was used to counter a six
     console.log('trick cards', trick.cards)
-    let sameSuitCards = trick.cards.filter((card:any)=>card.card.suit == trick.leading_suit)
+    let sameSuitCards = trick.cards.filter((card: any) => card.card.suit == trick.leading_suit)
     console.log('same suit cards', sameSuitCards)
-    let isaSix = sameSuitCards.find((card:any)=> card.card.rank == '6');
+    let isaSix = sameSuitCards.find((card: any) => card.card.rank == '6');
     console.log('isaSix', isaSix)
 
-    if(isaSix){
-       let indexOfSix = trick.cards.findIndex((card:any)=>card.card.rank == '6' && card.card.suit == trick.leading_suit);
-       let indexOfSeven = trick.cards.findIndex((card:any)=>card.card.rank == '7' && card.card.suit == trick.leading_suit)
-       if(indexOfSeven < indexOfSix){
+    if (isaSix) {
+      let indexOfSix = trick.cards.findIndex((card: any) => card.card.rank == '6' && card.card.suit == trick.leading_suit);
+      let indexOfSeven = trick.cards.findIndex((card: any) => card.card.rank == '7' && card.card.suit == trick.leading_suit)
+      if (indexOfSeven < indexOfSix) {
         console.log('the seven was played before the six')
         return (
           2 +
@@ -515,16 +522,16 @@ const calculateSpecialPoints = (
             last_trick_index
           )
         );
-       }
-       else{
-         console.log('7 was used to counter a six')
-         if(trick_number == last_trick_index)return  1;
-         return 0;
-       }
+      }
+      else {
+        console.log('7 was used to counter a six')
+        if (trick_number == last_trick_index) return 1;
+        return 0;
+      }
     }
     // if the seven was used to counter a six?
-        // if its the last trick card score only one point and return
-        //  else it doesn't score so return zero
+    // if its the last trick card score only one point and return
+    //  else it doesn't score so return zero
     return (
       2 +
       calculateSpecialPoints(
@@ -695,8 +702,19 @@ export const advanceToNextRound = async (
             )
             RETURNING id, status
           `;
+        console.log(`created match for only ${player1.username}`)
+        const g = game[0];
+        // g.turn_started_at = Date.now();
+        // g.turn_ends_at = g.turn_started_at + (g.turn_timeout_seconds + 60) * 1000
+        const newGame = {
+          ...g,
+          players: [result[0][0]],
+          cards: null,
+        };
 
-        continue;
+        await saveGame(game[0].code, newGame);
+        console.log("game saved to memory", game[0].code);
+        break;
       }
 
       const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
@@ -836,12 +854,19 @@ export const advanceToNextRound = async (
         WHERE id = ${tournament_id}
       `;
 
+
+      game[0].turn_started_at = Date.now();
+      game[0].turn_ends_at = game[0].turn_started_at + (game[0].turn_timeout_seconds + 0) * 1000;
+
+      await redis.zadd('forfeit:index', game[0].turn_ends_at, game[0].code);
+
       // Prepare and save game to Redis
       const newGame = {
         ...game[0],
         players: [result[0][0], result[1][0]],
         cards: gameCards,
       };
+
 
       await saveGame(game[0].code, newGame);
       console.log("game saved to memory successfully", game[0].code);
@@ -904,6 +929,16 @@ export const getTournamentLobbyData = async (tournamentId: number) => {
    ORDER BY tr.round_number ASC, tm.match_order ASC
  `;
 
+
+  const games = await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+
+  const gamesMap: Record<string, any> = {};
+  for (const gameData of games) {
+    const gamecode = gameData.gamecode;
+    const game = await getGameByCode(gamecode);
+    gamesMap[gamecode] = game;
+  }
+
   // Format rounds with aggregated player data
   const roundsMap: Record<number, any[]> = {};
   matches.forEach((match) => {
@@ -930,6 +965,7 @@ export const getTournamentLobbyData = async (tournamentId: number) => {
       game_id: match.game_id,
       game_code: match.code,
       winner_id: match.winner_id,
+      turn_ends_at: gamesMap[match.code]?.turn_ends_at,
     });
   });
 
@@ -951,7 +987,7 @@ export const gameExists = async (gameCode: string) => {
   return value === 1; // Redis returns 1 if the key exists, 0 if it does not
 };
 
-export async function saveGame(gameCode: string, gameData: object) {
+export async function saveGame(gameCode: string, gameData: any) {
   try {
     await redis.set(gameCode, JSON.stringify(gameData), "EX", 3600); // Set expiration time to 1 hour
   } catch (error) {
@@ -959,7 +995,7 @@ export async function saveGame(gameCode: string, gameData: object) {
   }
 }
 
-export async function getGameByCode(gameCode: string) {
+export async function getGameByCode(gameCode: string): Promise<any> {
   try {
     const gameData = await redis.get(gameCode);
     if (gameData) {

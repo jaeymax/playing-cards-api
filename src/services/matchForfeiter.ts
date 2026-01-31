@@ -5,10 +5,10 @@ import { getGameByCode, getTournamentLobbyData, saveGame } from "../utils/gameFu
 export default class MatchForfeiter {
   private interval: ReturnType<typeof setInterval> | null = null;
   private redis: any;
-  private readonly checkInterval: number = 1000; // 1 seconds
+  private readonly checkInterval: number = 5000; // 1 seconds
   serverSocket: any;
 
-  constructor(serverSocket: any, redis:any) {
+  constructor(serverSocket: any, redis: any) {
     this.serverSocket = serverSocket;
     this.redis = redis;
     this.start();
@@ -31,29 +31,29 @@ export default class MatchForfeiter {
     try {
       // Fetch participants qualified for the next round
       // create a new round entry for the tournament if it doesn't exist
-    const existingRound = await sql`
+      const existingRound = await sql`
     SELECT id 
     FROM tournament_rounds 
     WHERE tournament_id = ${tournamentId} 
     AND round_number = ${roundNumber}
   `;
 
-  let roundId;
-  if (existingRound.length === 0) {
-    const newRound = await sql`
+      let roundId;
+      if (existingRound.length === 0) {
+        const newRound = await sql`
       INSERT INTO tournament_rounds (tournament_id, round_number) 
       VALUES (${tournamentId}, ${roundNumber})
       RETURNING id
     `;
-    roundId = newRound[0].id;
-  } else {
-    roundId = existingRound[0].id;
-  }
+        roundId = newRound[0].id;
+      } else {
+        roundId = existingRound[0].id;
+      }
 
-  console.log('creating matching for round', roundNumber)
+      console.log('creating matching for round', roundNumber)
 
-  // create new matches for the next round
-  const participants = await sql`
+      // create new matches for the next round
+      const participants = await sql`
     SELECT u.id, u.username, u.image_url
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
@@ -61,17 +61,17 @@ export default class MatchForfeiter {
     ORDER BY u.username
   `;
 
-  // Shuffle participants
-  const shuffled = participants.sort(() => Math.random() - 0.5);
+      // Shuffle participants
+      const shuffled = participants.sort(() => Math.random() - 0.5);
 
-  // Pair players and create matches
-  for (let i = 0; i < shuffled.length; i += 2) {
-    const player1 = shuffled[i];
-    const player2 = shuffled[i + 1];
+      // Pair players and create matches
+      for (let i = 0; i < shuffled.length; i += 2) {
+        const player1 = shuffled[i];
+        const player2 = shuffled[i + 1];
 
-    if (!player2) {
-      // Handle odd number of players - auto-advance
-      const game = await sql`
+        if (!player2) {
+          // Handle odd number of players - auto-advance
+          const game = await sql`
           INSERT INTO games (
             code,
             created_by,
@@ -90,8 +90,8 @@ export default class MatchForfeiter {
           RETURNING *
         `;
 
-      // create game player
-      const result = await sql`
+          // create game player
+          const result = await sql`
           INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
           VALUES (
             ${game[0].id}, 
@@ -116,8 +116,8 @@ export default class MatchForfeiter {
             ) FROM users WHERE id = user_id) as user
         `;
 
-      // create tournament match
-      const match = await sql`
+          // create tournament match
+          const match = await sql`
           INSERT INTO tournament_matches (
             tournament_id,
             game_id,
@@ -139,16 +139,26 @@ export default class MatchForfeiter {
           )
           RETURNING id, status
         `;
+          const g = game[0];
+          // g.turn_started_at = Date.now();
+          // g.turn_ends_at = g.turn_started_at + (g.turn_timeout_seconds + 60) * 1000
+          const newGame = {
+            ...g,
+            players: [result[0][0]],
+            cards: null,
+          };
 
-      continue;
-    }
+          await saveGame(game[0].code, newGame);
+          console.log("game saved to memory", game[0].code);
+          break;
+        }
 
-    const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
+        const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
 
-    const is_final_match = participants.length == 2;
+        const is_final_match = participants.length == 2;
 
-    // Create game
-    const game = await sql`
+        // Create game
+        const game = await sql`
       INSERT INTO games (
         code,
         created_by,
@@ -169,9 +179,9 @@ export default class MatchForfeiter {
       RETURNING *
     `;
 
-    // Create game players
-    const result = await sql.transaction((sql) => [
-      sql`
+        // Create game players
+        const result = await sql.transaction((sql) => [
+          sql`
         INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
         VALUES (
           ${game[0].id}, 
@@ -195,7 +205,7 @@ export default class MatchForfeiter {
             'rating', rating
           ) FROM users WHERE id = user_id) as user
       `,
-      sql`
+          sql`
         INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
         VALUES (
           ${game[0].id}, 
@@ -219,10 +229,10 @@ export default class MatchForfeiter {
             'rating', rating
           ) FROM users WHERE id = user_id) as user
       `,
-    ]);
+        ]);
 
-    // Create game cards
-    const gameCards = await sql`
+        // Create game cards
+        const gameCards = await sql`
       INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
       SELECT 
         ${game[0].id},
@@ -251,8 +261,8 @@ export default class MatchForfeiter {
         ) FROM cards WHERE card_id = game_cards.card_id) as card
     `;
 
-    // Create match
-    const match = await sql`
+        // Create match
+        const match = await sql`
       INSERT INTO tournament_matches (
         tournament_id,
         game_id,
@@ -273,27 +283,32 @@ export default class MatchForfeiter {
       RETURNING id, status
     `;
 
-    // update tournaments current round number
-    await sql`
+        // update tournaments current round number
+        await sql`
       UPDATE tournaments 
       SET current_round_number = ${roundNumber} 
       WHERE id = ${tournamentId}
     `;
 
-    // Prepare and save game to Redis
-    const newGame = {
-      ...game[0],
-      players: [result[0][0], result[1][0]],
-      cards: gameCards,
-    };
+        game[0].turn_started_at = Date.now();
+        game[0].turn_ends_at = game[0].turn_started_at + (game[0].turn_timeout_seconds + 0) * 1000;
 
-    await saveGame(game[0].code, newGame);
-    console.log("game saved to memory successfully", game[0].code);
+        await this.redis.zadd('forfeit:index', game[0].turn_ends_at, game[0].code);
 
-    const lobbyData = await getTournamentLobbyData(tournamentId);
-    this.serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", lobbyData);
+        // Prepare and save game to Redis
+        const newGame = {
+          ...game[0],
+          players: [result[0][0], result[1][0]],
+          cards: gameCards,
+        };
 
-  }
+        await saveGame(game[0].code, newGame);
+        console.log("game saved to memory successfully", game[0].code);
+
+        const lobbyData = await getTournamentLobbyData(tournamentId);
+        this.serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", lobbyData);
+
+      }
     } catch (error) {
       console.error("Error creating next match round:", error);
     }
@@ -313,7 +328,7 @@ export default class MatchForfeiter {
       WHERE tm.game_id = ${gameId}
     `;
 
-    const ongoingMatches = await sql`
+      const ongoingMatches = await sql`
     SELECT COUNT(*) AS ongoing_count
     FROM tournament_matches tm
     JOIN tournament_rounds tr ON tm.round_id = tr.id
@@ -322,48 +337,48 @@ export default class MatchForfeiter {
     AND (tm.status = 'in_progress' OR tm.status = 'pending')
   `;
 
-  if (ongoingMatches[0].ongoing_count == 0) {
-    // proceed to check active participants
-    // count all active participants in the tournament
-    const activeParticipants = await sql`
+      if (ongoingMatches[0].ongoing_count == 0) {
+        // proceed to check active participants
+        // count all active participants in the tournament
+        const activeParticipants = await sql`
       SELECT COUNT(*) AS active_count
       FROM tournament_participants
       WHERE tournament_id = ${tournamentId} AND status = 'qualified'
     `;
 
-    console.log("activeParticipants", activeParticipants[0].active_count);
+        console.log("activeParticipants", activeParticipants[0].active_count);
 
-    if (activeParticipants[0].active_count <= 1) {
-      // if only one active participant remains, mark the tournament as completed
-      await sql`
+        if (activeParticipants[0].active_count <= 1) {
+          // if only one active participant remains, mark the tournament as completed
+          await sql`
         UPDATE tournaments
         SET status = 'completed', end_date = NOW()
         WHERE id = ${tournamentId}
       `;
 
-      // set tournament winner to the last active participant
-      const winnerParticipant = await sql`
+          // set tournament winner to the last active participant
+          const winnerParticipant = await sql`
         SELECT user_id
         FROM tournament_participants
         WHERE tournament_id = ${tournamentId} AND status = 'qualified'
         LIMIT 1
       `;
 
-      if (winnerParticipant.length > 0) {
-        await sql`
+          if (winnerParticipant.length > 0) {
+            await sql`
           UPDATE tournaments
           SET winner_id = ${winnerParticipant[0].user_id}
           WHERE id = ${tournamentId}
         `;
+          }
+        } else if (activeParticipants[0].active_count > 1) {
+          // advance to next round
+          this.createNextMatchRound(tournamentId, current_round_number[0].round_number + 1);
+
+        }
+      } else {
+        // exit if there are still ongoing matches
       }
-    } else if (activeParticipants[0].active_count > 1) {
-      // advance to next round
-      this.createNextMatchRound(tournamentId, current_round_number[0].round_number+1);
-      
-    }
-  } else {
-    // exit if there are still ongoing matches
-  }
 
     } catch (error) {
       console.error("Error advancing to next round:", error);
@@ -419,7 +434,7 @@ export default class MatchForfeiter {
 
       for (const gameCode of expiredGames) {
         const match = await getGameByCode(gameCode);
-        if(!match || !match.is_rated){
+        if (!match || !match.is_rated) {
           continue;
         }
 
@@ -427,10 +442,10 @@ export default class MatchForfeiter {
           `Game with code ${gameCode} is eligible for forfeit check.`
         );
 
-        const entry  = await this.redis.zrem("forfeit:index", gameCode);
+        const entry = await this.redis.zrem("forfeit:index", gameCode);
         console.log('Redis zrem result: in forfeit index itself', entry, gameCode);
-        if(entry == 0)continue;
-        
+        if (entry == 0) continue;
+
         const entry2 = await this.redis.zrem('forfeit:index', gameCode);
         console.log('Redis zrem result: in forfeit index itself test', entry2, gameCode);
 
@@ -440,7 +455,7 @@ export default class MatchForfeiter {
           loserId: match.current_turn_user_id,
         });
 
-        
+
         const winner_id = this.getWinnerId(match);
         match.winner_id = winner_id;
         await this.saveMatchResultToDB(match, winner_id);
@@ -462,9 +477,9 @@ export default class MatchForfeiter {
 
         const lobbyData = await getTournamentLobbyData(tournamentId[0].tournament_id);
 
-       // console.log('lobbyData after forfeit:', JSON.stringify(lobbyData));
+        // console.log('lobbyData after forfeit:', JSON.stringify(lobbyData));
 
-         this.serverSocket.to(`tournament_${tournamentId[0].tournament_id}`).emit("lobbyUpdate", lobbyData);
+        this.serverSocket.to(`tournament_${tournamentId[0].tournament_id}`).emit("lobbyUpdate", lobbyData);
 
       }
     } catch (error) {
