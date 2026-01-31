@@ -368,6 +368,9 @@ const endGame = async (game: any) => {
             WHERE id = ${tournament_id[0].tournament_id}
           `;
 
+
+          serverSocket.to(`tournament_${tournament_id[0].tournament_id}`).emit("tournamentEnded");
+
           // set tournament winner to the last active participant
           const winnerParticipant = await sql`
             SELECT user_id
@@ -939,6 +942,7 @@ export const getTournamentLobbyData = async (tournamentId: number) => {
     gamesMap[gamecode] = game;
   }
 
+  
   // Format rounds with aggregated player data
   const roundsMap: Record<number, any[]> = {};
   matches.forEach((match) => {
