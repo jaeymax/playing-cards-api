@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import sql from "../config/db";
-import type { AuthenticatedRequest, Game } from "../../types/index";
-import { getGameByCode, saveGame } from "../utils/gameFunctions";
-import { redis, serverSocket } from "..";
+import type { AuthenticatedRequest } from "../../types/index";
+import { saveGame } from "../utils/gameFunctions";
+import { serverSocket } from "..";
 import expressAsyncHandler from "express-async-handler";
 
 interface TournamentMatch {
@@ -68,12 +68,12 @@ export const getTournamentResults = expressAsyncHandler(
   }
 );
 
-export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(async (req: Request, res: Response) => {
+export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(async (req: Request, res: Response) =>{
 
   const tournament_id = await sql`SELECT id from tournaments WHERE format = 'Single Elimination' AND status = 'completed' ORDER by end_date DESC LIMIT 1`;
 
-  if (!tournament_id || tournament_id.length == 0) {
-    res.status(400).json({ message: "No tournament found" });
+  if(!tournament_id || tournament_id.length == 0){
+    res.status(400).json({message:"No tournament found"});
     return;
   }
 
@@ -92,7 +92,7 @@ export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(a
   GROUP BY u.id, u.username, u.image_url
   ORDER BY wins DESC LIMIT 3`;
 
-  res.status(200).json(results);
+    res.status(200).json(results);
 });
 
 export const getTopThreePlayersFromTournamentResults = expressAsyncHandler(
@@ -478,18 +478,7 @@ export const closeTournamentRegistration = async (
             status: match[0].status,
           });
           console.log(`created match for only ${player1.username}`)
-          const g = game[0];
-          // g.turn_started_at = Date.now();
-          // g.turn_ends_at = g.turn_started_at + (g.turn_timeout_seconds + 60) * 1000
-          const newGame = {
-            ...g,
-            players: [result[0][0]],
-            cards: null,
-          };
-
-          await saveGame(game[0].code, newGame);
-          console.log("game saved to memory", game[0].code);
-          break;
+          continue;
         }
 
         const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
@@ -679,11 +668,11 @@ export const closeTournamentRegistration = async (
       },
       player2: match.player2_id
         ? {
-          id: match.player2_id,
-          name: match.player2_name,
-          image_url: match.player2_image,
-          winner: match.winner_id === match.player2_id ? true : false,
-        }
+            id: match.player2_id,
+            name: match.player2_name,
+            image_url: match.player2_image,
+            winner: match.winner_id === match.player2_id ? true : false,
+          }
         : null,
       status: match.status,
     }));
@@ -792,15 +781,6 @@ export const getTournamentLobby = async (
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
 
-    const games = await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
-
-    const gamesMap: Record<string, any> = {};
-    for (const gameData of games) {
-      const gamecode = gameData.gamecode;
-      const game = await getGameByCode(gamecode);
-      gamesMap[gamecode] = game;
-    }
-
     // Format rounds with aggregated player data
     const roundsMap: Record<number, any[]> = {};
     matches.forEach((match) => {
@@ -827,7 +807,6 @@ export const getTournamentLobby = async (
         game_id: match.game_id,
         game_code: match.code,
         winner_id: match.winner_id,
-        turn_ends_at: gamesMap[match.code]?.turn_ends_at,
       });
     });
 
@@ -982,34 +961,12 @@ export const startTournament = async (
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
 
-    const games = await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
-    console.log('games', games)
-
-
-    const gamesMap: Record<string, any> = {};
-    for (const gameData of games) {
-      const gamecode = gameData.gamecode;
-      const game = await getGameByCode(gamecode);
-      console.log('game', game)
-      if (game) {
-        game.turn_started_at = Date.now();
-        game.turn_ends_at = game?.turn_started_at + (game.turn_timeout_seconds + 60) * 1000
-        if (game.player_count == 2) await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
-      }
-
-      await saveGame(gamecode, game);
-      gamesMap[gamecode] = game;
-    }
-
-
     // Format rounds with aggregated player data
     const roundsMap: Record<number, any[]> = {};
     matches.forEach((match) => {
       if (!roundsMap[match.round_number]) {
         roundsMap[match.round_number] = [];
       }
-
-      const game = gamesMap[match.code];
       roundsMap[match.round_number].push({
         id: match.id,
         player1: {
@@ -1030,16 +987,13 @@ export const startTournament = async (
         game_id: match.game_id,
         game_code: match.code,
         winner_id: match.winner_id,
-        turn_ends_at: game.turn_ends_at,
       });
-
     });
 
     const rounds = Object.entries(roundsMap).map(([round, matches]) => ({
       round: parseInt(round),
       matches,
     }));
-
 
     serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", {
       success: true,
@@ -1056,13 +1010,7 @@ export const startTournament = async (
     res.json({
       success: true,
       message: "Tournament started successfully!",
-      data: {
-        tournament: tournament[0],
-        participants,
-        rounds,
-      }
     });
-
   } catch (err) {
     console.error("Error starting tournament:", err);
     res.status(500).json({
