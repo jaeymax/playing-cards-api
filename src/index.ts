@@ -119,13 +119,15 @@ export const serverSocket = new Server(server, {
 
 const port = process.env.PORT || 5000;
 
+console.log('here...')
+
 server.listen(port, () => {
   console.log(`[server]: Server is running at https://localhost:${port}`);
 });
 
 export const matchmaker = new Matchmaker();
 //export const matchForfeiter = new MatchForfeiter(serverSocket, redis);
-
+// random line
 
 initializeSocketHandler(serverSocket);
 
