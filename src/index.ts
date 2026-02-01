@@ -125,7 +125,7 @@ server.listen(port, () => {
 });
 
 export const matchmaker = new Matchmaker();
-//export const matchForfeiter = new MatchForfeiter(serverSocket, redis);
+export const matchForfeiter = new MatchForfeiter(serverSocket, redis);
 // random line
 
 initializeSocketHandler(serverSocket);
