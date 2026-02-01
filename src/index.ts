@@ -119,7 +119,6 @@ export const serverSocket = new Server(server, {
 
 const port = process.env.PORT || 5000;
 
-console.log('here...')
 
 server.listen(port, () => {
   console.log(`[server]: Server is running at https://localhost:${port}`);
