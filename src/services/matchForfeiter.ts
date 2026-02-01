@@ -455,18 +455,27 @@ export default class MatchForfeiter {
           loserId: match.current_turn_user_id,
         });
 
-
+        
+        
         const winner_id = this.getWinnerId(match);
         match.winner_id = winner_id;
         await this.saveMatchResultToDB(match, winner_id);
         await this.forfeitMatch(match.id, gameCode, winner_id);
+        match.forfeited_by = match.current_turn_user_id;
+        await saveGame(gameCode, match);
 
         const tournamentId = await sql`
         SELECT tournament_id
         FROM tournament_matches
         WHERE game_id = ${match.id}
-      `;
-
+        `;
+        
+        // this.serverSocket.to(`tournament_${tournamentId[0].tournament_id}`).emit("matchForfeit", {
+        //   game_code: gameCode,
+        //   reason: "Match forfeited due to inactivity.",
+        //   loserId: match.current_turn_user_id,
+        // });
+        
         await this.advanceToNextRound(
           match.id,
           winner_id,

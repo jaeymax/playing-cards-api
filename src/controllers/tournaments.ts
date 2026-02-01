@@ -828,6 +828,7 @@ export const getTournamentLobby = async (
         game_code: match.code,
         winner_id: match.winner_id,
         turn_ends_at: gamesMap[match.code]?.turn_ends_at,
+        forfeiter_user_id: gamesMap[match.code]?.forfeited_by,
       });
     });
 
