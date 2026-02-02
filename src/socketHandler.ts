@@ -8,6 +8,21 @@ import { Game } from "../types";
 
 export const userSocketMap = new Map();
 
+
+async function acquireLock(gameCode:string, timeout = 5000) {
+  const lockKey = `lock:${gameCode}`;
+  // NX: Only set if it doesn't exist | PX: Expire after X milliseconds (prevents deadlocks)
+  const result = await redis.set(lockKey, "locked", "EX", timeout, "NX");
+  console.log("Lock result:", result);
+  return result === "OK";
+}
+
+async function releaseLock(gameCode:string) {
+  await redis.del(`lock:${gameCode}`);
+}
+
+
+
 export const initializeSocketHandler = (serverSocket: Server) => {
   serverSocket.on("connection", (socket: Socket) => {
     const userId = socket.handshake.auth.userId;
@@ -65,14 +80,29 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
     socket.on("playCard", async ({game_code, card_id, player_id}) => {
-      console.log("Playing card...", game_code, card_id, player_id);
-      if(await gameExists(game_code)){
-        const game = await getGameByCode(game_code);
-        playCard(game, card_id, player_id, socket);
-        await saveGame(game_code, game);
-      }else{
-        socket.emit("game-not-found");
+      try{
+        const lockAcquired = await acquireLock(game_code);
+        if(!lockAcquired){
+          console.log("Request blocked: Processing previous  move.")
+          return;
+        }
+        console.log("Playing card...", game_code, card_id, player_id);
+        if(await gameExists(game_code)){
+          const game = await getGameByCode(game_code);
+          playCard(game, card_id, player_id, socket);
+          await saveGame(game_code, game);
+        }else{
+          socket.emit("game-not-found");
+        }
+
+      }catch(error){
+        console.error("Error in playCard:", error);
+      }finally{
+        
+        console.log("Releasing lock...");
+        await releaseLock(game_code);
       }
+
     });
 
 
