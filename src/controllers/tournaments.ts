@@ -187,8 +187,7 @@ export const getCurrentWeekendTournament = async (
     const tournament = await sql`
       SELECT * FROM tournaments 
       WHERE name = 'Weekend Championship' 
-      AND is_current = true
-      ORDER BY created_at DESC
+      ORDER BY created_at ASC
       LIMIT 1
     `;
 
