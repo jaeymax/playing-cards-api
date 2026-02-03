@@ -51,9 +51,14 @@ export const app: Express = express();
 //   cert: fs.readFileSync("certs/192.168.43.218.pem"),
 // }
 
+const redisConfig = {
+  host: '127.0.0.1',
+  port: 6379,
+}
+
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
-export const redis = new Redis(process.env.REDIS_URL as string);
+export const redis = new Redis(redisConfig);
 
 
 export const games = new Map<string, Game>();
