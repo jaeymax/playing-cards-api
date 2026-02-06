@@ -1,8 +1,35 @@
-import { Game } from "../../types";
+import { create, get } from "axios";
+import { Game, GamePlayer } from "../../types";
 import sql from "../config/db";
-import { games, mixpanel, redis } from "../index";
+import { mixpanel, redis, matchForfeiter } from "../index";
 import { serverSocket } from "../index";
 import { updateRatings } from "../utils/rating";
+import {
+  advanceSingleEliminationTournamentToNextRound,
+  createByeMatch,
+  createGameCardsForMatch,
+  createMatchGamePlayer,
+  createSingleEliminationByeMatch,
+  createSingleEliminationMatch,
+  createSingleEliminationRound,
+  createTwoPlayerMatch,
+  createTwoPlayerMatchGamePlayers,
+  getSingleElimationTournamentOngoingMatches,
+  getSingleEliminationTournamentMatches,
+  getSingleEliminationTournamentParticipantsByStatus,
+  getSingleEliminationTournamentWinner,
+  updateSingleEliminationMatchResults,
+} from "./tournament";
+import {
+  getMatchLoser,
+  getMatchWinner,
+  isTournamentMatch,
+  markGameAsEndedAndCompleted,
+  markTournamentAsEndedAndCompleted,
+  updateGamePlayersScores,
+  updateGamesPlayedForGamePlayers,
+  updateWinnerWonCount,
+} from "./utils";
 
 export const getDealingSequence = (game: any) => {
   const dealingSequence: any[] = [];
@@ -65,9 +92,23 @@ export const dealCards = async (game: any) => {
 
   game.turn_started_at = Date.now();
   game.turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
-  game.current_player_position = (game.current_player_position + 1) % game.player_count;
-  game.current_turn_user_id = game.players.find((player: any) => player.position == game.current_player_position)?.user?.id;
-  await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
+  game.current_player_position =
+    (game.current_player_position + 1) % game.player_count;
+  game.current_turn_user_id = game.players.find(
+    (player: any) => player.position == game.current_player_position
+  )?.user?.id;
+  await matchForfeiter.scheduleForfeit(
+    game.code,
+    game.turn_timeout_seconds * 1000
+  );
+  //await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
+};
+
+export const fisherYatesShuffle = (array: any[]) => {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
 };
 
 export const shuffleDeck = async (game: any) => {
@@ -78,7 +119,7 @@ export const shuffleDeck = async (game: any) => {
     card.animation_state = "shuffling";
   });
 
-  game.cards.sort(() => Math.random() - 0.5);
+  fisherYatesShuffle(game.cards);
   console.log("shuffled deck");
 };
 
@@ -149,9 +190,11 @@ export const playCard = async (
   }
 
   console.log(
-    `Room ${game.code} has ${serverSocket.sockets.adapter.rooms.get(game.code)?.size
+    `Room ${game.code} has ${
+      serverSocket.sockets.adapter.rooms.get(game.code)?.size
     } players connected`
   );
+
   serverSocket.to(game.code).emit("playedCard", {
     card_id,
     player_id,
@@ -160,19 +203,22 @@ export const playCard = async (
 
   game.turn_started_at = Date.now();
   const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
-  game.turn_ends_at = turn_ends_at
+  game.turn_ends_at = turn_ends_at;
 
-  await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
-  // Move to next player or complete trick if needed
+  await matchForfeiter.scheduleForfeit(
+    game.code,
+    game.turn_timeout_seconds * 1000
+  );
+
   if (game.current_trick.cards.length === game.players.length) {
     completeTrick(game);
   } else {
     getNextPlayerPosition(game);
   }
 
-
-  const before_player = game.players.find((p: any) => p.user.id == game.current_turn_user_id)?.user.username;
-  //console.log('before', game.current_turn_user_id, before_player)
+  const before_player = game.players.find(
+    (p: any) => p.user.id == game.current_turn_user_id
+  )?.user.username;
 
   const current_turn_user_id = game.players.find(
     (p: any) => p.position === game.current_player_position
@@ -180,15 +226,12 @@ export const playCard = async (
 
   game.current_turn_user_id = current_turn_user_id;
 
-  const after_player = game.players.find((p: any) => p.user.id == game.current_turn_user_id).user.username;
-  //console.log('after', game.current_turn_user_id, after_player)
+  const after_player = game.players.find(
+    (p: any) => p.user.id == game.current_turn_user_id
+  ).user.username;
+  
   await saveGame(game.code, game);
-  // await sql`UPDATE games SET current_turn_user_id = ${current_turn_user_id}, turn_started_at = NOW() WHERE id = ${game.id}`;
 
-  // serverSocket.to(game.code).emit("turnStarted", {
-  //   current_turn_user_id,
-  //   turn_ends_at,
-  // });
   serverSocket.to(game.code).emit("updatedGameData", game);
 };
 
@@ -265,20 +308,12 @@ const endGame = async (game: any) => {
     );
   }
 
-  const winner = game.players.find(
-    (player: any) => player.position === final_trick.leader_position
-  );
+  const winner = getMatchWinner(game) as GamePlayer;
   winner.score += points;
 
   if (winner.score >= game.win_points) {
-    // new line to increment games_won
+    await matchForfeiter.cancelForfeit(game.code);
 
-    const entry = await redis.zrem("forfeit:index", game.code);
-    // console.log("Removed from forfeit index: first", entry, game.code);
-    // const entry2 = await redis.zrem('forfeit:index', game.code);
-    // const entry3 = await redis.zrem("forfeit:index", game.code);    
-    // console.log("Redis test first", entry2)
-    // console.log("Redis test aftermath", entry3)
     winner.games_won += 1;
     setTimeout(() => {
       serverSocket.to(game.code).emit("gameOver", {
@@ -286,32 +321,137 @@ const endGame = async (game: any) => {
       });
     }, 1000);
 
+    markGameAsEndedAndCompleted(game.id);
+    updateGamePlayersScores(game);
+    updateGamesPlayedForGamePlayers(game.id);
+    updateWinnerWonCount(winner.user.id);
 
-    // Update game status
-    await sql`UPDATE games SET status = 'completed', ended_at = NOW() WHERE id = ${game.id}`;
+    const tournament = await isTournamentMatch(game.id);
+    console.log("tournamentData", tournament);
 
-    // Update all players scores and games_played in the database
-    for (const player of game.players) {
-      await sql`
-        UPDATE game_players 
-        SET score = ${player.score}
-        WHERE game_id = ${game.id} AND user_id = ${player.user.id}
-      `;
+    if (tournament) {
+      console.log(
+        "this game is part of a tournament match, reporting result to tournament system"
+      );
+      const tournamentFormat = "Single Elimination"; // for now we only have single elimination tournaments, but this can be dynamic based on the tournament the match belongs to
+      if (tournamentFormat == "Single Elimination") {
+        const loser = getMatchLoser(game) as GamePlayer;
 
-      // update games_played for each user
-      await sql`
-        UPDATE users 
-        SET games_played = games_played + 1
-        WHERE id = ${player.user.id}
-      `;
+        await updateSingleEliminationMatchResults(
+          game.id,
+          winner.user.id,
+          loser.user.id,
+          tournament.id
+        );
+
+        const lobbyData = await getTournamentLobbyData(tournament.id);
+
+        serverSocket
+          .to(`tournament_${tournament.id}`)
+          .emit("lobbyUpdate", lobbyData);
+
+        advanceSingleEliminationTournamentToNextRound(tournament.id, tournament.current_round_number, serverSocket);
+
+        // const matches = await getSingleEliminationTournamentMatches(
+        //   tournament.id,
+        //   tournament.current_round_number
+        // );
+
+        // const allMatchesCompleted = matches.every(
+        //   (match) => match.winner_id != null
+        // );
+
+        // const active_participants =
+        //   await getSingleEliminationTournamentParticipantsByStatus(
+        //     tournament.id,
+        //     "qualified"
+        //   );
+
+        // const isLastRound = active_participants.length == 1;
+        // console.log("isLastRound", isLastRound);
+
+        // if (allMatchesCompleted && !isLastRound) {
+        //   await createNextSingleEliminationRoundMatches(
+        //     tournament.current_round_number + 1,
+        //     tournament.id
+        //   );
+        // } else if (isLastRound) {
+        //   // tournament has ended
+        //   console.log("this is the last round and match");
+        //   await markTournamentAsEndedAndCompleted(tournament.id);
+        //   const winnerParticipant = active_participants.find(
+        //     (p: any) => p.status == "qualified"
+        //   );
+
+        //   serverSocket
+        //     .to(`tournament_${tournament.id}`)
+        //     .emit("tournamentEnded");
+
+        //   if (winnerParticipant) {
+        //     await sql`
+        //             UPDATE tournaments
+        //             SET winner_id = ${winnerParticipant.user_id}
+        //             WHERE id = ${tournament.id}
+        //           `;
+
+        //     // send a notification message to the winner in db
+        //     await sql`
+        //             INSERT INTO notifications (user_id, type, title, message, action)
+        //             VALUES (
+        //               ${winnerParticipant.user_id},
+        //               'tournament',
+        //               'Tournament Champion 🏆',
+        //               'Congratulations! You won the Weekend Tournament. Your skill and strategy paid off — enjoy your rewards!',
+        //               'Claim Prize'
+        //             )
+        //           `;
+        //   }
+        // }
+
+        // if (ongoingMatches.length == 0) {
+
+        //   if (active_participants.length <= 1) {
+        //     await markTournamentAsEndedAndCompleted(tournament.id);
+        //     //const winnerParticipant = await getSingleEliminationTournamentWinner(tournament.id);
+        //     const winnerParticipant = active_participants.find(
+        //       (p: any) => p.status == "qualified"
+        //     );
+
+        //     serverSocket
+        //       .to(`tournament_${tournament.id}`)
+        //       .emit("tournamentEnded");
+
+        //     if (winnerParticipant) {
+        //       await sql`
+        //             UPDATE tournaments
+        //             SET winner_id = ${winnerParticipant.user_id}
+        //             WHERE id = ${tournament.id}
+        //           `;
+
+        //       // send a notification message to the winner in db
+        //       await sql`
+        //             INSERT INTO notifications (user_id, type, title, message, action)
+        //             VALUES (
+        //               ${winnerParticipant.user_id},
+        //               'tournament',
+        //               'Tournament Champion 🏆',
+        //               'Congratulations! You won the Weekend Tournament. Your skill and strategy paid off — enjoy your rewards!',
+        //               'Claim Prize'
+        //             )
+        //           `;
+        //     }
+        //   } else if (active_participants.length > 1) {
+        //     // advance to next round
+        //     await createNextSingleEliminationRoundMatches(
+        //       tournament.current_round_number + 1,
+        //       tournament.id
+        //     );
+        //   }
+        // } else {
+        //   // exit if there are still ongoing matches
+        // }
+      }
     }
-
-    // Update user's game_wons count
-    await sql`
-      UPDATE users 
-      SET games_won = games_won + 1
-      WHERE id = ${winner.user.id}
-    `;
 
     if (game.is_rated) {
       const tournament_id = await sql`
@@ -320,109 +460,20 @@ const endGame = async (game: any) => {
       WHERE game_id = ${game.id}
     `;
 
-      await reportMatchResult(
-        game.id,
-        winner.user.id,
-        tournament_id[0].tournament_id
-      );
-
-      const current_round_number = await sql`
-      SELECT tr.round_number
-      FROM tournament_matches tm
-      JOIN tournament_rounds tr ON tm.round_id = tr.id
-      WHERE tm.game_id = ${game.id}
-    `;
-
-      console.log("current_round_number", current_round_number[0].round_number);
-
-      // count all matches in progress for the current tournament's round
-      const ongoingMatches = await sql`
-        SELECT COUNT(*) AS ongoing_count
-        FROM tournament_matches tm
-        JOIN tournament_rounds tr ON tm.round_id = tr.id
-        WHERE tm.tournament_id = ${tournament_id[0].tournament_id}
-        AND tr.round_number = ${current_round_number[0].round_number}
-        AND (tm.status = 'in_progress' OR tm.status = 'pending')
-      `;
-
-      console.log("ongoingMatches", ongoingMatches[0].ongoing_count);
-
-      // if no ongoing matches remain, check active participants
-      //  console.log("type", typeof ongoingMatches[0].ongoing_count);
-      if (ongoingMatches[0].ongoing_count == 0) {
-        // proceed to check active participants
-        // count all active participants in the tournament
-        const activeParticipants = await sql`
-          SELECT COUNT(*) AS active_count
-          FROM tournament_participants
-          WHERE tournament_id = ${tournament_id[0].tournament_id} AND status = 'qualified'
-        `;
-
-        console.log("activeParticipants", activeParticipants[0].active_count);
-
-        if (activeParticipants[0].active_count <= 1) {
-          // if only one active participant remains, mark the tournament as completed
-          await sql`
-            UPDATE tournaments
-            SET status = 'completed', end_date = NOW()
-            WHERE id = ${tournament_id[0].tournament_id}
-          `;
-
-
-          serverSocket.to(`tournament_${tournament_id[0].tournament_id}`).emit("tournamentEnded");
-
-          // set tournament winner to the last active participant
-          const winnerParticipant = await sql`
-            SELECT user_id
-            FROM tournament_participants
-            WHERE tournament_id = ${tournament_id[0].tournament_id} AND status = 'qualified'
-            LIMIT 1
-          `;
-
-          if (winnerParticipant.length > 0) {
-            await sql`
-              UPDATE tournaments
-              SET winner_id = ${winnerParticipant[0].user_id}
-              WHERE id = ${tournament_id[0].tournament_id}
-            `;
-          }
-
-          // send a notification message to the winner in db
-          await sql`
-            INSERT INTO notifications (user_id, type, title, message, action)
-            VALUES (
-              ${winnerParticipant[0].user_id},
-              'tournament',
-              'Tournament Champion 🏆',
-              'Congratulations! You won the Weekend Tournament. Your skill and strategy paid off — enjoy your rewards!',
-              'Claim Prize'
-            )
-          `;
-
-        } else if (activeParticipants[0].active_count > 1) {
-          // advance to next round
-          await advanceToNextRound(
-            game.id,
-            current_round_number[0].round_number + 1,
-            tournament_id[0].tournament_id
-          );
-        }
-      } else {
-        // exit if there are still ongoing matches
-      }
-
       //update ratings
       const players = updateRatings(game.players, winner.user.id);
       for (let player of players) {
-        const oldRating = await sql`SELECT rating from users WHERE id = ${player.user.id}`
+        const oldRating =
+          await sql`SELECT rating from users WHERE id = ${player.user.id}`;
         const newRating = player.user.rating;
-        console.log(`player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`)
+        console.log(
+          `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`
+        );
         await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
         const ratingChange = newRating - oldRating[0].rating;
-        // character suit there question // 
-        await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`
+        // character suit there question //
+        await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`;
       }
-
     }
   } else {
     setTimeout(() => {
@@ -505,17 +556,25 @@ const calculateSpecialPoints = (
 
   if (winning_card_rank == "7") {
     // check if the 7 was used to counter a six
-    console.log('trick cards', trick.cards)
-    let sameSuitCards = trick.cards.filter((card: any) => card.card.suit == trick.leading_suit)
-    console.log('same suit cards', sameSuitCards)
-    let isaSix = sameSuitCards.find((card: any) => card.card.rank == '6');
-    console.log('isaSix', isaSix)
+    console.log("trick cards", trick.cards);
+    let sameSuitCards = trick.cards.filter(
+      (card: any) => card.card.suit == trick.leading_suit
+    );
+    console.log("same suit cards", sameSuitCards);
+    let isaSix = sameSuitCards.find((card: any) => card.card.rank == "6");
+    console.log("isaSix", isaSix);
 
     if (isaSix) {
-      let indexOfSix = trick.cards.findIndex((card: any) => card.card.rank == '6' && card.card.suit == trick.leading_suit);
-      let indexOfSeven = trick.cards.findIndex((card: any) => card.card.rank == '7' && card.card.suit == trick.leading_suit)
+      let indexOfSix = trick.cards.findIndex(
+        (card: any) =>
+          card.card.rank == "6" && card.card.suit == trick.leading_suit
+      );
+      let indexOfSeven = trick.cards.findIndex(
+        (card: any) =>
+          card.card.rank == "7" && card.card.suit == trick.leading_suit
+      );
       if (indexOfSeven < indexOfSix) {
-        console.log('the seven was played before the six')
+        console.log("the seven was played before the six");
         return (
           2 +
           calculateSpecialPoints(
@@ -525,9 +584,8 @@ const calculateSpecialPoints = (
             last_trick_index
           )
         );
-      }
-      else {
-        console.log('7 was used to counter a six')
+      } else {
+        console.log("7 was used to counter a six");
         if (trick_number == last_trick_index) return 1;
         return 0;
       }
@@ -552,6 +610,7 @@ const calculateSpecialPoints = (
 export const reportMatchResult = async (
   gameId: number,
   winnerId: number,
+  loserId: number,
   tournament_id: number
 ) => {
   try {
@@ -563,327 +622,137 @@ export const reportMatchResult = async (
       WHERE game_id = ${gameId}
     `;
 
-    // update the loser's participant status to 'eliminated'
-    const loserParticipant = await sql`
-    SELECT 
-      CASE 
-        WHEN player1_id = ${winnerId} 
-        THEN player2_id 
-        ELSE player1_id 
-      END AS loser_id
-    FROM tournament_matches 
-    WHERE game_id = ${gameId}
-  `;
-
     await sql`
     UPDATE tournament_participants
     SET status = 'eliminated'
     WHERE tournament_id = ${tournament_id}
-    AND user_id = ${loserParticipant[0].loser_id}
+    AND user_id = ${loserId}
   `;
 
     const lobbyData = await getTournamentLobbyData(tournament_id);
-    serverSocket.to(`tournament_${tournament_id}`).emit("lobbyUpdate", lobbyData);
-
-
+    serverSocket
+      .to(`tournament_${tournament_id}`)
+      .emit("lobbyUpdate", lobbyData);
   } catch (error) {
     console.error("Error reporting match result:", error);
     throw error;
   }
 };
 
-export const advanceToNextRound = async (
-  gameId: number,
-  nextRoundNumber: number,
-  tournament_id: number
-) => {
-  try {
-    // create a new round entry for the tournament if it doesn't exist
-    const existingRound = await sql`
-      SELECT id 
-      FROM tournament_rounds 
-      WHERE tournament_id = ${tournament_id} 
-      AND round_number = ${nextRoundNumber}
-    `;
+// export const createNextSingleEliminationRoundMatches = async (
+//   nextRoundNumber: number,
+//   tournament_id: number
+// ) => {
+//   try {
+//     const round = await createSingleEliminationRound(
+//       tournament_id,
+//       nextRoundNumber
+//     );
 
-    let roundId;
-    if (existingRound.length === 0) {
-      const newRound = await sql`
-        INSERT INTO tournament_rounds (tournament_id, round_number) 
-        VALUES (${tournament_id}, ${nextRoundNumber})
-        RETURNING id
-      `;
-      roundId = newRound[0].id;
-    } else {
-      roundId = existingRound[0].id;
-    }
+//     const participants =
+//       await getSingleEliminationTournamentParticipantsByStatus(
+//         tournament_id,
+//         "qualified"
+//       );
+//     const is_final_match = participants.length == 2;
 
-    // create new matches for the next round
-    const participants = await sql`
-      SELECT u.id, u.username, u.image_url
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournament_id} AND status = 'qualified'
-      ORDER BY u.username
-    `;
+//     fisherYatesShuffle(participants);
 
-    // Shuffle participants
-    const shuffled = participants.sort(() => Math.random() - 0.5);
+//     // Pair players and create matches
+//     for (let i = 0; i < participants.length; i += 2) {
+//       const player1 = participants[i];
+//       const player2 = participants[i + 1];
 
-    // Pair players and create matches
-    for (let i = 0; i < shuffled.length; i += 2) {
-      const player1 = shuffled[i];
-      const player2 = shuffled[i + 1];
+//       if (!player2) {
+//         // Handle odd number of players - auto-advance
+//         const game = await createByeMatch(player1.id);
 
-      if (!player2) {
-        // Handle odd number of players - auto-advance
-        const game = await sql`
-            INSERT INTO games (
-              code,
-              created_by,
-              player_count,
-              status,
-              current_turn_user_id,
-              is_rated
-            ) VALUES (
-              ${Math.random().toString(36).substring(2, 12)},
-              ${player1.id},
-              2,
-              'completed',
-              ${player1.id},
-              true
-            )
-            RETURNING *
-          `;
+//         const gameplayer = await createMatchGamePlayer(
+//           game.id,
+//           player1.id,
+//           0,
+//           true
+//         );
 
-        // create game player
-        const result = await sql`
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player1.id}, 
-              0, 
-              true,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `;
+//         await createSingleEliminationByeMatch(
+//           tournament_id,
+//           game.id,
+//           round.id,
+//           player1.id,
+//           Math.floor(i / 2) + 1
+//         );
+//         console.log(`created match for only ${player1.username}`);
 
-        // create tournament match
-        const match = await sql`
-            INSERT INTO tournament_matches (
-              tournament_id,
-              game_id,
-              round_id,
-              player1_id,
-              player2_id,
-              status,
-              winner_id,
-              match_order
-            ) VALUES (
-              ${tournament_id},
-              ${game[0].id},
-              ${roundId},
-              ${player1.id},
-              NULL,
-              'completed',
-              ${player1.id},
-              ${Math.floor(i / 2) + 1}
-            )
-            RETURNING id, status
-          `;
-        console.log(`created match for only ${player1.username}`)
-        const g = game[0];
-        // g.turn_started_at = Date.now();
-        // g.turn_ends_at = g.turn_started_at + (g.turn_timeout_seconds + 60) * 1000
-        const newGame = {
-          ...g,
-          players: [result[0][0]],
-          cards: null,
-        };
+//         const newGame = {
+//           ...game,
+//           players: [gameplayer],
+//           cards: null,
+//         };
 
-        await saveGame(game[0].code, newGame);
-        console.log("game saved to memory", game[0].code);
-        break;
-      }
+//         await saveGame(game.code, newGame);
+//         console.log("game saved to memory", game.code);
+//         break;
+//       }
 
-      const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
+//       const game = await createTwoPlayerMatch(
+//         player1.id,
+//         "waiting",
+//         is_final_match,
+//         true
+//       );
 
-      const is_final_match = participants.length == 2;
+//       const { gameplayer1, gameplayer2 } =
+//         await createTwoPlayerMatchGamePlayers(game.id, player1.id, player2.id);
 
-      // Create game
-      const game = await sql`
-        INSERT INTO games (
-          code,
-          created_by,
-          player_count,
-          status,
-          current_turn_user_id,
-          is_rated,
-          is_final_match
-        ) VALUES (
-          ${Math.random().toString(36).substring(2, 12)},
-          ${player1.id},
-          2,
-          'waiting',
-          ${player2.id},
-          true,
-          ${is_final_match}
-        )
-        RETURNING *
-      `;
+//       const gameCards = await createGameCardsForMatch(game.id, gameplayer1.id);
+//       // Create match
+//       await createSingleEliminationMatch(
+//         tournament_id,
+//         game.id,
+//         round.id,
+//         player1.id,
+//         player2.id,
+//         "in_progress",
+//         Math.floor(i / 2) + 1
+//       );
 
-      // Create game players
-      const result = await sql.transaction((sql) => [
-        sql`
-          INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-          VALUES (
-            ${game[0].id}, 
-            ${player1.id}, 
-            0, 
-            true,
-            'active'
-          )
-          RETURNING 
-            id,
-            game_id,
-            score,
-            games_won,
-            position,
-            is_dealer,
-            status,
-            (SELECT json_build_object(
-              'id', id,
-              'username', username,
-              'image_url', image_url,
-              'rating', rating
-            ) FROM users WHERE id = user_id) as user
-        `,
-        sql`
-          INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-          VALUES (
-            ${game[0].id}, 
-            ${player2.id}, 
-            1, 
-            false,
-            'active'
-          )
-          RETURNING 
-            id,
-            game_id,
-            score,
-            games_won,
-            position,
-            is_dealer,
-            status,
-            (SELECT json_build_object(
-              'id', id,
-              'username', username,
-              'image_url', image_url,
-              'rating', rating
-            ) FROM users WHERE id = user_id) as user
-        `,
-      ]);
+//       // update tournaments current round number
+//       await sql`
+//         UPDATE tournaments 
+//         SET current_round_number = ${nextRoundNumber} 
+//         WHERE id = ${tournament_id}
+//       `;
 
-      // Create game cards
-      const gameCards = await sql`
-        INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
-        SELECT 
-          ${game[0].id},
-          unnest(${cards.map((c) => c.card_id)}::integer[]),
-          ${result[0][0].id},
-          -1,
-          'in_deck'
-        RETURNING 
-          id,
-          game_id,
-          player_id,
-          status,
-          hand_position,
-          trick_number,
-          pos_x,
-          pos_y,
-          rotation,
-          z_index,
-          animation_state,
-          (SELECT json_build_object(
-            'card_id', card_id,
-            'suit', suit,
-            'value', value,
-            'rank', rank,
-            'image_url', image_url
-          ) FROM cards WHERE card_id = game_cards.card_id) as card
-      `;
+//       game.turn_started_at = Date.now();
+//       game.turn_ends_at =
+//         game.turn_started_at + (game.turn_timeout_seconds + 0) * 1000;
 
-      // Create match
-      const match = await sql`
-        INSERT INTO tournament_matches (
-          tournament_id,
-          game_id,
-          round_id,
-          player1_id,
-          player2_id,
-          status,
-          match_order
-        ) VALUES (
-          ${tournament_id},
-          ${game[0].id},
-          ${roundId},
-          ${player1.id},
-          ${player2.id},
-          'in_progress',
-          ${Math.floor(i / 2) + 1}
-        )
-        RETURNING id, status
-      `;
+//       await matchForfeiter.scheduleForfeit(
+//         game.code,
+//         (game.turn_timeout_seconds + 0) * 1000
+//       );
 
-      // update tournaments current round number
-      await sql`
-        UPDATE tournaments 
-        SET current_round_number = ${nextRoundNumber} 
-        WHERE id = ${tournament_id}
-      `;
+//       // Prepare and save game to Redis
+//       const newGame = {
+//         ...game,
+//         players: [gameplayer1, gameplayer2],
+//         cards: gameCards,
+//       };
 
+//       await saveGame(game.code, newGame);
+//       console.log("game saved to memory successfully", game.code);
 
-      game[0].turn_started_at = Date.now();
-      game[0].turn_ends_at = game[0].turn_started_at + (game[0].turn_timeout_seconds + 0) * 1000;
+//       const lobbyData = await getTournamentLobbyData(tournament_id);
 
-      await redis.zadd('forfeit:index', game[0].turn_ends_at, game[0].code);
-
-      // Prepare and save game to Redis
-      const newGame = {
-        ...game[0],
-        players: [result[0][0], result[1][0]],
-        cards: gameCards,
-      };
-
-
-      await saveGame(game[0].code, newGame);
-      console.log("game saved to memory successfully", game[0].code);
-
-      const lobbyData = await getTournamentLobbyData(tournament_id);
-
-      serverSocket.to(`tournament_${tournament_id}`).emit("lobbyUpdate", lobbyData);
-      //
-    }
-  } catch (error) {
-    console.error("Error advancing to next round:", error);
-    throw error;
-  }
-};
+//       serverSocket
+//         .to(`tournament_${tournament_id}`)
+//         .emit("lobbyUpdate", lobbyData);
+//     }
+//   } catch (error) {
+//     console.error("Error advancing to next round:", error);
+//     throw error;
+//   }
+// };
 
 export const getTournamentLobbyData = async (tournamentId: number) => {
   // Fetch tournament details
@@ -932,8 +801,8 @@ export const getTournamentLobbyData = async (tournamentId: number) => {
    ORDER BY tr.round_number ASC, tm.match_order ASC
  `;
 
-
-  const games = await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+  const games =
+    await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
 
   const gamesMap: Record<string, any> = {};
   for (const gameData of games) {
@@ -942,7 +811,6 @@ export const getTournamentLobbyData = async (tournamentId: number) => {
     gamesMap[gamecode] = game;
   }
 
-  
   // Format rounds with aggregated player data
   const roundsMap: Record<number, any[]> = {};
   matches.forEach((match) => {
