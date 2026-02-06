@@ -60,7 +60,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         serverSocket.to(code).emit("dealtCards", game?.cards);
         serverSocket.to(code).emit("updatedGameData", game);
        await saveGame(code, game);
-      }else{
+    }else{
         socket.emit("game-not-found");
       }
 
