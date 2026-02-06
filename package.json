@@ -2,6 +2,7 @@
   "name": "playing-cards-api",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "test": "jest",
     "start": "node ./dist/src/index.js",
@@ -14,15 +15,15 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.908.0",
-    "@neondatabase/serverless": "^0.10.4",
+    "@neondatabase/serverless": "^1.0.2",
     "@types/cookie-parser": "^1.4.8",
     "@types/passport": "^1.0.17",
     "axios": "^1.13.2",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.67.2",
     "cloudinary": "^1.41.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -30,12 +31,11 @@
     "express": "^4.19.2",
     "express-async-handler": "^1.2.0",
     "google-auth-library": "^10.2.1",
-    "ioredis": "^5.7.0",
+    "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.2",
     "mixpanel": "^0.18.1",
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
-    "redis": "^4.7.0",
     "resend": "^4.1.2",
     "socket.io": "^4.7.5"
   },
@@ -57,5 +57,17 @@
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
-  }
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaeymax/playing-cards-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jaeymax/playing-cards-api/issues"
+  },
+  "homepage": "https://github.com/jaeymax/playing-cards-api#readme",
+  "description": ""
 }

@@ -32,7 +32,7 @@ import sql from "./config/db";
 import authMiddleware from "./middlewares/authMiddleware";
 import  Mixpanel  from "mixpanel";
 import fs from "fs";
-import MatchForfeiter from "./services/matchForfeiter";
+import MatchForfeiter from "./services/matchForfeiterEnhanced";
 
 
 
@@ -58,10 +58,19 @@ const redisConfig = {
 
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
-export const redis = new Redis(redisConfig);
+export  const redis = new Redis(redisConfig);
+
+export const serverSocket = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
 
 
-export const games = new Map<string, Game>();
+
+
+
 export const FRONTEND_URL = process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL_PROD : process.env.FRONTEND_URL_DEV;
 //Middlewares
 
@@ -105,7 +114,7 @@ async function uploadFileToS3(bucketName: string, fileName: string, fileContent:
     Key: fileName,
     Body: fileContent,
   });
-
+  
   try {
     const response = await s3Client.send(command);
     console.log(`File uploaded successfully. ${response.$metadata.httpStatusCode}`);
@@ -115,12 +124,6 @@ async function uploadFileToS3(bucketName: string, fileName: string, fileContent:
 }
 
 // Websocket's connection to the server to allow bidirectional communication
-export const serverSocket = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
-});
 
 const port = process.env.PORT || 5000;
 
@@ -130,8 +133,8 @@ server.listen(port, () => {
 });
 
 export const matchmaker = new Matchmaker();
-//export const matchForfeiter = new MatchForfeiter(serverSocket, redis);
-// random line
+export const matchForfeiter = new MatchForfeiter(serverSocket);
+
 
 initializeSocketHandler(serverSocket);
 
@@ -139,5 +142,5 @@ initializeSocketHandler(serverSocket);
 process.on("SIGTERM", () => {
 //  matchmaker.stop();
  // matchForfeiter.stop();
-  // ...existing cleanup code..
+ // ...existing cleanup code..
 });

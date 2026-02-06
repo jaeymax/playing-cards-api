@@ -101,6 +101,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         
         console.log("Releasing lock...");
         await releaseLock(game_code);
+        console.log('Lock Released');
       }
 
     });

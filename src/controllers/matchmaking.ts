@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import sql from "../config/db";
 import { matchmaker } from "../index";
-import { games } from "../index";
 import type { Game } from "../../types";
 import { saveGame } from "../utils/gameFunctions";
 import { mixpanel } from "..";
@@ -123,7 +122,6 @@ export const startGame = asyncHandler(async (req: Request, res: Response) => {
     });
 
     await saveGame(gameCode[0].code, game);
-    games.set(gameCode[0].code, game as Game);
 
     res.json({
       success: true,

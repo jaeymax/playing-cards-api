@@ -1,9 +1,24 @@
 import { Request, Response } from "express";
 import sql from "../config/db";
 import type { AuthenticatedRequest, Game } from "../../types/index";
-import { getGameByCode, saveGame } from "../utils/gameFunctions";
-import { redis, serverSocket } from "..";
+import {
+  fisherYatesShuffle,
+  getGameByCode,
+  saveGame,
+} from "../utils/gameFunctions";
+import { matchForfeiter, redis, serverSocket } from "..";
 import expressAsyncHandler from "express-async-handler";
+import {
+  createByeMatch,
+  createGameCardsForMatch,
+  createMatchGamePlayer,
+  createSingleEliminationByeMatch,
+  createSingleEliminationMatch,
+  createTwoPlayerMatch,
+  createTwoPlayerMatchGamePlayers,
+  getSingleEliminationTournamentParticipants,
+} from "../utils/tournament";
+import { create, get } from "axios";
 
 interface TournamentMatch {
   id: number;
@@ -68,16 +83,17 @@ export const getTournamentResults = expressAsyncHandler(
   }
 );
 
-export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(async (req: Request, res: Response) => {
+export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const tournament_id =
+      await sql`SELECT id from tournaments WHERE format = 'Single Elimination' AND status = 'completed' ORDER by end_date DESC LIMIT 1`;
 
-  const tournament_id = await sql`SELECT id from tournaments WHERE format = 'Single Elimination' AND status = 'completed' ORDER by end_date DESC LIMIT 1`;
+    if (!tournament_id || tournament_id.length == 0) {
+      res.status(400).json({ message: "No tournament found" });
+      return;
+    }
 
-  if (!tournament_id || tournament_id.length == 0) {
-    res.status(400).json({ message: "No tournament found" });
-    return;
-  }
-
-  const results = await sql`SELECT
+    const results = await sql`SELECT
     u.id,
     u.username as name,
     u.image_url,
@@ -92,8 +108,9 @@ export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(a
   GROUP BY u.id, u.username, u.image_url
   ORDER BY wins DESC LIMIT 3`;
 
-  res.status(200).json(results);
-});
+    res.status(200).json(results);
+  }
+);
 
 export const getTopThreePlayersFromTournamentResults = expressAsyncHandler(
   async (req: Request, res: Response) => {
@@ -343,7 +360,6 @@ export const closeTournamentRegistration = async (
       return;
     }
 
-    // Fetch tournament details
     const tournament = await sql`
       SELECT * FROM tournaments WHERE id = ${tournamentId}
     `;
@@ -357,13 +373,8 @@ export const closeTournamentRegistration = async (
     }
 
     // Fetch all participants
-    const participants = await sql`
-      SELECT u.id, u.username, u.image_url, u.rating, tp.status
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournamentId}
-      ORDER BY u.username
-    `;
+    const participants =
+      await getSingleEliminationTournamentParticipants(tournamentId);
 
     if (participants.length < 2) {
       res.status(400).json({
@@ -373,15 +384,7 @@ export const closeTournamentRegistration = async (
       return;
     }
 
-    // Start transaction
     try {
-      // Update tournament registration closing date
-      // await sql`
-      //   UPDATE tournaments
-      //   SET registration_closing_date = CURRENT_TIMESTAMP
-      //   WHERE id = ${tournamentId}
-      // `;
-
       // Create first round
       const round = await sql`
         INSERT INTO tournament_rounds (tournament_id, round_number, status)
@@ -390,253 +393,105 @@ export const closeTournamentRegistration = async (
       `;
 
       const roundId = round[0].id;
-      const shuffled = shuffleArray(participants);
+      fisherYatesShuffle(participants);
       const rounds: Record<number, any[]> = { 1: [] };
+      const is_final_round = participants.length === 2;
 
       // Pair players and create matches
-      for (let i = 0; i < shuffled.length; i += 2) {
-        const player1 = shuffled[i];
-        const player2 = shuffled[i + 1];
+      for (let i = 0; i < participants.length; i += 2) {
+        const player1 = participants[i];
+        const player2 = participants[i + 1];
 
         if (!player2) {
+          console.log("creating bye match");
           // Handle odd player (auto-advance)
-          // create a game with only one player
-          const game = await sql`
-            INSERT INTO games (
-              code,
-              created_by,
-              player_count,
-              status,
-              current_turn_user_id,
-              is_rated
-            ) VALUES (
-              ${Math.random().toString(36).substring(2, 12)},
-              ${player1.id},
-              2,
-              'waiting',
-              ${player1.id},
-              true
-            )
-            RETURNING *
-          `;
+          const game = await createByeMatch(player1.id);
 
-          // create game player
-          const result = await sql`
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player1.id}, 
-              0, 
-              true,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `;
+          console.log("game created for bye match", game.id, game.code);
+          const { gameplayer } = await createMatchGamePlayer(
+            game.id,
+            player1.id,
+            0,
+            true
+          );
 
+          console.log("game player created for bye match", gameplayer);
           // create tournament match
-          const match = await sql`
-            INSERT INTO tournament_matches (
-              tournament_id,
-              game_id,
-              round_id,
-              player1_id,
-              player2_id,
-              status,
-              winner_id,
-              match_order
-            ) VALUES (
-              ${tournamentId},
-              ${game[0].id},
-              ${roundId},
-              ${player1.id},
-              NULL,
-              'completed',
-              ${player1.id},
-              ${Math.floor(i / 2) + 1}
-            )
-            RETURNING id, status
-          `;
+
+          const match = await createSingleEliminationByeMatch(
+            tournamentId,
+            game.id,
+            roundId,
+            player1.id,
+            Math.floor(i / 2) + 1
+          );
 
           rounds[1].push({
-            id: match[0].id,
+            id: match.id,
             player1: player1.username,
             player2: null,
-            status: match[0].status,
+            status: match.status,
           });
-          console.log(`created match for only ${player1.username}`)
-          const g = game[0];
-          // g.turn_started_at = Date.now();
-          // g.turn_ends_at = g.turn_started_at + (g.turn_timeout_seconds + 60) * 1000
+          console.log(`created match for only ${player1.username}`);
+
           const newGame = {
-            ...g,
-            players: [result[0][0]],
+            ...game,
+            players: [gameplayer],
             cards: null,
           };
 
-          await saveGame(game[0].code, newGame);
-          console.log("game saved to memory", game[0].code);
+          await saveGame(game.code, newGame);
+          console.log("game saved to memory", game.code);
           break;
         }
 
-        const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
-        // Create game
-        const game = await sql`
-          INSERT INTO games (
-            code,
-            created_by,
-            player_count,
-            status,
-            current_player_position,
-            current_turn_user_id,
-            is_rated
-          ) VALUES (
-            ${Math.random().toString(36).substring(2, 12)},
-            ${player1.id},
-            2,
-            'waiting',
-             0,
-            ${player1.id},
-            true
-          )
-          RETURNING *
-        `;
+        const game = await createTwoPlayerMatch(
+          player1.id,
+          "waiting",
+          is_final_round,
+          true
+        );
 
-        // create game players
-        const result = await sql.transaction((sql) => [
-          sql`
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player1.id}, 
-              0, 
-              true,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `,
-          sql`
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player2.id}, 
-              1, 
-              false,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `,
-        ]);
+        const { gameplayer1, gameplayer2 } =
+          await createTwoPlayerMatchGamePlayers(
+            game.id,
+            player1.id,
+            player2.id
+          );
 
-        // create game cards
-        const player1Id = result[0][0].id;
-        const gameCards = await sql`
-      INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
-      SELECT 
-        ${game[0].id},
-        unnest(${cards.map((c) => c.card_id)}::integer[]),
-        ${player1Id},
-        -1,
-        'in_deck'
-      RETURNING 
-          id,
-          game_id,
-          player_id,
-          status,
-          hand_position,
-          trick_number,
-          pos_x,
-          pos_y,
-          rotation,
-          z_index,
-          animation_state,
-          (SELECT json_build_object(
-           'card_id', card_id,
-            'suit', suit,
-            'value', value,
-            'rank', rank,
-            'image_url', image_url
-          ) FROM cards WHERE card_id = game_cards.card_id) as card
-    `;
+        const gameCards = await createGameCardsForMatch(
+          game.id,
+          gameplayer1.id
+        );
 
-        // Create match
-        const match = await sql`
-          INSERT INTO tournament_matches (
-            tournament_id,
-            game_id,
-            round_id,
-            player1_id,
-            player2_id,
-            status,
-            match_order
-          ) VALUES (
-            ${tournamentId},
-            ${game[0].id},
-            ${roundId},
-            ${player1.id},
-            ${player2.id},
-            'pending',
-            ${Math.floor(i / 2) + 1}
-          )
-          RETURNING id, status
-        `;
+        const match = await createSingleEliminationMatch(
+          tournamentId,
+          game.id,
+          roundId,
+          player1.id,
+          player2.id,
+          "pending",
+          Math.floor(i / 2) + 1
+        );
 
-        console.log(`created match for ${player1.username} an ${player2.username}`)
-        const g = game[0];
-        // g.turn_started_at = Date.now();
-        // g.turn_ends_at = g.turn_started_at + (g.turn_timeout_seconds + 60) * 1000
+        console.log(
+          `created match for ${player1.username} an ${player2.username}`
+        );
+
         const newGame = {
-          ...g,
-          players: [result[0][0], result[1][0]],
+          ...game,
+          players: [gameplayer1, gameplayer2],
           cards: gameCards,
         };
 
-        await saveGame(game[0].code, newGame);
-        console.log("game saved to memory", game[0].code);
+        await saveGame(game.code, newGame);
+        console.log("game saved to memory", game.code);
 
         rounds[1].push({
-          id: match[0].id,
+          id: match.id,
           player1: player1.username,
           player2: player2.username,
-          status: match[0].status,
+          status: match.status,
         });
       }
     } catch (err) {
@@ -678,11 +533,11 @@ export const closeTournamentRegistration = async (
       },
       player2: match.player2_id
         ? {
-          id: match.player2_id,
-          name: match.player2_name,
-          image_url: match.player2_image,
-          winner: match.winner_id === match.player2_id ? true : false,
-        }
+            id: match.player2_id,
+            name: match.player2_name,
+            image_url: match.player2_image,
+            winner: match.winner_id === match.player2_id ? true : false,
+          }
         : null,
       status: match.status,
     }));
@@ -761,7 +616,8 @@ export const getTournamentLobby = async (
       WHERE tp.tournament_id = ${tournamentId}
     `;
 
-    const rules = await sql`SELECT id, title, message as content from tournament_rules WHERE tournament_id = ${tournamentId}`;
+    const rules =
+      await sql`SELECT id, title, message as content from tournament_rules WHERE tournament_id = ${tournamentId}`;
 
     // Fetch current round matches with player details and scores
     const matches = await sql`
@@ -791,7 +647,8 @@ export const getTournamentLobby = async (
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
 
-    const games = await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+    const games =
+      await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
 
     const gamesMap: Record<string, any> = {};
     for (const gameData of games) {
@@ -876,12 +733,29 @@ export const startTournament = async (
       return;
     }
 
-    // Get all participants
-    const players = await sql`
-      SELECT user_id 
-      FROM tournament_participants 
-      WHERE tournament_id = ${tournamentId}
+    let tournament = await sql`
+      SELECT status FROM tournaments WHERE id = ${tournamentId}
     `;
+
+    if (!tournament.length) {
+      res.status(404).json({
+        success: false,
+        message: "Tournament not found",
+      });
+      return;
+    }
+
+    if (tournament[0].status !== "upcoming") {
+      res.status(400).json({
+        success: false,
+        message: "Tournament cannot be started",
+      });
+      return;
+    }
+
+    // Get all participants
+    const players =
+      await getSingleEliminationTournamentParticipants(tournamentId);
 
     if (players.length < 2) {
       res.status(400).json({
@@ -927,19 +801,6 @@ export const startTournament = async (
       WHERE tournament_id = ${tournamentId} AND round_number = 1
     `;
 
-    // Fetch tournament details
-    const tournament = await sql`
-      SELECT * FROM tournaments WHERE id = ${tournamentId}
-    `;
-
-    if (!tournament.length) {
-      res.status(404).json({
-        success: false,
-        message: "Tournament not found",
-      });
-      return;
-    }
-
     // Fetch participants with their global ranking
     const participants = await sql`
       SELECT 
@@ -953,6 +814,9 @@ export const startTournament = async (
       JOIN tournament_participants tp ON u.id = tp.user_id
       WHERE tp.tournament_id = ${tournamentId}
     `;
+
+    tournament = await sql`
+      SELECT * FROM tournaments WHERE id = ${tournamentId} `
 
     // Fetch current round matches with player details and scores
     const matches = await sql`
@@ -982,25 +846,31 @@ export const startTournament = async (
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
 
-    const games = await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
-    console.log('games', games)
-
+    const games =
+      await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+    console.log("games", games);
 
     const gamesMap: Record<string, any> = {};
     for (const gameData of games) {
       const gamecode = gameData.gamecode;
       const game = await getGameByCode(gamecode);
-      console.log('game', game)
+      console.log("game", game.status);
       if (game) {
         game.turn_started_at = Date.now();
-        game.turn_ends_at = game?.turn_started_at + (game.turn_timeout_seconds + 60) * 1000
-        if (game.player_count == 2) await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
+        game.turn_ends_at =
+          game?.turn_started_at + (game.turn_timeout_seconds + 60) * 1000;
+        if (game.status == 'waiting'){
+          game.status = 'in_progress';
+          await matchForfeiter.scheduleForfeit(
+            gamecode,
+            (game.turn_timeout_seconds + 60) * 1000
+          );
+        }
       }
 
       await saveGame(gamecode, game);
       gamesMap[gamecode] = game;
     }
-
 
     // Format rounds with aggregated player data
     const roundsMap: Record<number, any[]> = {};
@@ -1032,14 +902,12 @@ export const startTournament = async (
         winner_id: match.winner_id,
         turn_ends_at: game.turn_ends_at,
       });
-
     });
 
     const rounds = Object.entries(roundsMap).map(([round, matches]) => ({
       round: parseInt(round),
       matches,
     }));
-
 
     serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", {
       success: true,
@@ -1060,9 +928,8 @@ export const startTournament = async (
         tournament: tournament[0],
         participants,
         rounds,
-      }
+      },
     });
-
   } catch (err) {
     console.error("Error starting tournament:", err);
     res.status(500).json({

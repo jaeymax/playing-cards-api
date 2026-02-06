@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import sql from "../config/db";
-import { games } from "../index";
 import { saveGame } from "../utils/gameFunctions";
 import { mixpanel } from "..";
 
