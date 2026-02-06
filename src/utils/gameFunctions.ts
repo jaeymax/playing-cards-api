@@ -6,18 +6,6 @@ import { serverSocket } from "../index";
 import { updateRatings } from "../utils/rating";
 import {
   advanceSingleEliminationTournamentToNextRound,
-  createByeMatch,
-  createGameCardsForMatch,
-  createMatchGamePlayer,
-  createSingleEliminationByeMatch,
-  createSingleEliminationMatch,
-  createSingleEliminationRound,
-  createTwoPlayerMatch,
-  createTwoPlayerMatchGamePlayers,
-  getSingleElimationTournamentOngoingMatches,
-  getSingleEliminationTournamentMatches,
-  getSingleEliminationTournamentParticipantsByStatus,
-  getSingleEliminationTournamentWinner,
   updateSingleEliminationMatchResults,
 } from "./tournament";
 import {
@@ -25,7 +13,6 @@ import {
   getMatchWinner,
   isTournamentMatch,
   markGameAsEndedAndCompleted,
-  markTournamentAsEndedAndCompleted,
   updateGamePlayersScores,
   updateGamesPlayedForGamePlayers,
   updateWinnerWonCount,
