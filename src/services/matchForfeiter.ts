@@ -1,6 +1,6 @@
 //import { redis } from "..";
 import sql from "../config/db";
-import { getGameByCode, getTournamentLobbyData, saveGame } from "../utils/gameFunctions";
+import { getGameByCode, getSingleEliminationTournamentLobbyData, saveGame } from "../utils/gameFunctions";
 
 export default class MatchForfeiter {
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -305,7 +305,7 @@ export default class MatchForfeiter {
         await saveGame(game[0].code, newGame);
         console.log("game saved to memory successfully", game[0].code);
 
-        const lobbyData = await getTournamentLobbyData(tournamentId);
+        const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
         this.serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", lobbyData);
 
       }
@@ -484,7 +484,7 @@ export default class MatchForfeiter {
 
 
 
-        const lobbyData = await getTournamentLobbyData(tournamentId[0].tournament_id);
+        const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId[0].tournament_id);
 
         // console.log('lobbyData after forfeit:', JSON.stringify(lobbyData));
 

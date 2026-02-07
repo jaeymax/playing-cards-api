@@ -3,7 +3,7 @@ import { Queue, Worker, Job } from "bullmq";
 import {
   getGameByCode,
   saveGame,
-  getTournamentLobbyData,
+  getSingleEliminationTournamentLobbyData,
 } from "../utils/gameFunctions";
 import Redis from "ioredis";
 import sql from "../config/db";
@@ -23,9 +23,11 @@ export default class MatchForfeiter {
     this.worker = new Worker(
       "forfeitQueue",
       async (job: Job) => {
+        const start = Date.now()
         await this.processForfeitJob(job);
+        console.log(`Job ${job?.id} took ${Date.now() - start}ms`)
       },
-      { connection: new Redis({ maxRetriesPerRequest: null }) }
+      { connection: new Redis({ maxRetriesPerRequest: null }), concurrency:50}
     );
 
     this.worker.on("failed", (job, err) => {
@@ -52,7 +54,8 @@ export default class MatchForfeiter {
       {
         delay: delayMs,
         removeOnComplete: true,
-        removeOnFail: true,
+        attempts:3,
+        removeOnFail: 500,
         jobId: gameCode,
       }
     );
@@ -61,9 +64,13 @@ export default class MatchForfeiter {
 
   public async cancelForfeit(gameCode: string) {
     const job = await this.queue.getJob(gameCode);
-    if (job) {
-      await job.remove();
-      console.log(`Cancelled forfeit for game ${gameCode}`);
+    try{
+      if (job) {
+        await job.remove();
+        console.log(`Cancelled forfeit for game ${gameCode}`);
+      }
+    }catch(err){
+      console.log(`Error canceling job ${job?.id}`, err);
     }
   }
 
@@ -83,6 +90,19 @@ export default class MatchForfeiter {
     console.log(
       `Forfeit processed for match ${gameCode}. Winner: ${winnerId}, Loser: ${loserId}`
     );
+
+     // Notify Game Room
+     this.serverSocket
+     .to(gameCode)
+     .emit("matchForfeit", { winnerId, loserId });
+   this.serverSocket.to(`lobby_game_room:${gameCode}`).emit('matchForfeit', {winnerId, loserId});
+   console.log(`event sent to lobby_game_room:${gameCode}`)
+     
+   // Update Memory/Redis State
+   match.winner_id = winnerId;
+   match.status = "forfeited";
+   match.forfeited_by = loserId;
+   await saveGame(gameCode, match);
 
     const tournament = await isTournamentMatch(match.id);
 
@@ -129,25 +149,16 @@ export default class MatchForfeiter {
           });
           
           const tournamentId = results[0][0].tournament_id;
-          const lobbyData = await getTournamentLobbyData(tournamentId);
+          const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
           this.serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", lobbyData);
           
-          advanceSingleEliminationTournamentToNextRound(tournament.id, tournament.current_round_number, this.serverSocket);          
+         await advanceSingleEliminationTournamentToNextRound(tournament.id, tournament.current_round_number, this.serverSocket);          
 
         }
     }
 
    
-      // Notify Game Room
-      this.serverSocket
-        .to(gameCode)
-        .emit("matchForfeit", { winnerId, loserId });
-        
-      // Update Memory/Redis State
-      match.winner_id = winnerId;
-      match.status = "forfeited";
-      match.forfeited_by = loserId;
-      await saveGame(gameCode, match);
+     
 
  
 
