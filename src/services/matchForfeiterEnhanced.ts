@@ -75,6 +75,7 @@ export default class MatchForfeiter {
   }
 
   private async processForfeitJob(job: Job) {
+    console.log(`Memory usage: ${process.memoryUsage()}`)
     const { gameCode } = job.data;
     console.log(`Processing forfeit for match ${gameCode}`);
     // Add your forfeit logic here
