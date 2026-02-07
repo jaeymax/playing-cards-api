@@ -27,7 +27,7 @@ export default class MatchForfeiter {
         await this.processForfeitJob(job);
         console.log(`Job ${job?.id} took ${Date.now() - start}ms`)
       },
-      { connection: new Redis({ maxRetriesPerRequest: null }), concurrency:50}
+      { connection: new Redis({ maxRetriesPerRequest: null }), concurrency:3}
     );
 
     this.worker.on("failed", (job, err) => {
