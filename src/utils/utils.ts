@@ -1,3 +1,4 @@
+import { redis } from "..";
 import { Game } from "../../types";
 import sql from "../config/db";
 
@@ -59,13 +60,27 @@ const getMatchLosers = (game: Game) => {
 }
 
 const updateGamePlayersScores = async (game: Game) => {
-  for (const player of game.players) {
-    await sql`
-        UPDATE game_players 
-        SET score = ${player.score}
-        WHERE game_id = ${game.id} AND user_id = ${player.user.id}
-    `;
-  }
+  // for (const player of game.players) {
+  //   await sql`
+  //       UPDATE game_players 
+  //       SET score = ${player.score}
+  //       WHERE game_id = ${game.id} AND user_id = ${player.user.id}
+  //   `;
+  // }
+
+  const userIds = game.players.map(p => p.user.id);
+  const scores = game.players.map(p => p.score);
+
+  await sql`
+    UPDATE game_players gp
+    SET score = u.score
+    FROM UNNEST(
+      ${userIds}::int[],
+      ${scores}::int[]
+    ) AS u(user_id, score)
+    WHERE gp.game_id = ${game.id}
+      AND gp.user_id = u.user_id
+  `;
 };
 
 // function to determin whether a game is a tournament game
@@ -80,6 +95,17 @@ const isTournamentMatch = async (gameId: number) => {
     return result.length > 0 ? {id:result[0].tournament_id, current_round_number:result[0].round_number} : null;
 };
 
+const getGamesByCodes = async (codes: string[])=>{
+    try{
+      const keys = codes.map(code=> `${code}`);
+      const games = await redis.mget(keys);
+      return games.map(g => g && JSON.parse(g)).filter(Boolean);
+    }catch(err){
+      console.log('Error getting games from redis', err)
+      return null;
+    }
+};
+
 export {
   updateWinnerWonCount,
   markGameAsEndedAndCompleted,
@@ -88,5 +114,6 @@ export {
   updateGamePlayersScores,
  isTournamentMatch,
     getMatchLoser,
-    markTournamentAsEndedAndCompleted
+    markTournamentAsEndedAndCompleted,
+    getGamesByCodes
 };

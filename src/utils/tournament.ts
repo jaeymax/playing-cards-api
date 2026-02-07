@@ -1,6 +1,6 @@
 import { matchForfeiter } from "..";
 import sql from "../config/db";
-import { fisherYatesShuffle, getTournamentLobbyData, saveGame } from "./gameFunctions";
+import { fisherYatesShuffle, getSingleEliminationTournamentLobbyData, saveGame } from "./gameFunctions";
 import { markTournamentAsEndedAndCompleted } from "./utils";
 
 const createNextSingleEliminationRoundMatches = async (
@@ -109,7 +109,7 @@ const createNextSingleEliminationRoundMatches = async (
       await saveGame(game.code, newGame);
       console.log("game saved to memory successfully", game.code);
 
-      const lobbyData = await getTournamentLobbyData(tournamentId);
+      const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
 
       serverSocket
         .to(`tournament_${tournamentId}`)

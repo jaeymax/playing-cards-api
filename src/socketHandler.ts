@@ -53,28 +53,54 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
     socket.on("dealCards", async (code) => {
-      console.log(`Deal cards request for game code: ${code}`);
-      if( await gameExists(code)){
-        const game = await getGameByCode(code);
-        dealCards(game);
-        serverSocket.to(code).emit("dealtCards", game?.cards);
-        serverSocket.to(code).emit("updatedGameData", game);
-       await saveGame(code, game);
-    }else{
-        socket.emit("game-not-found");
+      try{
+        const lockAcquired = await acquireLock(code);
+        if(!lockAcquired){
+          console.log("Request blocked: Processing previous  move.")
+          return;
+        }
+        console.log(`Deal cards request for game code: ${code}`);
+        if( await gameExists(code)){
+          const game = await getGameByCode(code);
+          dealCards(game);
+          serverSocket.to(code).emit("dealtCards", game?.cards);
+          serverSocket.to(code).emit("updatedGameData", game);
+         await saveGame(code, game);
+      }else{
+          socket.emit("game-not-found");
+        }
+      }catch(err){
+        console.error('Error in ShuffleDeck:', err)
+      }finally{
+        console.log("Releasing lock...");
+        await releaseLock(code);
+        console.log('Lock Released');
       }
 
     });
 
     socket.on("shuffleDeck", async (code) => {
-      console.log(`Shuffle deck request for game code: ${code}`);
-      if( await gameExists(code)){
-        const game = await getGameByCode(code);
-        shuffleDeck(game);
-        serverSocket.to(code).emit("shuffledDeck", game?.cards);
-        await saveGame(code, game);
-      } else {
-        socket.emit("game-not-found");
+      try{
+        const lockAcquired = await acquireLock(code);
+        if(!lockAcquired){
+          console.log("Request blocked: Processing previous  move.")
+          return;
+        }
+        console.log(`Shuffle deck request for game code: ${code}`);
+        if( await gameExists(code)){
+          const game = await getGameByCode(code);
+          shuffleDeck(game);
+          serverSocket.to(code).emit("shuffledDeck", game?.cards);
+          await saveGame(code, game);
+        } else {
+          socket.emit("game-not-found");
+        }
+      }catch(err){
+          console.error('Error in ShuffleDeck:', err)
+      }finally{
+        console.log("Releasing lock...");
+        await releaseLock(code);
+        console.log('Lock Released');
       }
      
     });
@@ -98,7 +124,6 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       }catch(error){
         console.error("Error in playCard:", error);
       }finally{
-        
         console.log("Releasing lock...");
         await releaseLock(game_code);
         console.log('Lock Released');
@@ -197,9 +222,10 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       }
     });
 
-    socket.on("joinTournamentRoom", async ({tournamentId, userId}) => {
-      console.log(`User ${userId} joining tournament room: ${tournamentId}`);
+    socket.on("joinTournamentRoom", async ({tournamentId, userId, gameCode}) => {
+      console.log(`User ${userId} joining tournament room: ${tournamentId} with gamecode ${gameCode}`);
       socket.join(`tournament_${tournamentId}`);
+      if(gameCode)socket.join(`lobby_game_room:${gameCode}`)
     });
 
     socket.on("playerJoin", async ({userId, gameCode}) => {
