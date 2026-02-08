@@ -19,6 +19,7 @@ import {
   getSingleEliminationTournamentParticipants,
 } from "../utils/tournament";
 import { create, get } from "axios";
+import { getGamesByCodes } from "../utils/utils";
 
 interface TournamentMatch {
   id: number;
@@ -647,16 +648,16 @@ export const getTournamentLobby = async (
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
 
-    const games =
+    const gamesList =
       await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
 
-    const gamesMap: Record<string, any> = {};
-    for (const gameData of games) {
-      const gamecode = gameData.gamecode;
-      const game = await getGameByCode(gamecode);
-      gamesMap[gamecode] = game;
-    }
+    const codes = gamesList.map((gameData) => gameData.gamecode);
+    const games = await getGamesByCodes(codes);
 
+    let gamesMap: Record<string, any> = {};
+    if (games) {
+      gamesMap = Object.fromEntries(games.map((game) => [game.code, game]));
+    }
     // Format rounds with aggregated player data
     const roundsMap: Record<number, any[]> = {};
     matches.forEach((match) => {
@@ -816,7 +817,7 @@ export const startTournament = async (
     `;
 
     tournament = await sql`
-      SELECT * FROM tournaments WHERE id = ${tournamentId} `
+      SELECT * FROM tournaments WHERE id = ${tournamentId} `;
 
     // Fetch current round matches with player details and scores
     const matches = await sql`
@@ -846,31 +847,34 @@ export const startTournament = async (
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
 
-    const games =
+    const gamesList =
       await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
-    console.log("games", games);
+    //console.log("games", games);
 
-    const gamesMap: Record<string, any> = {};
-    for (const gameData of games) {
-      const gamecode = gameData.gamecode;
-      const game = await getGameByCode(gamecode);
-      console.log("game", game.status);
-      if (game) {
-        game.turn_started_at = Date.now();
-        game.turn_ends_at =
-          game?.turn_started_at + (game.turn_timeout_seconds + 60) * 1000;
-        if (game.status == 'waiting'){
-          game.status = 'in_progress';
-          await matchForfeiter.scheduleForfeit(
-            gamecode,
-            (game.turn_timeout_seconds + 60) * 1000
-          );
-        }
-      }
+    const codes = gamesList.map((gameData) => gameData.gamecode);
+    const games = await getGamesByCodes(codes);
 
-      await saveGame(gamecode, game);
-      gamesMap[gamecode] = game;
+    let gamesMap: Record<string, any> = {};
+    if (games) {
+      gamesMap = Object.fromEntries(games.map((game) => [game.code, game]));
     }
+
+    for (let code of codes) {
+      const game = gamesMap[code];
+      game.turn_started_at = Date.now();
+      game.turn_ends_at =
+        game?.turn_started_at + (game.turn_timeout_seconds + 0) * 1000;
+      if (game.status == "waiting") {
+        game.status = "in_progress";
+        await matchForfeiter.scheduleForfeit(
+          code,
+          (game.turn_timeout_seconds + 0) * 1000
+        );
+      }
+      await saveGame(code, game);
+    }
+
+   
 
     // Format rounds with aggregated player data
     const roundsMap: Record<number, any[]> = {};

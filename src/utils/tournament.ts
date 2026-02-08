@@ -515,7 +515,7 @@ const getSingleEliminationTournamentWinner = async (tournamentId: number) => {
   JOIN tournament_rounds tr ON tm.round_id = tr.id
   WHERE tm.tournament_id = ${tournamentId}
   AND tr.round_number = ${currentRoundNumber}
-  AND (tm.status = 'in_progress' OR tm.status = 'pending')
+  AND tm.status IN ('in_progress', 'pending')
 `;
   return ongoingMatches
  }

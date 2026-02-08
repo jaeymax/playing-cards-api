@@ -29,12 +29,12 @@ const markTournamentAsEndedAndCompleted = async (tournamentId: number) => {
 // update games played for all players in a game
 const updateGamesPlayedForGamePlayers = async (gameId: number) => {
   await sql`
-      UPDATE users
-      SET games_played = games_played + 1
-      WHERE id IN (
-         SELECT user_id FROM game_players WHERE game_id = ${gameId}
-      )
-   `;
+  UPDATE users u
+  SET games_played = u.games_played + 1
+  FROM game_players gp
+  WHERE gp.game_id = ${gameId}
+    AND gp.user_id = u.id
+`;
 };
 
 const getMatchWinner = (game: Game) => {

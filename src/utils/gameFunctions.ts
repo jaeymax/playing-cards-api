@@ -516,38 +516,6 @@ const calculateSpecialPoints = (
   return 0;
 };
 
-export const reportMatchResult = async (
-  gameId: number,
-  winnerId: number,
-  loserId: number,
-  tournament_id: number
-) => {
-  try {
-    // update match with winner
-
-    await sql`
-      UPDATE tournament_matches 
-      SET winner_id = ${winnerId}, status = 'completed'
-      WHERE game_id = ${gameId}
-    `;
-
-    await sql`
-    UPDATE tournament_participants
-    SET status = 'eliminated'
-    WHERE tournament_id = ${tournament_id}
-    AND user_id = ${loserId}
-  `;
-
-    const lobbyData =
-      await getSingleEliminationTournamentLobbyData(tournament_id);
-    serverSocket
-      .to(`tournament_${tournament_id}`)
-      .emit("lobbyUpdate", lobbyData);
-  } catch (error) {
-    console.error("Error reporting match result:", error);
-    throw error;
-  }
-};
 
 export const getSingleEliminationTournamentLobbyData = async (
   tournamentId: number
