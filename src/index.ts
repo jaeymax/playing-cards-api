@@ -139,19 +139,18 @@ export const matchForfeiter = new MatchForfeiter(serverSocket);
 initializeSocketHandler(serverSocket);
 
 const getTotalMemoryUsage = () =>{
-  return `${(process.memoryUsage().rss /1000000) + (process.memoryUsage().heapUsed / 1000000) + (process.memoryUsage().external / 1000000) + (process.memoryUsage().arrayBuffers / 1000000)}mb`
+  return (process.memoryUsage().rss /1000000) + (process.memoryUsage().heapUsed / 1000000) + (process.memoryUsage().external / 1000000) + (process.memoryUsage().arrayBuffers / 1000000)
 }
 
 setInterval(()=>{
   console.log('MemoryUsage: ',
     {
-      process: `${process.memoryUsage().rss / 1000000}mb`,
-      heapTotal: `${process.memoryUsage().heapTotal / 1000000}mb`,
-      heapUsed: `${process.memoryUsage().heapUsed / 1000000}mb`,
-      arrayBuffers: `${process.memoryUsage().arrayBuffers / 1000000}mb`,
-      external:`${process.memoryUsage().external / 1000000}mb`,
-      totalMemoryUsage: getTotalMemoryUsage()
-
+      process: `${(process.memoryUsage().rss / 1000000).toFixed(2)}mb`,
+      heapTotal: `${(process.memoryUsage().heapTotal / 1000000).toFixed(2)}mb`,
+      heapUsed: `${(process.memoryUsage().heapUsed / 1000000).toFixed(2)}mb`,
+      arrayBuffers: `${(process.memoryUsage().arrayBuffers / 1000000).toFixed(2)}mb`,
+      external:`${(process.memoryUsage().external / 1000000).toFixed(2)}mb`,
+      totalMemoryUsage: `${getTotalMemoryUsage().toFixed(2)}mb`
     }
   )
 }, 30000);
