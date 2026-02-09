@@ -33,7 +33,7 @@ import authMiddleware from "./middlewares/authMiddleware";
 import  Mixpanel  from "mixpanel";
 import fs from "fs";
 import MatchForfeiter from "./services/matchForfeiterEnhanced";
-
+import {monitorEventLoopDelay} from 'perf_hooks'
 
 
 export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
@@ -154,6 +154,27 @@ setInterval(()=>{
     }
   )
 }, 30000);
+
+const h = monitorEventLoopDelay()
+h.enable()
+let last = process.cpuUsage()
+
+setInterval(()=>{
+  console.log('Event Loop Lag: ',{
+    eventLoopLagMs: Math.round(h.mean / 1e6),
+    memory:  process.memoryUsage().rss / 1024 / 1024
+  })
+}, 5000);
+
+setInterval(()=>{
+    const usage = process.cpuUsage(last);
+    last = process.cpuUsage();
+
+    const userMs = usage.user / 1000;
+    const systemMs = usage.system / 1000;
+
+    console.log('cpu Usage: ', {userMs, systemMs});
+}, 1000)
 
 // Cleanup on server shutdown
 process.on("SIGTERM", () => {
