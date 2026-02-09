@@ -486,8 +486,6 @@ export default class MatchForfeiter {
 
         const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId[0].tournament_id);
 
-        // console.log('lobbyData after forfeit:', JSON.stringify(lobbyData));
-
         this.serverSocket.to(`tournament_${tournamentId[0].tournament_id}`).emit("lobbyUpdate", lobbyData);
 
       }
