@@ -6,7 +6,6 @@ import { markTournamentAsEndedAndCompleted } from "./utils";
 const createNextSingleEliminationRoundMatches = async (
   roundNumber: number,
   tournamentId:number,
-  serverSocket:any
 ) => {
   // Implementation for creating the next round in a single elimination tournament
   
@@ -109,11 +108,11 @@ const createNextSingleEliminationRoundMatches = async (
       await saveGame(game.code, newGame);
       console.log("game saved to memory successfully", game.code);
 
-      const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
+      // const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
 
-      serverSocket
-        .to(`tournament_${tournamentId}`)
-        .emit("lobbyUpdate", lobbyData);
+      // serverSocket
+      //   .to(`tournament_${tournamentId}`)
+      //   .emit("lobbyUpdate", lobbyData);
     }
   } catch (error) {
     console.error("Error advancing to next round:", error);
@@ -456,9 +455,14 @@ const advanceSingleEliminationTournamentToNextRound = async (
   if (allMatchesCompleted && !isLastRound) {
     await createNextSingleEliminationRoundMatches(
       currentRoundNumber + 1,
-      tournamentId,
-      serverSocket
-    );
+      tournamentId,);
+
+    const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
+
+    serverSocket
+      .to(`tournament_${tournamentId}`)
+      .emit("lobbyUpdate", lobbyData);
+
   } else if (isLastRound) {
     // tournament has ended
     console.log("this is the last round and match");
@@ -490,6 +494,8 @@ const advanceSingleEliminationTournamentToNextRound = async (
               )
             `;
     }
+  }else{
+     // if not last round and all matches are not yet completed
   }
 
 };
