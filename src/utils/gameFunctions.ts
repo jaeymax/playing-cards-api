@@ -375,9 +375,12 @@ const endGame = async (game: any) => {
     }
   } else {
     await saveGame(game.code, game);
-    serverSocket.to(game.code).emit("gameEnded", {
-      winner: { ...winner, points, hand_number: game.current_hand_number },
-    });
+    setTimeout(()=>{
+      serverSocket.to(game.code).emit("gameEnded", {
+        winner: { ...winner, points, hand_number: game.current_hand_number },
+      });
+
+    }, 1000)
 
     if (tournament) {
       const tournamentFormat = "SingleElimination";
@@ -465,13 +468,13 @@ const calculateSpecialPoints = (
 
   if (winning_card_rank == "7") {
     // check if the 7 was used to counter a six
-    console.log("trick cards", trick.cards);
+  //  console.log("trick cards", trick.cards);
     let sameSuitCards = trick.cards.filter(
       (card: any) => card.card.suit == trick.leading_suit
     );
-    console.log("same suit cards", sameSuitCards);
+    //console.log("same suit cards", sameSuitCards);
     let isaSix = sameSuitCards.find((card: any) => card.card.rank == "6");
-    console.log("isaSix", isaSix);
+    //console.log("isaSix", isaSix);
 
     if (isaSix) {
       let indexOfSix = trick.cards.findIndex(
@@ -483,7 +486,7 @@ const calculateSpecialPoints = (
           card.card.rank == "7" && card.card.suit == trick.leading_suit
       );
       if (indexOfSeven < indexOfSix) {
-        console.log("the seven was played before the six");
+        //console.log("the seven was played before the six");
         return (
           2 +
           calculateSpecialPoints(
@@ -494,7 +497,7 @@ const calculateSpecialPoints = (
           )
         );
       } else {
-        console.log("7 was used to counter a six");
+      //  console.log("7 was used to counter a six");
         if (trick_number == last_trick_index) return 1;
         return 0;
       }
