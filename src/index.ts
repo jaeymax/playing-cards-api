@@ -35,6 +35,10 @@ import fs from "fs";
 import MatchForfeiter from "./services/matchForfeiterEnhanced";
 import {monitorEventLoopDelay} from 'perf_hooks'
 
+const h = monitorEventLoopDelay()
+h.enable()
+let last = process.cpuUsage()
+
 
 export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
 
@@ -47,14 +51,14 @@ dotenv.config();
 export const app: Express = express();
 
 // const options = {
-//   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
+//   key: fs.readFileSync("certs/192.168.43.218-key.pem"),  
 //   cert: fs.readFileSync("certs/192.168.43.218.pem"),
 // }
 
 const redisConfig = {
   host: '127.0.0.1',
   port: 6379,
-}
+}  
 
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
@@ -64,8 +68,8 @@ export const serverSocket = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
-  },
-});
+  },  
+});  
 
 
 
@@ -104,8 +108,8 @@ const s3Client = new S3Client({
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
-  },
-});
+  },  
+});  
 
 
 async function uploadFileToS3(bucketName: string, fileName: string, fileContent: Buffer) {
@@ -113,15 +117,15 @@ async function uploadFileToS3(bucketName: string, fileName: string, fileContent:
     Bucket: bucketName,
     Key: fileName,
     Body: fileContent,
-  });
+  });  
   
   try {
     const response = await s3Client.send(command);
     console.log(`File uploaded successfully. ${response.$metadata.httpStatusCode}`);
   } catch (error) {
     console.error("Error uploading file:", error);
-  }
-}
+  }  
+}  
 
 // Websocket's connection to the server to allow bidirectional communication
 
@@ -130,7 +134,7 @@ const port = process.env.PORT || 5000;
 
 server.listen(port, () => {
   console.log(`[server]: Server is running at https://localhost:${port}`);
-});
+});  
 
 export const matchmaker = new Matchmaker();
 export const matchForfeiter = new MatchForfeiter(serverSocket);
@@ -140,41 +144,45 @@ initializeSocketHandler(serverSocket);
 
 const getTotalMemoryUsage = () =>{
   return (process.memoryUsage().rss /1000000) + (process.memoryUsage().heapUsed / 1000000) + (process.memoryUsage().external / 1000000) + (process.memoryUsage().arrayBuffers / 1000000)
-}
+}  
 
-setInterval(()=>{
-  console.log('MemoryUsage: ',
-    {
-      process: `${(process.memoryUsage().rss / 1000000).toFixed(2)}mb`,
-      heapTotal: `${(process.memoryUsage().heapTotal / 1000000).toFixed(2)}mb`,
-      heapUsed: `${(process.memoryUsage().heapUsed / 1000000).toFixed(2)}mb`,
-      arrayBuffers: `${(process.memoryUsage().arrayBuffers / 1000000).toFixed(2)}mb`,
-      external:`${(process.memoryUsage().external / 1000000).toFixed(2)}mb`,
-      totalMemoryUsage: `${getTotalMemoryUsage().toFixed(2)}mb`
-    }
-  )
-}, 30000);
+const logMemoryUsage = () =>{
+  setInterval(()=>{
+    console.log('MemoryUsage: ',
+      {
+        process: `${(process.memoryUsage().rss / 1000000).toFixed(2)}mb`,
+        heapTotal: `${(process.memoryUsage().heapTotal / 1000000).toFixed(2)}mb`,
+        heapUsed: `${(process.memoryUsage().heapUsed / 1000000).toFixed(2)}mb`,
+        arrayBuffers: `${(process.memoryUsage().arrayBuffers / 1000000).toFixed(2)}mb`,
+        external:`${(process.memoryUsage().external / 1000000).toFixed(2)}mb`,
+        totalMemoryUsage: `${getTotalMemoryUsage().toFixed(2)}mb`
+      }  
+    )  
+  }, 30000);  
+}  
 
-const h = monitorEventLoopDelay()
-h.enable()
-let last = process.cpuUsage()
+const logEventLoopLag = () =>{
+  setInterval(()=>{
+    console.log('Event Loop Lag: ',{
+      eventLoopLagMs: Math.round(h.mean / 1e6),
+      memory:  process.memoryUsage().rss / 1024 / 1024
+    })  
+  }, 5000);  
+}  
 
-setInterval(()=>{
-  console.log('Event Loop Lag: ',{
-    eventLoopLagMs: Math.round(h.mean / 1e6),
-    memory:  process.memoryUsage().rss / 1024 / 1024
-  })
-}, 5000);
+const logCpuUsage = ()=> {
+  setInterval(()=>{
+      const usage = process.cpuUsage(last);
+      last = process.cpuUsage();
+  
+      const userMs = usage.user / 1000;
+      const systemMs = usage.system / 1000;
+  
+      console.log('cpu Usage: ', {userMs, systemMs});
+  }, 1000)    
+}  
 
-setInterval(()=>{
-    const usage = process.cpuUsage(last);
-    last = process.cpuUsage();
 
-    const userMs = usage.user / 1000;
-    const systemMs = usage.system / 1000;
-
-    console.log('cpu Usage: ', {userMs, systemMs});
-}, 1000)
 
 // Cleanup on server shutdown
 process.on("SIGTERM", () => {
