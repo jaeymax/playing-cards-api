@@ -226,13 +226,7 @@ export const playCard = async (
   serverSocket.to(game.code).emit("updatedGameData", game);
 };
 
-const computeTurnEndsAt = (
-  turnStartedAt: string,
-  turnTimeoutSeconds: number
-) => {
-  const start = new Date(turnStartedAt);
-  return new Date(start.getTime() + turnTimeoutSeconds * 1000);
-};
+
 
 const isHigherCard = (card: any, current_trick: any) => {
   if (current_trick.cards.length === 0) {
@@ -305,7 +299,7 @@ const endGame = async (game: any) => {
   await updateGamePlayersScores(game);
 
   if (winner.score >= game.win_points) {
-    await matchForfeiter.cancelForfeit(game.code);
+    if(game.is_rated)await matchForfeiter.cancelForfeit(game.code);
 
     winner.games_won += 1;
     setTimeout(() => {
@@ -314,9 +308,10 @@ const endGame = async (game: any) => {
       });
     }, 1000);
 
-    await markGameAsEndedAndCompleted(game.id);
+    await markGameAsEndedAndCompleted(game.id);   
     await updateGamesPlayedForGamePlayers(game.id);
     await updateWinnerWonCount(winner.user.id);
+    await saveGame(game.code, game);
 
     console.log("tournamentData", tournament);
 
