@@ -34,6 +34,9 @@ import  Mixpanel  from "mixpanel";
 import fs from "fs";
 import MatchForfeiter from "./services/matchForfeiterEnhanced";
 import {monitorEventLoopDelay} from 'perf_hooks'
+import { TwilioClient } from "./config/twilio";
+import { sendSMS } from "./services/smsService";
+
 
 const h = monitorEventLoopDelay()
 h.enable()
@@ -41,9 +44,6 @@ let last = process.cpuUsage()
 
 
 export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
-
-
-
 
 
 dotenv.config();
@@ -100,6 +100,13 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/payout-method", payoutRoutes);
 //app.use(notFoundMiddleware);
 
+app.post('/api/test-sms', async (req, res)=>{
+   const {phone} = req.body;
+
+   await sendSMS(phone, 'Test SMS from SparPlay 🔥');
+
+   res.json({success:true});
+});
 
 app.use(errorHandler);
 
