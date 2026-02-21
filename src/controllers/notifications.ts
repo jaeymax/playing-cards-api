@@ -6,7 +6,14 @@ import type { AuthenticatedRequest } from "../../types/index";
 
 
 export const getUserNotifications = async (req: AuthenticatedRequest, res: Response) => {
-  const { userId } = req.params;
+  const { id } = req.params;
+
+  console.log("Fetching notifications for user ID:", id);
+  if(!id){
+    res.status(400).json({ message: "User ID is required." });
+    return;
+  }
+
   const notifications = await sql`
         SELECT 
             n.id,
@@ -15,9 +22,9 @@ export const getUserNotifications = async (req: AuthenticatedRequest, res: Respo
             n.message,
             n.is_read,
             n.action,
-            n.created_at as timestamp
+            n.created_at
         FROM notifications n
-        WHERE n.user_id = ${userId}
+        WHERE n.user_id = ${id}
         ORDER BY n.created_at DESC
     `;
   res.json(notifications);

@@ -275,8 +275,8 @@ const endGame = async (game: any) => {
 
   let points = 1;
 
-  game.status = "ended";
-  game.ended_at = new Date();
+  //game.status = "ended";
+  //game.ended_at = new Date();
 
   mixpanel.track("game_completed", {
     distinct_id: game.id,
@@ -299,6 +299,8 @@ const endGame = async (game: any) => {
   await updateGamePlayersScores(game);
 
   if (winner.score >= game.win_points) {
+    game.status = 'completed';
+    game.ended_at = Date.now();
     if(game.is_rated)await matchForfeiter.cancelForfeit(game.code);
 
     winner.games_won += 1;

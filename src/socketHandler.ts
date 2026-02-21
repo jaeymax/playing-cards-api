@@ -227,6 +227,12 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       socket.join(`tournament_${tournamentId}`);
       if(gameCode)socket.join(`lobby_game_room:${gameCode}`)
     });
+    
+    socket.on("leaveTournamentRoom", async({tournamentId, userId, gameCode})=>{
+      console.log(`User ${userId} leaving tournament room: ${tournamentId} with gamecode ${gameCode}`);
+      socket.leave(`tournament_${tournamentId}`);
+      if(gameCode)socket.leave(`lobby_game_room:${gameCode}`)
+    });
 
     socket.on("playerJoin", async ({userId, gameCode}) => {
       console.log(`User ${userId} joining game: ${gameCode}`);

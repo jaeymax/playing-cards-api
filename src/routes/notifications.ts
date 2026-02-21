@@ -6,7 +6,7 @@ const router = express.Router();
 
 
 
-router.get("/user/:userId", authMiddleware, getUserNotifications);
+router.get("/user/:id", authMiddleware, getUserNotifications);
 router.post("/mark-as-read/:notificationId", authMiddleware, markNotificationAsRead);
 
 export default router;

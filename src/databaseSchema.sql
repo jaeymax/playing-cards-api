@@ -8,6 +8,7 @@ CREATE TABLE users (
   image_url TEXT DEFAULT NULL,
   rating INTEGER DEFAULT 1000, 
   location VARCHAR(100) DEFAULT NULL,
+  phone VARCHAR(20) DEFAULT NULL,
   games_played INTEGER DEFAULT 0,
   games_won INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
