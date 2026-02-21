@@ -159,6 +159,8 @@ const registerUser = asyncHandler(
         RETURNING id, username, email
       `;
 
+    await sql`INSERT INTO wallets (user_id) VALUES (${newUser[0].id})`;
+
     // Delete the OTP record after successful registration
     await sql`DELETE FROM otp_verification WHERE email = ${email}`;
 

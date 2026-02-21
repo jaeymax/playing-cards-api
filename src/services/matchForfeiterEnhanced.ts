@@ -23,11 +23,11 @@ export default class MatchForfeiter {
     this.worker = new Worker(
       "forfeitQueue",
       async (job: Job) => {
-        const start = Date.now()
+        const start = Date.now();
         await this.processForfeitJob(job);
-        console.log(`Job ${job?.id} took ${Date.now() - start}ms`)
+        console.log(`Job ${job?.id} took ${Date.now() - start}ms`);
       },
-      { connection: new Redis({ maxRetriesPerRequest: null }), concurrency:10}
+      { connection: new Redis({ maxRetriesPerRequest: null }), concurrency: 10 }
     );
 
     this.worker.on("failed", (job, err) => {
@@ -54,7 +54,7 @@ export default class MatchForfeiter {
       {
         delay: delayMs,
         removeOnComplete: true,
-        attempts:3,
+        attempts: 3,
         removeOnFail: 500,
         jobId: gameCode,
       }
@@ -64,12 +64,12 @@ export default class MatchForfeiter {
 
   public async cancelForfeit(gameCode: string) {
     const job = await this.queue.getJob(gameCode);
-    try{
+    try {
       if (job) {
         await job.remove();
         console.log(`Cancelled forfeit for game ${gameCode}`);
       }
-    }catch(err){
+    } catch (err) {
       console.log(`Error canceling job ${job?.id}`, err);
     }
   }
@@ -91,78 +91,73 @@ export default class MatchForfeiter {
       `Forfeit processed for match ${gameCode}. Winner: ${winnerId}, Loser: ${loserId}`
     );
 
-     // Notify Game Room
-     this.serverSocket
-     .to(gameCode)
-     .emit("matchForfeit", { winnerId, loserId });
-   this.serverSocket.to(`lobby_game_room:${gameCode}`).emit('matchForfeit', {winnerId, loserId});
-   console.log(`event sent to lobby_game_room:${gameCode}`)
-     
-   // Update Memory/Redis State
-   match.winner_id = winnerId;
-   match.status = "forfeited";
-   match.forfeited_by = loserId;
-   await saveGame(gameCode, match);
+    // Notify Game Room
 
     const tournament = await isTournamentMatch(match.id);
 
-    if(tournament){
-        const tournamentFormat = 'Single Elimination';
-        if(tournamentFormat == 'Single Elimination'){
-          //create sql transaction to update match and player stats
-          const results = await sql.transaction((tx) => {
-            // 1. Update Match Status
-            const updateMatchStatus = tx`
+    if (tournament) {
+      const tournamentFormat = "Single Elimination";
+      if (tournamentFormat == "Single Elimination") {
+        //create sql transaction to update match and player stats
+        const results = await sql.transaction((tx) => {
+          // 1. Update Match Status
+          const updateMatchStatus = tx`
               UPDATE tournament_matches 
               SET status = 'forfeited', winner_id = ${winnerId} 
               WHERE game_id = ${match.id} 
               RETURNING id, tournament_id
             `;
-      
-            const queries = [updateMatchStatus];
-      
-            // 2. Eliminate Loser from Tournament
-            const eliminateLoser = tx`
+
+          const queries = [updateMatchStatus];
+
+          // 2. Eliminate Loser from Tournament
+          const eliminateLoser = tx`
               UPDATE tournament_participants 
               SET status = 'eliminated' 
               WHERE tournament_id = (SELECT tournament_id FROM tournament_matches WHERE game_id = ${match.id}) AND user_id = ${loserId}
             `;
-      
-            // 3. Update User Stats (Batch these!)
-            const updateUserStats = tx`
+
+          // 3. Update User Stats (Batch these!)
+          const updateUserStats = tx`
               UPDATE users SET games_played = games_played + 1 
               WHERE id IN (${winnerId}, ${loserId})
             `;
-            const updateWinnerStats = tx`UPDATE users SET games_won = games_won + 1 WHERE id = ${winnerId}`;
-      
-            // 4. Update Game Players
-            //const updateGamePlayers = tx`UPDATE game_players SET status = 'forfeited' WHERE game_id = ${match.id} AND user_id = ${loserId}`;
-      
-            queries.push(
-              eliminateLoser,
-              updateUserStats,
-              updateWinnerStats,
-              
-            );
-      
-            return queries;
-          });
-          
-          const tournamentId = results[0][0].tournament_id;
-          const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
-          this.serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", lobbyData);
-          
-         await advanceSingleEliminationTournamentToNextRound(tournament.id, tournament.current_round_number, this.serverSocket);          
+          const updateWinnerStats = tx`UPDATE users SET games_won = games_won + 1 WHERE id = ${winnerId}`;
 
-        }
+          // 4. Update Game Players
+          //const updateGamePlayers = tx`UPDATE game_players SET status = 'forfeited' WHERE game_id = ${match.id} AND user_id = ${loserId}`;
+
+          queries.push(eliminateLoser, updateUserStats, updateWinnerStats);
+
+          return queries;
+        });
+
+
+        this.serverSocket
+          .to(`lobby_game_room:${gameCode}`)
+          .emit("matchForfeit", { winnerId, loserId });
+        console.log(`event sent to lobby_game_room:${gameCode}`);
+        const tournamentId = results[0][0].tournament_id;
+        const lobbyData =
+          await getSingleEliminationTournamentLobbyData(tournamentId);
+        this.serverSocket
+          .to(`tournament_${tournamentId}`)
+          .emit("lobbyUpdate", lobbyData);
+
+        await advanceSingleEliminationTournamentToNextRound(
+          tournament.id,
+          tournament.current_round_number,
+          this.serverSocket
+        );
+      }
     }
 
-   
-     
+    this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId, loserId });
 
- 
-
-
-
+    // Update Memory/Redis State
+    match.winner_id = winnerId;
+    match.status = "forfeited";
+    match.forfeited_by = loserId;
+    await saveGame(gameCode, match);
   }
 }

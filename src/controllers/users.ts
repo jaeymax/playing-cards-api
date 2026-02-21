@@ -35,9 +35,42 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
   res.status(200).json(users[0]);
 });
 
-const updateUserProfile = async (req: Request, res: Response) => {
-  res.status(200).json({ message: "update user profile controller" });
-};
+const updateUserProfile = asyncHandler(
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401);
+      throw new Error("Not authorized");
+    }
+
+    const { phone, location } = req.body;
+
+    if (!phone && !location) {
+      res.status(400);
+      throw new Error(
+        "At least one field (phone or location) must be provided"
+      );
+    }
+
+    const user = await sql`
+      UPDATE users
+      SET 
+        phone = COALESCE(${phone}, phone),
+        location = COALESCE(${location}, location),
+        updated_at = NOW()
+      WHERE id = ${userId}
+      RETURNING id, username, email, phone, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at
+    `;
+
+    if (user.length === 0) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    res.status(200).json(user[0]);
+  }
+);
 
 const getUsers = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
