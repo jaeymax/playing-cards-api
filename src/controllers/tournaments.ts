@@ -87,7 +87,7 @@ export const getTournamentResults = expressAsyncHandler(
 export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const tournament_id =
-      await sql`SELECT id from tournaments WHERE format = 'Single Elimination' AND status = 'completed' ORDER by end_date DESC LIMIT 1`;
+      await sql`SELECT id from tournaments WHERE format = 'Single Elimination' AND status = 'completed' ORDER by created_at DESC LIMIT 1`;
 
     if (!tournament_id || tournament_id.length == 0) {
       res.status(400).json({ message: "No tournament found" });
