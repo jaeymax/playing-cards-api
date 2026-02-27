@@ -28,7 +28,7 @@ const getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
             rating,
             CASE
                 WHEN games_played = 0 THEN 0
-                ELSE (games_won::decimal / games_played) * 100
+                ELSE ROUND((games_won::decimal / games_played) * 100, 2)
             END as win_rate,
             RANK() OVER (ORDER BY rating DESC) as rank
         FROM users 
