@@ -481,7 +481,6 @@ const advanceSingleEliminationTournamentToNextRound = async (
               SET winner_id = ${winnerParticipant.user_id}
               WHERE id = ${tournamentId}
             `;
-
     }
     const allParticipants =
       await getSingleEliminationTournamentParticipants(tournamentId);
@@ -489,7 +488,10 @@ const advanceSingleEliminationTournamentToNextRound = async (
     // get Top 3 winners for the tournament
     const winners = await getSingleEliminationTournamentWinners(tournamentId);
     console.log("winners", winners);
-    assert(winners.length >= 3, "There should be at least 3 winners for the tournament");
+    assert(
+      winners.length >= 3,
+      "There should be at least 3 winners for the tournament"
+    );
     const firstPlace = winners[0];
     const secondPlace = winners[1];
     const thirdPlace = winners[2];
@@ -499,7 +501,9 @@ const advanceSingleEliminationTournamentToNextRound = async (
     const thirdPlaceMessage = `Congratulations! You earned 3rd Place in the Spar Weekend Tournament. A podium performance among ${allParticipants.length} competitors! You've proven you belong among the elite competitors.`;
     const participationMessage = `You battled in this week's Spar Tournament and made your mark. 🎖 Participation Reward: +2 Rating. Thanks for participating. Every tournament sharpends your edge.`;
     const nextTournamentMessage = `The next Spar Weekend Championship is coming up! Sharpen your skills and get ready to compete for glory and prizes. Mark your calendar for Friday 8PM and be there to claim your spot among the best!`;
-    
+    const cashPrizeMessage = `Your victory in the Spar Weekend Championship has earned you ₵50.
+Our team will contact you and credit your reward within 15 minutes. Congratulations on an outstanding performance.`;
+
     // send notification to all participants about participation reward and tournament results, also include the rating change for each participant in the notification
     for (const participant of allParticipants) {
       const ratingChange = await getRatingChangeForTournament(
@@ -509,33 +513,55 @@ const advanceSingleEliminationTournamentToNextRound = async (
       const ratingMesssageTitle =
         ratingChange >= 0 ? "Rating Increased 📈" : "Rating Decreased 📉";
       const ratingMessage = `Your performance in the tournament has resulted in a rating change of ${ratingChange >= 0 ? "+" : ""}${ratingChange}. Keep competing to climb the leaderboard!. Your leaderboard position have been updated`;
-      
+
       await sql`
       UPDATE users
       SET rating = rating + 2
       WHERE id = ${participant.id}
       `;
 
-      createNotification(participant.id, 'tournament', '⏳ Next Tournament: Friday 8PM', nextTournamentMessage, 'Register')
-      
-      
+      createNotification(
+        participant.id,
+        "tournament",
+        "⏳ Next Tournament: Friday 8PM",
+        nextTournamentMessage,
+        "Register"
+      );
+
       console.log(
         `rating change for user ${participant.username} in tournament ${tournamentId}:`,
         ratingChange
       );
-      
-      
-      createNotification(participant.id, 'tournament', ratingMesssageTitle, ratingMessage, 'View Profile');
-      createNotification(participant.id, 'tournament', '🏆 Tournament Complete!', participationMessage, 'View Results');
 
-      if(!participant.is_rated){
+      createNotification(
+        participant.id,
+        "tournament",
+        ratingMesssageTitle,
+        ratingMessage,
+        "View Profile"
+      );
+      createNotification(
+        participant.id,
+        "tournament",
+        "🏆 Tournament Complete!",
+        participationMessage,
+        "View Results"
+      );
+
+      if (!participant.is_rated) {
         await sql`
         UPDATE users
         SET is_rated = true
         WHERE id = ${participant.id}
         `;
 
-       createNotification(participant.id, 'tournament', 'Your games are now rated! 🎉', 'Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!', 'View Leaderboard');
+        createNotification(
+          participant.id,
+          "tournament",
+          "Your games are now rated! 🎉",
+          "Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!",
+          "View Leaderboard"
+        );
       }
 
       // update tournaments played for each participant
@@ -546,23 +572,67 @@ const advanceSingleEliminationTournamentToNextRound = async (
       `;
 
       // update tournaments won for the winner
-      if(participant.id === firstPlace.id){
+      if (participant.id === firstPlace.id) {
         await sql`
           UPDATE users
           SET tournaments_won = tournaments_won + 1
           WHERE id = ${participant.id}
         `;
       }
-      
     }
 
-    createNotification(firstPlace.id, 'tournament', 'Spar Weekend Tournament Champion 🏆', winnerMessage, 'Claim Prize');
-    createNotification(secondPlace.id, 'tournament', 'Spar Weekend Tournament Runner-Up 🥈', runnerUpMessage, 'Claim Prize');
-    createNotification(thirdPlace.id, 'tournament', 'Spar Weekend Tournament Top 3 Finish 🥉', thirdPlaceMessage, 'Claim Prize');
+    createNotification(
+      firstPlace.id,
+      "tournament",
+      "Spar Weekend Tournament Champion 🏆",
+      winnerMessage,
+      "Claim Prize"
+    );
+    createNotification(
+      secondPlace.id,
+      "tournament",
+      "Spar Weekend Tournament Runner-Up 🥈",
+      runnerUpMessage,
+      "Claim Prize"
+    );
+    createNotification(
+      thirdPlace.id,
+      "tournament",
+      "Spar Weekend Tournament Top 3 Finish 🥉",
+      thirdPlaceMessage,
+      "Claim Prize"
+    );
 
-    createNotification(firstPlace.id, 'reward', '🥇 Gold Medal Awarded!', 'You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.', 'Claim Prize');
-    createNotification(secondPlace.id, 'reward', '🥈 Silver Medal Awarded!', 'You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.', 'Claim Prize');
-    createNotification(thirdPlace.id, 'reward', '🥉 Bronze Medal Awarded!', 'You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.', 'Claim Prize');
+    createNotification(
+      firstPlace.id,
+      "reward",
+      "🥇 Gold Medal Awarded!",
+      "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.",
+      "Claim Prize"
+    );
+    createNotification(
+      secondPlace.id,
+      "reward",
+      "🥈 Silver Medal Awarded!",
+      "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.",
+      "Claim Prize"
+    );
+    createNotification(
+      thirdPlace.id,
+      "reward",
+      "🥉 Bronze Medal Awarded!",
+      "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.",
+      "Claim Prize"
+    );
+
+    createNotification(
+      firstPlace.id,
+      "reward",
+      "💰 ₵50 Cash Prize Won!",
+      cashPrizeMessage,
+      "View Leaderboard"
+    );
+
     // update medals for top 3 winners
     // wrap in sql trasaction to ensure all medal updates are successful, if any of them fail, the transaction will be rolled back and no medals will be updated
 
@@ -582,28 +652,7 @@ const advanceSingleEliminationTournamentToNextRound = async (
       SET bronze_medals = bronze_medals + 1
       WHERE id = ${thirdPlace.id}
     `,
-
     ]);
-
-    // await sql`
-    //   UPDATE users
-    //   SET gold_medals = gold_medals + 1
-    //   WHERE id = ${firstPlace.id}
-    // `;
-
-    // await sql`
-    //   UPDATE users
-    //   SET silver_medals = silver_medals + 1
-    //   WHERE id = ${secondPlace.id}
-    // `;
-
-    // await sql`
-    //   UPDATE users
-    //   SET bronze_medals = bronze_medals + 1
-    //   WHERE id = ${thirdPlace.id}
-    // `;
-
-
   } else {
     // if not last round and all matches are not yet completed
   }
