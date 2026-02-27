@@ -36,6 +36,7 @@ import MatchForfeiter from "./services/matchForfeiterEnhanced";
 import {monitorEventLoopDelay} from 'perf_hooks'
 import { TwilioClient } from "./config/twilio";
 import { sendSMS } from "./services/smsService";
+import expressAsyncHandler from "express-async-handler";
 
 
 const h = monitorEventLoopDelay()
@@ -100,13 +101,83 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/payout-method", payoutRoutes);
 //app.use(notFoundMiddleware);
 
-app.post('/api/test-sms', async (req, res)=>{
+app.post('/api/test-sms', expressAsyncHandler (async (req, res)=>{
    const {phone} = req.body;
 
    await sendSMS(phone, 'Test SMS from SparPlay 🔥');
 
    res.json({success:true});
-});
+}));
+
+
+app.post('/api/send-tournament-notification', expressAsyncHandler(async (req, res)=>{
+    const {tournamentName} = req.body;
+
+    try{
+      const users = await sql`
+          SELECT username, phone FROM users WHERE phone IS NOT NULL
+      `;
+
+      
+      for(const user of users){
+          const messageTemplate = `Hi ${user.username}!, Spar Weekend Championship kicks off Friday 7PM. Test your skills, compete with others and win ₵50 cash. Register now at https://sparplay.com`;
+          const phone = '233'+ user.phone.substr(1);
+          console.log('realphone', phone);
+          await sendSMS(phone, messageTemplate);
+      }
+
+      res.json({success:true, message: 'Tournament notifications sent successfully'});
+
+  }
+  catch(error){
+      console.error('Error sending tournament notifications:', error);
+  }
+
+}))
+
+app.post('/api/tournament-notification-reminder', expressAsyncHandler(async (req, res)=>{
+    const {tournamentName} = req.body;
+
+    try{
+      const users = await sql`
+          SELECT username, phone FROM users WHERE phone IS NOT NULL
+      `;
+
+      for(const user of users){
+          const messageTemplate = `Hi ${user.username}!, reminder! The Spar Weekend Championship starts tomorrow at 8PM. ₵50 cash prize awaits the winner. Register now at https://sparplay.com`;
+          const phone = '233'+ user.phone.substr(1);
+          console.log('realphone', phone);
+          await sendSMS(phone, messageTemplate);
+      }
+
+    }catch(error){
+      console.error('Error sending tournament reminder notifications:', error);
+    }
+
+    res.json({success:true, message: 'Tournament reminder notifications sent successfully'});
+}))
+
+app.post('/api/tournament-notification-reminder-final', expressAsyncHandler(async (req, res)=>{
+    const {tournamentName} = req.body;
+
+    try{
+      const users = await sql`
+          SELECT username, phone FROM users WHERE phone IS NOT NULL
+      `;
+
+      for(const user of users){
+          const messageTemplate = `Hi ${user.username}!, final reminder that the Spar Weekend Championship starts in 1 hour! Don't miss out on the action and the chance to win ₵50 cash. Register now at https://sparplay.com if you haven't already!`;
+          const phone = '233'+ user.phone.substr(1);
+          console.log('realphone', phone);
+          await sendSMS(phone, messageTemplate);
+      }
+
+    }catch(error){
+      console.error('Error sending tournament reminder notifications:', error);
+    }
+
+    res.json({success:true, message: 'Tournament reminder notifications sent successfully'});
+}))
 
 app.use(errorHandler);
 

@@ -160,10 +160,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
           
         })
 
-        game.turn_started_at = Date.now();
-        game.turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
         game.current_turn_user_id = game.players.find((player:any)=>player.position == game.current_player_position)?.user?.id as number;
-        await redis.zadd('forfeit:index', game.turn_ends_at, game.code);
         await saveGame(code, game);
         serverSocket.to(code).emit('startNewHand', game);
 

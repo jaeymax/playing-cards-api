@@ -1,19 +1,22 @@
+import { assert } from "console";
 import { matchForfeiter } from "..";
-import sql from "../config/db";
-import { fisherYatesShuffle, getSingleEliminationTournamentLobbyData, saveGame } from "./gameFunctions";
-import { markTournamentAsEndedAndCompleted } from "./utils";
+import sql from "../config/db"; // Ensure sql is properly typed in the db configuration file
+import {
+  fisherYatesShuffle,
+  getSingleEliminationTournamentLobbyData,
+  saveGame,
+} from "./gameFunctions";
+import { createNotification, markTournamentAsEndedAndCompleted } from "./utils";
+import { create } from "axios";
 
 const createNextSingleEliminationRoundMatches = async (
   roundNumber: number,
-  tournamentId:number,
+  tournamentId: number
 ) => {
   // Implementation for creating the next round in a single elimination tournament
-  
+
   try {
-    const round = await createSingleEliminationRound(
-      tournamentId,
-      roundNumber
-    );
+    const round = await createSingleEliminationRound(tournamentId, roundNumber);
 
     const participants =
       await getSingleEliminationTournamentParticipantsByStatus(
@@ -124,7 +127,7 @@ const getSingleEliminationTournamentParticipants = async (
   tournamentId: number
 ) => {
   const participants = await sql`
-    SELECT u.id, u.username, u.image_url, tp.status
+    SELECT u.id, u.username, u.is_rated, u.image_url, tp.status
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId}
@@ -432,16 +435,14 @@ AND user_id = ${loserId}
 const advanceSingleEliminationTournamentToNextRound = async (
   tournamentId: number,
   currentRoundNumber: number,
-  serverSocket:any
+  serverSocket: any
 ) => {
   const matches = await getSingleEliminationTournamentMatches(
     tournamentId,
     currentRoundNumber
   );
 
-  const allMatchesCompleted = matches.every(
-    (match) => match.winner_id != null
-  );
+  const allMatchesCompleted = matches.every((match) => match.winner_id != null);
 
   const active_participants =
     await getSingleEliminationTournamentParticipantsByStatus(
@@ -455,14 +456,15 @@ const advanceSingleEliminationTournamentToNextRound = async (
   if (allMatchesCompleted && !isLastRound) {
     await createNextSingleEliminationRoundMatches(
       currentRoundNumber + 1,
-      tournamentId,);
+      tournamentId
+    );
 
-    const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
+    const lobbyData =
+      await getSingleEliminationTournamentLobbyData(tournamentId);
 
     serverSocket
       .to(`tournament_${tournamentId}`)
       .emit("lobbyUpdate", lobbyData);
-
   } else if (isLastRound) {
     // tournament has ended
     console.log("this is the last round and match");
@@ -471,9 +473,7 @@ const advanceSingleEliminationTournamentToNextRound = async (
       (p: any) => p.status == "qualified"
     );
 
-    serverSocket
-      .to(`tournament_${tournamentId}`)
-      .emit("tournamentEnded");
+    serverSocket.to(`tournament_${tournamentId}`).emit("tournamentEnded");
 
     if (winnerParticipant) {
       await sql`
@@ -482,25 +482,169 @@ const advanceSingleEliminationTournamentToNextRound = async (
               WHERE id = ${tournamentId}
             `;
 
-      // send a notification message to the winner in db
-      await sql`
-              INSERT INTO notifications (user_id, type, title, message, action)
-              VALUES (
-                ${winnerParticipant.user_id},
-                'tournament',
-                'Tournament Champion 🏆',
-                'Congratulations! You won the Weekend Tournament. Your skill and strategy paid off — enjoy your rewards!',
-                'Claim Prize'
-              )
-            `;
     }
-  }else{
-     // if not last round and all matches are not yet completed
-  }
+    const allParticipants =
+      await getSingleEliminationTournamentParticipants(tournamentId);
 
+    // get Top 3 winners for the tournament
+    const winners = await getSingleEliminationTournamentWinners(tournamentId);
+    console.log("winners", winners);
+    assert(winners.length >= 3, "There should be at least 3 winners for the tournament");
+    const firstPlace = winners[0];
+    const secondPlace = winners[1];
+    const thirdPlace = winners[2];
+
+    const winnerMessage = `Congratulations! You have conquered the Spar Weekend Championship. 1st Place out of ${allParticipants.length} competitors! Your skill and strategy paid off - Your name now stands at the top. Enjoy your rewards and bragging rights!`;
+    const runnerUpMessage = `Congratulations! You secured 2nd Place out of ${allParticipants.length} players. You were one match away from the crown. The next tournament could be yours!`;
+    const thirdPlaceMessage = `Congratulations! You earned 3rd Place in the Spar Weekend Tournament. A podium performance among ${allParticipants.length} competitors! You've proven you belong among the elite competitors.`;
+    const participationMessage = `You battled in this week's Spar Tournament and made your mark. 🎖 Participation Reward: +2 Rating. Thanks for participating. Every tournament sharpends your edge.`;
+    const nextTournamentMessage = `The next Spar Weekend Championship is coming up! Sharpen your skills and get ready to compete for glory and prizes. Mark your calendar for Friday 8PM and be there to claim your spot among the best!`;
+    
+    // send notification to all participants about participation reward and tournament results, also include the rating change for each participant in the notification
+    for (const participant of allParticipants) {
+      const ratingChange = await getRatingChangeForTournament(
+        participant.id,
+        tournamentId
+      );
+      const ratingMesssageTitle =
+        ratingChange >= 0 ? "Rating Increased 📈" : "Rating Decreased 📉";
+      const ratingMessage = `Your performance in the tournament has resulted in a rating change of ${ratingChange >= 0 ? "+" : ""}${ratingChange}. Keep competing to climb the leaderboard!. Your leaderboard position have been updated`;
+      
+      await sql`
+      UPDATE users
+      SET rating = rating + 2
+      WHERE id = ${participant.id}
+      `;
+
+      createNotification(participant.id, 'tournament', '⏳ Next Tournament: Friday 8PM', nextTournamentMessage, 'Register')
+      
+      
+      console.log(
+        `rating change for user ${participant.username} in tournament ${tournamentId}:`,
+        ratingChange
+      );
+      
+      
+      createNotification(participant.id, 'tournament', ratingMesssageTitle, ratingMessage, 'View Profile');
+      createNotification(participant.id, 'tournament', '🏆 Tournament Complete!', participationMessage, 'View Results');
+
+      if(!participant.is_rated){
+        await sql`
+        UPDATE users
+        SET is_rated = true
+        WHERE id = ${participant.id}
+        `;
+
+       createNotification(participant.id, 'tournament', 'Your games are now rated! 🎉', 'Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!', 'View Leaderboard');
+      }
+
+      // update tournaments played for each participant
+      await sql`
+        UPDATE users
+        SET tournaments_played = tournaments_played + 1
+        WHERE id = ${participant.id}
+      `;
+
+      // update tournaments won for the winner
+      if(participant.id === firstPlace.id){
+        await sql`
+          UPDATE users
+          SET tournaments_won = tournaments_won + 1
+          WHERE id = ${participant.id}
+        `;
+      }
+      
+    }
+
+    createNotification(firstPlace.id, 'tournament', 'Spar Weekend Tournament Champion 🏆', winnerMessage, 'Claim Prize');
+    createNotification(secondPlace.id, 'tournament', 'Spar Weekend Tournament Runner-Up 🥈', runnerUpMessage, 'Claim Prize');
+    createNotification(thirdPlace.id, 'tournament', 'Spar Weekend Tournament Top 3 Finish 🥉', thirdPlaceMessage, 'Claim Prize');
+
+    createNotification(firstPlace.id, 'reward', '🥇 Gold Medal Awarded!', 'You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.', 'Claim Prize');
+    createNotification(secondPlace.id, 'reward', '🥈 Silver Medal Awarded!', 'You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.', 'Claim Prize');
+    createNotification(thirdPlace.id, 'reward', '🥉 Bronze Medal Awarded!', 'You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.', 'Claim Prize');
+    // update medals for top 3 winners
+    // wrap in sql trasaction to ensure all medal updates are successful, if any of them fail, the transaction will be rolled back and no medals will be updated
+
+    await sql.transaction((sql) => [
+      sql`
+      UPDATE users
+      SET gold_medals = gold_medals + 1
+      WHERE id = ${firstPlace.id}
+    `,
+      sql`
+      UPDATE users
+      SET silver_medals = silver_medals + 1
+      WHERE id = ${secondPlace.id}
+    `,
+      sql`
+      UPDATE users
+      SET bronze_medals = bronze_medals + 1
+      WHERE id = ${thirdPlace.id}
+    `,
+
+    ]);
+
+    // await sql`
+    //   UPDATE users
+    //   SET gold_medals = gold_medals + 1
+    //   WHERE id = ${firstPlace.id}
+    // `;
+
+    // await sql`
+    //   UPDATE users
+    //   SET silver_medals = silver_medals + 1
+    //   WHERE id = ${secondPlace.id}
+    // `;
+
+    // await sql`
+    //   UPDATE users
+    //   SET bronze_medals = bronze_medals + 1
+    //   WHERE id = ${thirdPlace.id}
+    // `;
+
+
+  } else {
+    // if not last round and all matches are not yet completed
+  }
 };
 
+const getSingleEliminationTournamentWinners = async (tournamentId: number) => {
+  const winners = await sql`SELECT
+  u.id,
+  u.username as name,
+  u.image_url,
+  COALESCE(COUNT(tm.id),0) AS wins
+FROM tournament_participants tp
+JOIN users u
+  ON u.id = tp.user_id
+LEFT JOIN tournament_matches tm
+  ON tm.tournament_id = tp.tournament_id
+  AND tm.winner_id = u.id
+WHERE tp.tournament_id = ${tournamentId}
+GROUP BY u.id, u.username, u.image_url
+ORDER BY wins DESC LIMIT 3`;
+  return winners;
+};
 
+const getRatingChangeForTournament = async (
+  userId: number,
+  tournamentId: number
+) => {
+  let ratingChange = 0;
+  const ratingChanges = await sql`SELECT 
+   rating_change
+   FROM rating_changes
+   WHERE user_id = ${userId} AND tournament_id = ${tournamentId}
+  `;
+
+  console.log("rating_changes", ratingChanges);
+  for (let ratingChangeData of ratingChanges) {
+    ratingChange += ratingChangeData.rating_change;
+  }
+
+  return ratingChange;
+};
 
 // get the winner in a single elimination tournament
 const getSingleEliminationTournamentWinner = async (tournamentId: number) => {
@@ -514,7 +658,10 @@ const getSingleEliminationTournamentWinner = async (tournamentId: number) => {
 };
 
 // get all matches with status inprogress in a single elimination tournament
- const getSingleElimationTournamentOngoingMatches = async (tournamentId:number, currentRoundNumber:number) =>{
+const getSingleElimationTournamentOngoingMatches = async (
+  tournamentId: number,
+  currentRoundNumber: number
+) => {
   const ongoingMatches = await sql`
   SELECT tm.id
   FROM tournament_matches tm
@@ -523,18 +670,21 @@ const getSingleEliminationTournamentWinner = async (tournamentId: number) => {
   AND tr.round_number = ${currentRoundNumber}
   AND tm.status IN ('in_progress', 'pending')
 `;
-  return ongoingMatches
- }
+  return ongoingMatches;
+};
 
- const getSingleEliminationTournamentMatches = async (tournamentId:number, currentRoundNumber:number) =>{
+const getSingleEliminationTournamentMatches = async (
+  tournamentId: number,
+  currentRoundNumber: number
+) => {
   const matches = await sql`
   SELECT id, winner_id, player1_id, player2_id
   FROM tournament_matches
   WHERE tournament_id = ${tournamentId}
   AND round_id = (SELECT id FROM tournament_rounds WHERE tournament_id = ${tournamentId} AND round_number = ${currentRoundNumber})
 `;
- return matches;
- }
+  return matches;
+};
 
 export {
   createNextSingleEliminationRoundMatches,
@@ -552,5 +702,5 @@ export {
   advanceSingleEliminationTournamentToNextRound,
   getSingleEliminationTournamentWinner,
   getSingleElimationTournamentOngoingMatches,
-  getSingleEliminationTournamentMatches
+  getSingleEliminationTournamentMatches,
 };
