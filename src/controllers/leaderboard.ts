@@ -12,6 +12,7 @@ const getTopPlayers = asyncHandler(async (req: Request, res: Response) => {
           FROM users 
           WHERE is_guest = false 
           AND is_bot = false 
+          AND is_rated = true
           ORDER BY rating DESC
           LIMIT 5
       `;
@@ -25,10 +26,15 @@ const getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
             username, 
             image_url, 
             rating,
+            CASE
+                WHEN games_played = 0 THEN 0
+                ELSE (games_won::decimal / games_played) * 100
+            END as win_rate,
             RANK() OVER (ORDER BY rating DESC) as rank
         FROM users 
         WHERE is_guest = false 
         AND is_bot = false 
+        AND is_rated = true
         ORDER BY rating DESC
     `;
 

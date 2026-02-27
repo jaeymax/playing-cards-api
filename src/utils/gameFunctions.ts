@@ -316,6 +316,28 @@ const endGame = async (game: any) => {
     await saveGame(game.code, game);
 
     console.log("tournamentData", tournament);
+    if (game.is_rated) {
+      const tournament_id = await sql`
+      SELECT tournament_id 
+      FROM tournament_matches 
+      WHERE game_id = ${game.id}
+    `;
+
+      //update ratings
+      const players = updateRatings(game.players, winner.user.id);
+      for (let player of players) {
+        const oldRating =
+          await sql`SELECT rating from users WHERE id = ${player.user.id}`;
+        const newRating = player.user.rating;
+        console.log(
+          `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`
+        );
+        await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+        const ratingChange = newRating - oldRating[0].rating;
+        // character suit there question //
+        await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`;
+      }
+    }
 
     if (tournament) {
       console.log(
@@ -348,28 +370,6 @@ const endGame = async (game: any) => {
       }
     }
 
-    if (game.is_rated) {
-      const tournament_id = await sql`
-      SELECT tournament_id 
-      FROM tournament_matches 
-      WHERE game_id = ${game.id}
-    `;
-
-      //update ratings
-      const players = updateRatings(game.players, winner.user.id);
-      for (let player of players) {
-        const oldRating =
-          await sql`SELECT rating from users WHERE id = ${player.user.id}`;
-        const newRating = player.user.rating;
-        console.log(
-          `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`
-        );
-        await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
-        const ratingChange = newRating - oldRating[0].rating;
-        // character suit there question //
-        await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`;
-      }
-    }
   } else {
     await saveGame(game.code, game);
     setTimeout(()=>{
