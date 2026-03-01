@@ -17,6 +17,8 @@ import {
   createTwoPlayerMatch,
   createTwoPlayerMatchGamePlayers,
   getSingleEliminationTournamentParticipants,
+  getSingleEliminationTournamentStandings,
+  getSwissTournamentStandings,
 } from "../utils/tournament";
 import { create, get } from "axios";
 import { getGamesByCodes } from "../utils/utils";
@@ -41,15 +43,7 @@ interface RoundMatches {
   matches: TournamentBracketMatch[];
 }
 
-// Utility function for shuffling arrays
-const shuffleArray = <T>(array: T[]): T[] => {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-};
+
 
 export const getTournamentResults = expressAsyncHandler(
   async (req: Request, res: Response) => {
@@ -610,7 +604,9 @@ export const getTournamentLobby = async (
         u.username, 
         u.image_url, 
         u.rating,
+        u.is_rated,
         tp.status,
+        tp.score,
         RANK() OVER (ORDER BY u.rating DESC) as rank
       FROM users u
       JOIN tournament_participants tp ON u.id = tp.user_id
@@ -694,14 +690,14 @@ export const getTournamentLobby = async (
       matches,
     }));
 
-    // serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", {
-    //   success: true,
-    //   tournament: tournament[0],
-    //   participants,
-    //   rounds,
-    // });
 
-    // console.log('tournament lobby emitted to socket room:', `tournament_${tournamentId}`);
+    const tournamentFormat = tournament[0].format;
+    let standings = null;
+    if (tournamentFormat === "Swiss") {
+      standings = await getSwissTournamentStandings(tournamentId);
+    }else if (tournamentFormat === "Single Elimination") {
+      standings = await getSingleEliminationTournamentStandings(tournamentId, tournament[0].status);
+    }
 
     res.json({
       success: true,
@@ -709,6 +705,7 @@ export const getTournamentLobby = async (
       participants,
       rules,
       rounds,
+      standings
     });
   } catch (err) {
     console.error("Error fetching tournament lobby:", err);
@@ -1031,140 +1028,7 @@ export const reportMatchResult = async (
   }
 };
 
-export const completeMatch = async (
-  req: AuthenticatedRequest,
-  res: Response
-): Promise<void> => {
-  try {
-    const matchId = parseInt(req.params.matchId);
-    const winnerId = parseInt(req.body.winner_id);
 
-    if (!matchId || !winnerId) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid match ID or winner ID",
-      });
-      return;
-    }
-
-    // Get match data
-    const matchData = await sql`
-      SELECT * FROM tournament_matches WHERE id = ${matchId}
-    `;
-
-    if (!matchData.length) {
-      res.status(404).json({
-        success: false,
-        message: "Match not found",
-      });
-      return;
-    }
-
-    const match = matchData[0];
-
-    // Update match status
-    await sql`
-      UPDATE tournament_matches 
-      SET status = 'completed'
-      WHERE id = ${matchId}
-    `;
-
-    // Update game status
-    await sql`
-      UPDATE games 
-      SET status = 'completed'
-      WHERE id = ${match.game_id}
-    `;
-
-    // Check if round is completed
-    const pendingMatches = await sql`
-      SELECT COUNT(*) 
-      FROM tournament_matches 
-      WHERE tournament_id = ${match.tournament_id} 
-      AND round_number = ${match.round_number} 
-      AND status != 'completed'
-    `;
-
-    if (parseInt(pendingMatches[0].count) === 0) {
-      // Get winners from current round
-      const winners = await sql`
-        SELECT game_id 
-        FROM tournament_matches 
-        WHERE tournament_id = ${match.tournament_id} 
-        AND round_number = ${match.round_number}
-      `;
-
-      if (winners.length === 1) {
-        // Tournament completed
-        await sql`
-          UPDATE tournaments 
-          SET status = 'completed', 
-              winner_id = ${winnerId},
-              end_date = CURRENT_TIMESTAMP
-          WHERE id = ${match.tournament_id}
-        `;
-      } else {
-        // Create next round matches
-        const nextRound = match.round_number + 1;
-        const shuffled = shuffleArray(winners.map((w) => w.game_id));
-
-        for (let i = 0; i < shuffled.length; i += 2) {
-          const player1GameId = shuffled[i];
-          const player2GameId = shuffled[i + 1];
-
-          if (!player2GameId) {
-            // Auto-advance single player
-            await sql`
-              UPDATE tournament_participants 
-              SET status = 'winner' 
-              WHERE tournament_id = ${match.tournament_id} 
-              AND user_id = (
-                SELECT created_by FROM games WHERE id = ${player1GameId}
-              )
-            `;
-            continue;
-          }
-
-          // Create new game and match for next round
-          await sql`
-            INSERT INTO tournament_matches (
-              tournament_id,
-              round_number,
-              game_id
-            ) VALUES (
-              ${match.tournament_id},
-              ${nextRound},
-              (
-                INSERT INTO games (
-                  code,
-                  created_by,
-                  player_count,
-                  status
-                ) VALUES (
-                  ${Math.random().toString(36).substring(2, 12)},
-                  (SELECT created_by FROM games WHERE id = ${player1GameId}),
-                  2,
-                  'waiting'
-                ) RETURNING id
-              )
-            )
-          `;
-        }
-      }
-    }
-
-    res.json({
-      success: true,
-      message: "Match completed successfully",
-    });
-  } catch (err) {
-    console.error("Error completing match:", err);
-    res.status(500).json({
-      success: false,
-      message: "Failed to complete match",
-    });
-  }
-};
 
 export const getBracket = async (
   req: Request,

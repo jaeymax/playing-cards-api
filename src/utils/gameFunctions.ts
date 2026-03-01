@@ -6,7 +6,10 @@ import { serverSocket } from "../index";
 import { updateRatings } from "../utils/rating";
 import {
   advanceSingleEliminationTournamentToNextRound,
+  advanceSwissTournamentToNextRound,
+  getSingleEliminationTournamentStandings,
   updateSingleEliminationMatchResults,
+  updateSwissMatchResults,
 } from "./tournament";
 import {
   getGamesByCodes,
@@ -367,6 +370,14 @@ const endGame = async (game: any) => {
           tournament.current_round_number,
           serverSocket
         );
+      }else if(tournamentFormat == "Swiss"){
+        
+
+        await updateSwissMatchResults(game.id, winner.user.id, tournament.id);
+        const lobbyData = await getSwissTournamentLobbyData(tournament.id);
+        serverSocket.to(`tournament_${tournament.id}`).emit("lobbyUpdate", lobbyData);
+
+        await advanceSwissTournamentToNextRound(tournament.id, tournament.current_round_number, serverSocket);
       }
     }
 
@@ -613,11 +624,14 @@ export const getSingleEliminationTournamentLobbyData = async (
     matches,
   }));
 
+  const standings = await getSingleEliminationTournamentStandings(tournamentId, tournament[0].status);
+
   return {
     success: true,
     tournament: tournament[0],
     participants,
     rounds,
+    standings,
   };
 };
 
@@ -682,3 +696,7 @@ export async function createGamePlayer(
     return null;
   }
 }
+function getSwissTournamentLobbyData(id: any) {
+  throw new Error("Function not implemented.");
+}
+

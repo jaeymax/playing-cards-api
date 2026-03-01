@@ -9,6 +9,7 @@ import Redis from "ioredis";
 import sql from "../config/db";
 import { isTournamentMatch } from "../utils/utils";
 import { advanceSingleEliminationTournamentToNextRound } from "../utils/tournament";
+import { updateRatings } from "../utils/rating";
 
 export default class MatchForfeiter {
   private queue: Queue;
@@ -158,6 +159,23 @@ export default class MatchForfeiter {
     match.winner_id = winnerId;
     match.status = "forfeited";
     match.forfeited_by = loserId;
+
+    if(match.rated){
+      const players = updateRatings(match.players, winnerId);
+      for(let player of players){
+        const oldRating =
+        await sql`SELECT rating from users WHERE id = ${player.user.id}`;
+      const newRating = player.user.rating;
+      console.log(
+        `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`
+      );
+      await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+      const ratingChange = newRating - oldRating[0].rating;
+      // character suit there question //
+      await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament?.id}, ${ratingChange})`;
+      }
+    }
+
     await saveGame(gameCode, match);
   }
 }

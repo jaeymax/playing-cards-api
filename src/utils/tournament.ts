@@ -9,6 +9,154 @@ import {
 import { createNotification, markTournamentAsEndedAndCompleted } from "./utils";
 import { create } from "axios";
 
+const createNextSwissRoundMatches = async (
+  roundNumber: number,
+  tournamentId: number
+) => {
+  // Implementation for creating the next round in a swiss tournament
+  try{
+    const round = await createSwissRound(tournamentId, roundNumber);
+
+    const participants = await getSwissTournamentParticipantsByScore(tournamentId);
+
+    for(let i = 0; i < participants.length; i += 2){
+      const player1 = participants[i];
+      const player2 = participants[i + 1];
+
+      if (!player2) {
+        // Handle odd number of players - auto-advance
+        const game = await createByeMatch(player1.id);
+
+        const gameplayer = await createMatchGamePlayer(
+          game.id,
+          player1.id,
+          0,
+          true
+        );
+
+        await createSingleEliminationByeMatch(
+          tournamentId,
+          game.id,
+          round.id,
+          player1.id,
+          Math.floor(i / 2) + 1
+        );
+        console.log(`created match for only ${player1.username}`);
+
+        const newGame = {
+          ...game,
+          players: [gameplayer],
+          cards: null,
+        };
+
+        await saveGame(game.code, newGame);
+        console.log("game saved to memory", game.code);
+        break;
+      }
+
+      const game = await createTwoPlayerMatch(
+        player1.id,
+        "waiting",
+        false,
+        true
+      );
+
+      const { gameplayer1, gameplayer2 } =
+        await createTwoPlayerMatchGamePlayers(game.id, player1.id, player2.id);
+
+      const gameCards = await createGameCardsForMatch(game.id, gameplayer1.id);
+
+        // Create match
+        await createSwissMatch(
+          tournamentId,
+          game.id,
+          round.id,
+          player1.id,
+          player2.id,
+          "in_progress",
+          Math.floor(i / 2) + 1
+        );
+  
+        // update tournaments current round number
+        await sql`
+          UPDATE tournaments 
+          SET current_round_number = ${roundNumber} 
+          WHERE id = ${tournamentId}
+        `;
+  
+        game.turn_started_at = Date.now();
+        game.turn_ends_at =
+          game.turn_started_at + (game.turn_timeout_seconds + 0) * 1000;
+  
+        await matchForfeiter.scheduleForfeit(
+          game.code,
+          (game.turn_timeout_seconds + 0) * 1000
+        );
+  
+        // Prepare and save game to Redis
+        const newGame = {
+          ...game,
+          players: [gameplayer1, gameplayer2],
+          cards: gameCards,
+        };
+  
+        await saveGame(game.code, newGame);
+        console.log("game saved to memory successfully", game.code);
+
+    }
+
+  }catch(error){
+    console.error("Error advancing to next round:", error);
+    throw error;
+  }
+};
+
+// flag
+const createSwissRound = async (
+  tournamentId: number,
+  roundNumber: number
+) => {
+  const round = await sql`
+      INSERT INTO tournament_rounds (tournament_id, round_number)
+      VALUES (${tournamentId}, ${roundNumber}) ON CONFLICT (tournament_id, round_number) DO NOTHING
+      RETURNING id
+    `;
+  return round[0];
+}
+
+//flag
+const createSwissMatch = async (
+  tournamentId: number,
+  matchId: number,
+  roundId: number,
+  player1Id: number,
+  player2Id: number,
+  status: string,
+  matchOrder: number
+) => {
+  const match = await sql`
+          INSERT INTO tournament_matches (
+            tournament_id,
+            game_id,
+            round_id,
+            player1_id,
+            player2_id,
+            status,
+            match_order
+          ) VALUES (
+            ${tournamentId},
+            ${matchId},
+            ${roundId},
+            ${player1Id},
+            ${player2Id},
+            ${status},
+            ${matchOrder}
+          )
+          RETURNING id, status
+        `;
+  return match[0];
+};
+
 const createNextSingleEliminationRoundMatches = async (
   roundNumber: number,
   tournamentId: number
@@ -122,6 +270,17 @@ const createNextSingleEliminationRoundMatches = async (
     throw error;
   }
 };
+
+const getSwissTournamentParticipantsByScore = async (tournamentId: number) => {
+  const participants = await sql`
+    SELECT u.id, u.username, u.is_rated, u.image_url, tp.score
+    FROM users u
+    JOIN tournament_participants tp ON u.id = tp.user_id
+    WHERE tp.tournament_id = ${tournamentId}
+    ORDER BY tp.score DESC, u.username
+  `;
+  return participants;
+}
 
 const getSingleEliminationTournamentParticipants = async (
   tournamentId: number
@@ -431,6 +590,73 @@ AND user_id = ${loserId}
 `;
 };
 
+const updateSwissMatchResults = async (matchId: number, winnerId:number, tournamentId: number) => {
+  await sql`
+  UPDATE tournament_matches 
+  SET winner_id = ${winnerId}, status = 'completed'
+  WHERE game_id = ${matchId}
+`;
+
+ // Update the winners score by 1
+ await sql`
+     UPDATE tournament_participants
+     SET score = score + 1
+     WHERE tournament_id = ${tournamentId}
+     AND user_id = ${winnerId}
+ `
+}
+
+
+const advanceSwissTournamentToNextRound = async (tournamentId: number, currentRoundNumber: number, serverSocket: any) => {
+  
+  const matches = await getSwissTournamentMatches(tournamentId, currentRoundNumber);
+  const allMatchesCompleted = matches.every((match:any) => match.winner_id != null);
+  const isLastRound = false;
+
+  console.log('isLastRound', isLastRound);
+  if(allMatchesCompleted && !isLastRound){
+    await createNextSwissRoundMatches(currentRoundNumber + 1, tournamentId);
+    const lobbyData = await getSwissTournamentLobbyData(tournamentId);
+    serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", lobbyData);
+  }else if(isLastRound){
+      // tournament has ended
+        console.log("this is the last round and match for swiss tournament");
+        await markTournamentAsEndedAndCompleted(tournamentId);
+
+        serverSocket.to(`tournament_${tournamentId}`).emit("tournamentEnded");
+
+        const swissTournamentStandings = await getSwissTournamentFinalStandings(tournamentId);
+  }
+};
+
+const getSwissTournamentMatches = async (tournamentId: number, currentRoundNumber: number) => {  
+  const matches = await sql`
+  SELECT id, winner_id, player1_id, player2_id
+  FROM tournament_matches
+  WHERE tournament_id = ${tournamentId}
+  AND round_id = (SELECT id FROM tournament_rounds WHERE tournament_id = ${tournamentId} AND round_number = ${currentRoundNumber})
+`;
+  return matches;
+};
+
+const getSwissTournamentLobbyData = async (tournamentId: number) => {
+
+};
+
+const getSwissTournamentResultsForRound = async (tournamentId: number, roundNumber: number) => {
+   // select all tournament participants for the tournament and order them by score descending, then by rating descending  
+ const results  = await  sql`SELECT u.id, u.username, u.image_url, tp.score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
+ return results;
+};
+
+
+const getSwissTournamentFinalStandings = async (tournamentId: number) => {
+  // select all tournament participants for the tournament and order them by score descending, then by buchholz score descending, then by rating descending  
+ const results  = await  sql`SELECT u.id, u.username, u.image_url, tp.score, tp.buchholz_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
+ return results;
+};
+
+
 // function to advance single elimination tournament to the next round, it will check if there are any matches that are completed in the current round, if all matches are completed, it will create the next round matches
 const advanceSingleEliminationTournamentToNextRound = async (
   tournamentId: number,
@@ -735,6 +961,37 @@ const getSingleEliminationTournamentMatches = async (
   return matches;
 };
 
+const getSwissTournamentStandings = async (tournamentId: number) => {
+  const standings = await sql`SELECT u.id, u.username, u.image_url, tp.score, tp.buchholz_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
+  return standings;
+};
+
+const getSingleEliminationTournamentStandings = async (tournamentId: number, tournamentStatus:string) => {
+  let standings:any[] = [];
+
+  if(tournamentStatus === "completed"){
+
+   standings = await sql`SELECT
+    u.id,
+    u.username,
+    u.image_url,
+    u.rating,
+    tp.status,
+    COALESCE(COUNT(tm.id),0) AS num_wins
+  FROM tournament_participants tp
+  JOIN users u
+    ON u.id = tp.user_id
+  LEFT JOIN tournament_matches tm
+    ON tm.tournament_id = tp.tournament_id
+    AND tm.winner_id = u.id
+  WHERE tp.tournament_id = ${tournamentId}
+  GROUP BY u.id, u.username, u.image_url, tp.status
+  ORDER BY num_wins DESC, u.rating DESC`;
+  }
+
+  return standings;
+}
+
 export {
   createNextSingleEliminationRoundMatches,
   createSingleEliminationRound,
@@ -748,8 +1005,15 @@ export {
   createMatchGamePlayer,
   createTwoPlayerMatchGamePlayers,
   updateSingleEliminationMatchResults,
+  updateSwissMatchResults,
   advanceSingleEliminationTournamentToNextRound,
   getSingleEliminationTournamentWinner,
   getSingleElimationTournamentOngoingMatches,
   getSingleEliminationTournamentMatches,
+  advanceSwissTournamentToNextRound,
+  getSwissTournamentFinalStandings,
+  getSingleEliminationTournamentStandings,
+  getSwissTournamentStandings,
+  getSwissTournamentLobbyData,
+  getSwissTournamentResultsForRound
 };
