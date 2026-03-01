@@ -166,7 +166,7 @@ app.post('/api/tournament-notification-reminder-final', expressAsyncHandler(asyn
       `;
 
       for(const user of users){
-          const messageTemplate = `Hi ${user.username}!, final reminder that the Spar Weekend Championship starts in 1 hour! Don't miss out on the action and the chance to win ₵50 cash. Register now at https://sparplay.com if you haven't already!`;
+          const messageTemplate = `Hi ${user.username}!, final reminder that the Spar Weekend Championship starts in 1 hour!. Registration ends in 30 minutes. Don't miss out on the action and the chance to win ₵50 cash. Register now at https://sparplay.com if you haven't already!`;
           const phone = '233'+ user.phone.substr(1);
           console.log('realphone', phone);
           await sendSMS(phone, messageTemplate);
