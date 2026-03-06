@@ -182,7 +182,8 @@ CREATE TABLE tournament_participants (
     tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     score INTEGER DEFAULT 0;
-    bulchhoz_score INTEGER DEFAULT 0;
+    losses INTEGER DEFAULT 0;
+    buchholz_score INTEGER DEFAULT 0;
     registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(20) CHECK (status IN ('registered', 'eliminated', 'winner')) DEFAULT 'registered',
     UNIQUE(tournament_id, user_id) -- Prevent duplicate registrations

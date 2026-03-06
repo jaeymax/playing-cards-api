@@ -10,6 +10,7 @@ import {
   getSingleEliminationTournamentStandings,
   updateSingleEliminationMatchResults,
   updateSwissMatchResults,
+  getSwissTournamentLobbyData
 } from "./tournament";
 import {
   getGamesByCodes,
@@ -346,7 +347,8 @@ const endGame = async (game: any) => {
       console.log(
         "this game is part of a tournament match, reporting result to tournament system"
       );
-      const tournamentFormat = "Single Elimination"; // for now we only have single elimination tournaments, but this can be dynamic based on the tournament the match belongs to
+      const tournamentFormat =  tournament.format;
+      console.log('tournamentFormat', tournamentFormat);
       if (tournamentFormat == "Single Elimination") {
         const loser = getMatchLoser(game) as GamePlayer;
 
@@ -372,8 +374,8 @@ const endGame = async (game: any) => {
         );
       }else if(tournamentFormat == "Swiss"){
         
-
-        await updateSwissMatchResults(game.id, winner.user.id, tournament.id);
+        const loser = getMatchLoser(game) as GamePlayer;
+        await updateSwissMatchResults(game.id, winner.user.id, loser.user.id, tournament.id);
         const lobbyData = await getSwissTournamentLobbyData(tournament.id);
         serverSocket.to(`tournament_${tournament.id}`).emit("lobbyUpdate", lobbyData);
 
@@ -391,14 +393,17 @@ const endGame = async (game: any) => {
     }, 1000)
 
     if (tournament) {
-      const tournamentFormat = "SingleElimination";
-      if (tournamentFormat == "SingleElimination") {
+      const tournamentFormat = tournament.format;
+      if (tournamentFormat == "Single Elimination") {
         const lobbyData = await getSingleEliminationTournamentLobbyData(
           tournament.id
         );
         serverSocket
           .to(`tournament_${tournament.id}`)
           .emit("lobbyUpdate", lobbyData);
+      }else if(tournamentFormat == "Swiss"){
+        const lobbyData = await getSwissTournamentLobbyData(tournament.id);
+        serverSocket.to(`tournament_${tournament.id}`).emit("lobbyUpdate", lobbyData);
       }
     }
   }
@@ -541,12 +546,13 @@ export const getSingleEliminationTournamentLobbyData = async (
      u.id, 
      u.username, 
      u.image_url, 
+     u.is_rated,
      u.rating,
-     tp.status,
-     RANK() OVER (ORDER BY u.rating DESC) as rank
+     tp.status
    FROM users u
    JOIN tournament_participants tp ON u.id = tp.user_id
    WHERE tp.tournament_id = ${tournamentId}
+    ORDER BY u.rating DESC
  `;
 
   // Fetch current round matches with player details and scores
@@ -696,7 +702,3 @@ export async function createGamePlayer(
     return null;
   }
 }
-function getSwissTournamentLobbyData(id: any) {
-  throw new Error("Function not implemented.");
-}
-

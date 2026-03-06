@@ -85,14 +85,16 @@ const updateGamePlayersScores = async (game: Game) => {
 
 // function to determin whether a game is a tournament game
 const isTournamentMatch = async (gameId: number) => {
+   // join on tournaments table and return the format of the tournament
     const result = await sql`
-      SELECT tm.tournament_id, tr.round_number 
+      SELECT tm.tournament_id, tr.round_number, t.format
            FROM tournament_matches tm
            JOIN tournament_rounds tr ON tm.round_id = tr.id
+           JOIN tournaments t ON tm.tournament_id = t.id
         WHERE tm.game_id = ${gameId}
     `;
     
-    return result.length > 0 ? {id:result[0].tournament_id, current_round_number:result[0].round_number} : null;
+    return result.length > 0 ? {id:result[0].tournament_id, current_round_number:result[0].round_number, format: result[0].format} : null;
 };
 
 const getGamesByCodes = async (codes: string[])=>{

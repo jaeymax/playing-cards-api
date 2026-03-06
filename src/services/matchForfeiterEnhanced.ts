@@ -8,7 +8,7 @@ import {
 import Redis from "ioredis";
 import sql from "../config/db";
 import { isTournamentMatch } from "../utils/utils";
-import { advanceSingleEliminationTournamentToNextRound } from "../utils/tournament";
+import { advanceSingleEliminationTournamentToNextRound, advanceSwissTournamentToNextRound, getSwissTournamentLobbyData } from "../utils/tournament";
 import { updateRatings } from "../utils/rating";
 
 export default class MatchForfeiter {
@@ -28,7 +28,7 @@ export default class MatchForfeiter {
         await this.processForfeitJob(job);
         console.log(`Job ${job?.id} took ${Date.now() - start}ms`);
       },
-      { connection: new Redis({ maxRetriesPerRequest: null }), concurrency: 5 }
+      { connection: new Redis({ maxRetriesPerRequest: null }), concurrency: 1 }
     );
 
     this.worker.on("failed", (job, err) => {
@@ -97,7 +97,7 @@ export default class MatchForfeiter {
     const tournament = await isTournamentMatch(match.id);
 
     if (tournament) {
-      const tournamentFormat = "Single Elimination";
+      const tournamentFormat = tournament.format;
       if (tournamentFormat == "Single Elimination") {
         //create sql transaction to update match and player stats
         const results = await sql.transaction((tx) => {
@@ -151,6 +151,66 @@ export default class MatchForfeiter {
           this.serverSocket
         );
       }
+      else if(tournamentFormat == "Swiss"){
+        const results = await sql.transaction((tx) => {
+          // 1. Update Match Status
+          const updateMatchStatus = tx`
+              UPDATE tournament_matches 
+              SET status = 'forfeited', winner_id = ${winnerId} 
+              WHERE game_id = ${match.id} 
+              RETURNING id, tournament_id
+            `;
+
+          const queries = [updateMatchStatus];
+
+          // 2. Eliminate Loser from Tournament
+          const winner = tx`
+              UPDATE tournament_participants 
+              SET score = score + 1 
+              WHERE tournament_id = (SELECT tournament_id FROM tournament_matches WHERE game_id = ${match.id}) AND user_id = ${winnerId}
+            `;
+           
+            const loser = tx`
+            UPDATE tournament_participants 
+            SET losses = losses + 1
+            WHERE tournament_id = (SELECT tournament_id FROM tournament_matches WHERE game_id = ${match.id}) AND user_id = ${loserId}
+          `;
+
+          // 3. Update User Stats (Batch these!)
+          const updateUserStats = tx`
+              UPDATE users SET games_played = games_played + 1 
+              WHERE id IN (${winnerId}, ${loserId})
+            `;
+          const updateWinnerStats = tx`UPDATE users SET games_won = games_won + 1 WHERE id = ${winnerId}`;
+
+          // 4. Update Game Players
+          //const updateGamePlayers = tx`UPDATE game_players SET status = 'forfeited' WHERE game_id = ${match.id} AND user_id = ${loserId}`;
+
+          queries.push(winner, loser, updateUserStats, updateWinnerStats);
+
+          return queries;
+        });
+
+
+        this.serverSocket
+          .to(`lobby_game_room:${gameCode}`)
+          .emit("matchForfeit", { winnerId, loserId });
+        console.log(`event sent to lobby_game_room:${gameCode}`);
+        const tournamentId = results[0][0].tournament_id;
+        console.log('before lobby update')
+        const lobbyData =
+          await getSwissTournamentLobbyData(tournamentId);
+        console.log('after lobby update')
+        this.serverSocket
+          .to(`tournament_${tournamentId}`)
+          .emit("lobbyUpdate", lobbyData);
+              //
+        await advanceSwissTournamentToNextRound(
+          tournament.id,
+          tournament.current_round_number,
+          this.serverSocket
+        );
+      }
     }
 
     this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId, loserId });
@@ -160,7 +220,7 @@ export default class MatchForfeiter {
     match.status = "forfeited";
     match.forfeited_by = loserId;
 
-    if(match.rated){
+    if(match.is_rated){
       const players = updateRatings(match.players, winnerId);
       for(let player of players){
         const oldRating =

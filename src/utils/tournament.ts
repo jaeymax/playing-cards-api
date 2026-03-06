@@ -6,20 +6,26 @@ import {
   getSingleEliminationTournamentLobbyData,
   saveGame,
 } from "./gameFunctions";
-import { createNotification, markTournamentAsEndedAndCompleted } from "./utils";
-import { create } from "axios";
+import {
+  createNotification,
+  getGamesByCodes,
+  markTournamentAsEndedAndCompleted,
+} from "./utils";
 
 const createNextSwissRoundMatches = async (
   roundNumber: number,
   tournamentId: number
 ) => {
   // Implementation for creating the next round in a swiss tournament
-  try{
+  try {
     const round = await createSwissRound(tournamentId, roundNumber);
 
-    const participants = await getSwissTournamentParticipantsByScore(tournamentId);
+    const participants =
+      await getSwissTournamentParticipantsByScore(tournamentId);
 
-    for(let i = 0; i < participants.length; i += 2){
+    console.log("swiss participants by score", participants);
+
+    for (let i = 0; i < participants.length; i += 2) {
       const player1 = participants[i];
       const player2 = participants[i + 1];
 
@@ -48,7 +54,12 @@ const createNextSwissRoundMatches = async (
           players: [gameplayer],
           cards: null,
         };
-
+        await sql`
+          UPDATE tournament_participants
+          SET score = score + 1
+          WHERE tournament_id = ${tournamentId}
+          AND user_id = ${player1.id}
+        `;
         await saveGame(game.code, newGame);
         console.log("game saved to memory", game.code);
         break;
@@ -66,63 +77,58 @@ const createNextSwissRoundMatches = async (
 
       const gameCards = await createGameCardsForMatch(game.id, gameplayer1.id);
 
-        // Create match
-        await createSwissMatch(
-          tournamentId,
-          game.id,
-          round.id,
-          player1.id,
-          player2.id,
-          "in_progress",
-          Math.floor(i / 2) + 1
-        );
-  
-        // update tournaments current round number
-        await sql`
+      // Create match
+      await createSwissMatch(
+        tournamentId,
+        game.id,
+        round.id,
+        player1.id,
+        player2.id,
+        "in_progress",
+        Math.floor(i / 2) + 1
+      );
+
+      // update tournaments current round number
+      await sql`
           UPDATE tournaments 
           SET current_round_number = ${roundNumber} 
           WHERE id = ${tournamentId}
         `;
-  
-        game.turn_started_at = Date.now();
-        game.turn_ends_at =
-          game.turn_started_at + (game.turn_timeout_seconds + 0) * 1000;
-  
-        await matchForfeiter.scheduleForfeit(
-          game.code,
-          (game.turn_timeout_seconds + 0) * 1000
-        );
-  
-        // Prepare and save game to Redis
-        const newGame = {
-          ...game,
-          players: [gameplayer1, gameplayer2],
-          cards: gameCards,
-        };
-  
-        await saveGame(game.code, newGame);
-        console.log("game saved to memory successfully", game.code);
 
+      game.turn_started_at = Date.now();
+      game.turn_ends_at =
+        game.turn_started_at + (game.turn_timeout_seconds + 0) * 1000;
+
+      await matchForfeiter.scheduleForfeit(
+        game.code,
+        (game.turn_timeout_seconds + 0) * 1000
+      );
+
+      // Prepare and save game to Redis
+      const newGame = {
+        ...game,
+        players: [gameplayer1, gameplayer2],
+        cards: gameCards,
+      };
+
+      await saveGame(game.code, newGame);
+      console.log("game saved to memory successfully", game.code);
     }
-
-  }catch(error){
+  } catch (error) {
     console.error("Error advancing to next round:", error);
     throw error;
   }
 };
 
 // flag
-const createSwissRound = async (
-  tournamentId: number,
-  roundNumber: number
-) => {
+const createSwissRound = async (tournamentId: number, roundNumber: number) => {
   const round = await sql`
       INSERT INTO tournament_rounds (tournament_id, round_number)
       VALUES (${tournamentId}, ${roundNumber}) ON CONFLICT (tournament_id, round_number) DO NOTHING
       RETURNING id
     `;
   return round[0];
-}
+};
 
 //flag
 const createSwissMatch = async (
@@ -277,20 +283,20 @@ const getSwissTournamentParticipantsByScore = async (tournamentId: number) => {
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId}
-    ORDER BY tp.score DESC, u.username
+    ORDER BY tp.score DESC, u.rating DESC
   `;
   return participants;
-}
+};
 
 const getSingleEliminationTournamentParticipants = async (
   tournamentId: number
 ) => {
   const participants = await sql`
-    SELECT u.id, u.username, u.is_rated, u.image_url, tp.status
+    SELECT u.id, u.username, u.rating, u.is_rated, u.image_url, tp.status, tp.score, tp.losses
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId}
-    ORDER BY u.username
+    ORDER BY u.rating DESC
   `;
   return participants;
 };
@@ -300,7 +306,7 @@ const getSingleEliminationTournamentParticipantsByStatus = async (
   status: string
 ) => {
   const participants = await sql`
-    SELECT u.id, tp.user_id, u.username, u.image_url, tp.status
+    SELECT u.id, tp.user_id, u.username, u.image_url, tp.status, tp.score, tp.losses
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId} AND status = ${status}
@@ -590,46 +596,112 @@ AND user_id = ${loserId}
 `;
 };
 
-const updateSwissMatchResults = async (matchId: number, winnerId:number, tournamentId: number) => {
+const updateSwissMatchResults = async (
+  matchId: number,
+  winnerId: number,
+  loserId: number,
+  tournamentId: number
+) => {
   await sql`
   UPDATE tournament_matches 
   SET winner_id = ${winnerId}, status = 'completed'
   WHERE game_id = ${matchId}
 `;
 
- // Update the winners score by 1
- await sql`
+  // Update the winners score by 1
+  await sql`
      UPDATE tournament_participants
      SET score = score + 1
      WHERE tournament_id = ${tournamentId}
      AND user_id = ${winnerId}
- `
-}
+ `;
 
+  // update the losers score by 1
+  await sql` 
+      UPDATE tournament_participants
+      SET losses = losses + 1
+      WHERE tournament_id = ${tournamentId}
+      AND user_id = ${loserId}
+      `;
+};
 
-const advanceSwissTournamentToNextRound = async (tournamentId: number, currentRoundNumber: number, serverSocket: any) => {
-  
-  const matches = await getSwissTournamentMatches(tournamentId, currentRoundNumber);
-  const allMatchesCompleted = matches.every((match:any) => match.winner_id != null);
-  const isLastRound = false;
+const calculateBuchholzScoresForSwissRound = async (
+  tournamentId: number,
+  participants: any[]
+) => {
+  for (let participant of participants) {
+    const buchholzResult = await sql`
+      SELECT COALESCE(SUM(op_tp.score), 0) AS buchholz_score
+      FROM tournament_matches tm
+      JOIN tournament_participants op_tp
+        ON op_tp.user_id =
+             CASE
+               WHEN tm.player1_id = ${participant.id} THEN tm.player2_id
+               ELSE tm.player1_id
+             END
+        AND op_tp.tournament_id = ${tournamentId}
+      WHERE tm.tournament_id = ${tournamentId}
+        AND (tm.player1_id = ${participant.id} OR tm.player2_id = ${participant.id})
+        AND tm.winner_id IS NOT NULL
+    `;
 
-  console.log('isLastRound', isLastRound);
-  if(allMatchesCompleted && !isLastRound){
-    await createNextSwissRoundMatches(currentRoundNumber + 1, tournamentId);
-    const lobbyData = await getSwissTournamentLobbyData(tournamentId);
-    serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", lobbyData);
-  }else if(isLastRound){
-      // tournament has ended
-        console.log("this is the last round and match for swiss tournament");
-        await markTournamentAsEndedAndCompleted(tournamentId);
+    const buchholzScore = buchholzResult[0]?.buchholz_score || 0;
 
-        serverSocket.to(`tournament_${tournamentId}`).emit("tournamentEnded");
-
-        const swissTournamentStandings = await getSwissTournamentFinalStandings(tournamentId);
+    await sql`
+      UPDATE tournament_participants
+      SET buchholz_score = ${buchholzScore}
+      WHERE tournament_id = ${tournamentId}
+      AND user_id = ${participant.id}
+    `;
   }
 };
 
-const getSwissTournamentMatches = async (tournamentId: number, currentRoundNumber: number) => {  
+const advanceSwissTournamentToNextRound = async (
+  tournamentId: number,
+  currentRoundNumber: number,
+  serverSocket: any
+) => {
+  const matches = await getSwissTournamentMatches(
+    tournamentId,
+    currentRoundNumber
+  );
+  const allMatchesCompleted = matches.every(
+    (match: any) => match.winner_id != null
+  );
+  const participants =
+    await getSwissTournamentParticipantsByScore(tournamentId);
+
+  const lastRoundNumber = Math.ceil(Math.log2(participants.length));
+
+  const isLastRound = currentRoundNumber >= lastRoundNumber;
+
+  console.log("isLastRound", isLastRound);
+  if (allMatchesCompleted && !isLastRound) {
+    await calculateBuchholzScoresForSwissRound(tournamentId, participants);
+    await createNextSwissRoundMatches(currentRoundNumber + 1, tournamentId);
+    const lobbyData = await getSwissTournamentLobbyData(tournamentId);
+    serverSocket
+      .to(`tournament_${tournamentId}`)
+      .emit("lobbyUpdate", lobbyData);
+  } else if (allMatchesCompleted && isLastRound) {
+    // tournament has ended
+    await calculateBuchholzScoresForSwissRound(tournamentId, participants);
+    console.log("this is the last round and match for swiss tournament");
+    await markTournamentAsEndedAndCompleted(tournamentId);
+    const lobbyData = await getSwissTournamentLobbyData(tournamentId);
+    serverSocket
+      .to(`tournament_${tournamentId}`)
+      .emit("lobbyUpdate", lobbyData);
+    serverSocket.to(`tournament_${tournamentId}`).emit("tournamentEnded");
+
+    // const swissTournamentStandings = await getSwissTournamentFinalStandings(tournamentId);
+  }
+};
+
+const getSwissTournamentMatches = async (
+  tournamentId: number,
+  currentRoundNumber: number
+) => {
   const matches = await sql`
   SELECT id, winner_id, player1_id, player2_id
   FROM tournament_matches
@@ -640,22 +712,129 @@ const getSwissTournamentMatches = async (tournamentId: number, currentRoundNumbe
 };
 
 const getSwissTournamentLobbyData = async (tournamentId: number) => {
+  // Fetch tournament details
+  const tournament = await sql`
+   SELECT * FROM tournaments WHERE id = ${tournamentId}
+ `;
+  // Fetch participants with their global ranking
+  const participants = await sql`
+    SELECT 
+      u.id, 
+      u.username, 
+      u.image_url, 
+      u.is_rated,
+      u.rating,
+      tp.status,
+      tp.score,
+      tp.losses
+    FROM users u
+    JOIN tournament_participants tp ON u.id = tp.user_id
+    WHERE tp.tournament_id = ${tournamentId}
+    ORDER BY u.rating DESC
+  `;
 
+  // Fetch current round matches with player details and scores
+  const matches = await sql`
+    SELECT 
+      tr.round_number,
+      tm.id,
+      tm.game_id,
+      tm.status,
+      tm.winner_id,
+      g.code,
+      u1.id as player1_id,
+      u2.id as player2_id,
+      u1.username as player1_name,
+      u1.image_url as player1_image,
+      gp1.score as player1_score,
+      u2.username as player2_name,
+      u2.image_url as player2_image,
+      gp2.score as player2_score
+    FROM tournament_matches tm
+    JOIN tournament_rounds tr ON tm.round_id = tr.id
+    JOIN users u1 ON tm.player1_id = u1.id
+    LEFT JOIN users u2 ON tm.player2_id = u2.id
+    JOIN games g ON tm.game_id = g.id
+    LEFT JOIN game_players gp1 ON g.id = gp1.game_id AND u1.id = gp1.user_id
+    LEFT JOIN game_players gp2 ON g.id = gp2.game_id AND u2.id = gp2.user_id
+    WHERE tm.tournament_id = ${tournamentId}
+    ORDER BY tr.round_number ASC, tm.match_order ASC
+  `;
+
+  const gamesList =
+    await sql`SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+
+  const codes = gamesList.map((gameData) => gameData.gamecode);
+  const games = await getGamesByCodes(codes);
+
+  let gamesMap: Record<string, any> = {};
+  if (games) {
+    gamesMap = Object.fromEntries(games.map((game) => [game.code, game]));
+  }
+
+  // Format rounds with aggregated player data
+  const roundsMap: Record<number, any[]> = {};
+  matches.forEach((match) => {
+    if (!roundsMap[match.round_number]) {
+      roundsMap[match.round_number] = [];
+    }
+    roundsMap[match.round_number].push({
+      id: match.id,
+      player1: {
+        id: match.player1_id,
+        name: match.player1_name,
+        image_url: match.player1_image,
+        score: match.player1_score || 0,
+        winner: match.winner_id === match.player1_id ? true : false,
+      },
+      player2: {
+        id: match.player2_id,
+        name: match.player2_name,
+        image_url: match.player2_image,
+        score: match.player2_score || 0,
+        winner: match.winner_id === match.player2_id ? true : false,
+      },
+      status: match.status,
+      game_id: match.game_id,
+      game_code: match.code,
+      winner_id: match.winner_id,
+      turn_ends_at: gamesMap[match.code]?.turn_ends_at,
+      forfeiter_user_id: gamesMap[match.code]?.forfeited_by,
+    });
+  });
+
+  const rounds = Object.entries(roundsMap).map(([round, matches]) => ({
+    round: parseInt(round),
+    matches,
+  }));
+
+  const standings = await getSwissTournamentStandings(tournamentId);
+
+  return {
+    success: true,
+    tournament: tournament[0],
+    participants,
+    rounds,
+    standings,
+  };
 };
 
-const getSwissTournamentResultsForRound = async (tournamentId: number, roundNumber: number) => {
-   // select all tournament participants for the tournament and order them by score descending, then by rating descending  
- const results  = await  sql`SELECT u.id, u.username, u.image_url, tp.score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
- return results;
+const getSwissTournamentResultsForRound = async (
+  tournamentId: number,
+  roundNumber: number
+) => {
+  // select all tournament participants for the tournament and order them by score descending, then by rating descending
+  const results =
+    await sql`SELECT u.id, u.username, u.image_url, tp.score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
+  return results;
 };
-
 
 const getSwissTournamentFinalStandings = async (tournamentId: number) => {
-  // select all tournament participants for the tournament and order them by score descending, then by buchholz score descending, then by rating descending  
- const results  = await  sql`SELECT u.id, u.username, u.image_url, tp.score, tp.buchholz_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
- return results;
+  // select all tournament participants for the tournament and order them by score descending, then by buchholz score descending, then by rating descending
+  const results =
+    await sql`SELECT u.id, u.username, u.image_url, tp.score, tp.buchholz_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
+  return results;
 };
-
 
 // function to advance single elimination tournament to the next round, it will check if there are any matches that are completed in the current round, if all matches are completed, it will create the next round matches
 const advanceSingleEliminationTournamentToNextRound = async (
@@ -698,7 +877,11 @@ const advanceSingleEliminationTournamentToNextRound = async (
     const winnerParticipant = active_participants.find(
       (p: any) => p.status == "qualified"
     );
-
+    const lobbyData =
+      await getSingleEliminationTournamentLobbyData(tournamentId);
+    serverSocket
+      .to(`tournament_${tournamentId}`)
+      .emit("lobbyUpdate", lobbyData);
     serverSocket.to(`tournament_${tournamentId}`).emit("tournamentEnded");
 
     if (winnerParticipant) {
@@ -732,10 +915,13 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
 
     // send notification to all participants about participation reward and tournament results, also include the rating change for each participant in the notification
     for (const participant of allParticipants) {
-      const ratingChange = await getRatingChangeForTournament(
+      let ratingChange = await getRatingChangeForTournament(
         participant.id,
         tournamentId
       );
+
+      ratingChange += 2; // add 2 rating points for participation
+
       const ratingMesssageTitle =
         ratingChange >= 0 ? "Rating Increased 📈" : "Rating Decreased 📉";
       const ratingMessage = `Your performance in the tournament has resulted in a rating change of ${ratingChange >= 0 ? "+" : ""}${ratingChange}. Keep competing to climb the leaderboard!. Your leaderboard position have been updated`;
@@ -962,16 +1148,19 @@ const getSingleEliminationTournamentMatches = async (
 };
 
 const getSwissTournamentStandings = async (tournamentId: number) => {
-  const standings = await sql`SELECT u.id, u.username, u.image_url, tp.score, tp.buchholz_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
+  const standings =
+    await sql`SELECT u.id, u.username, u.image_url, tp.score, tp.losses, tp.status, tp.buchholz_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
   return standings;
 };
 
-const getSingleEliminationTournamentStandings = async (tournamentId: number, tournamentStatus:string) => {
-  let standings:any[] = [];
+const getSingleEliminationTournamentStandings = async (
+  tournamentId: number,
+  tournamentStatus: string
+) => {
+  let standings: any[] = [];
 
-  if(tournamentStatus === "completed"){
-
-   standings = await sql`SELECT
+  if (tournamentStatus === "completed") {
+    standings = await sql`SELECT
     u.id,
     u.username,
     u.image_url,
@@ -990,7 +1179,7 @@ const getSingleEliminationTournamentStandings = async (tournamentId: number, tou
   }
 
   return standings;
-}
+};
 
 export {
   createNextSingleEliminationRoundMatches,
@@ -1015,5 +1204,5 @@ export {
   getSingleEliminationTournamentStandings,
   getSwissTournamentStandings,
   getSwissTournamentLobbyData,
-  getSwissTournamentResultsForRound
+  getSwissTournamentResultsForRound,
 };
