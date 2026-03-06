@@ -1,4 +1,4 @@
-import express, { Express} from "express";
+import express, { Express } from "express";
 import { Resend } from "resend";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
@@ -11,7 +11,7 @@ import gameRoutes from "./routes/game";
 import friendsRoutes from "./routes/friends";
 import errorHandler from "./middlewares/errorHandler";
 //import notFoundMiddleware from './middlewares/notFoundMiddleware';
-import {PutObjectCommand, S3Client} from "@aws-sdk/client-s3"
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import userRoutes from "./routes/users";
 import messageRoute from "./routes/messages";
 import cardRoutes from "./routes/cards";
@@ -30,55 +30,50 @@ import type { Game } from "../types";
 import Redis from "ioredis";
 import sql from "./config/db";
 import authMiddleware from "./middlewares/authMiddleware";
-import  Mixpanel  from "mixpanel";
+import Mixpanel from "mixpanel";
 import fs from "fs";
 import MatchForfeiter from "./services/matchForfeiterEnhanced";
-import {monitorEventLoopDelay} from 'perf_hooks'
+import { monitorEventLoopDelay } from "perf_hooks";
 import { TwilioClient } from "./config/twilio";
 import { sendSMS } from "./services/smsService";
 import expressAsyncHandler from "express-async-handler";
 
-
-const h = monitorEventLoopDelay()
-h.enable()
-let last = process.cpuUsage()
-
+const h = monitorEventLoopDelay();
+h.enable();
+let last = process.cpuUsage();
 
 export const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN as string);
-
 
 dotenv.config();
 
 export const app: Express = express();
 
 // const options = {
-//   key: fs.readFileSync("certs/192.168.43.218-key.pem"),  
+//   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
 //   cert: fs.readFileSync("certs/192.168.43.218.pem"),
 // }
 
 const redisConfig = {
-  host: '127.0.0.1',
+  host: "127.0.0.1",
   port: 6379,
-}  
+};
 
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
-export  const redis = new Redis(redisConfig);
+export const redis = new Redis(redisConfig);
 
 export const serverSocket = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
-  },  
-});  
+  },
+});
 
-
-
-
-
-export const FRONTEND_URL = process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL_PROD : process.env.FRONTEND_URL_DEV;
+export const FRONTEND_URL =
+  process.env.NODE_ENV === "production"
+    ? process.env.FRONTEND_URL_PROD
+    : process.env.FRONTEND_URL_DEV;
 //Middlewares
-
 
 app.use(cors());
 app.use("/api/webhooks", webhookRoutes);
@@ -101,83 +96,99 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/payout-method", payoutRoutes);
 //app.use(notFoundMiddleware);
 
-app.post('/api/test-sms', expressAsyncHandler (async (req, res)=>{
-   const {phone} = req.body;
+app.post(
+  "/api/test-sms",
+  expressAsyncHandler(async (req, res) => {
+    const { phone } = req.body;
 
-   await sendSMS(phone, 'Test SMS from SparPlay 🔥');
+    await sendSMS(phone, "Test SMS from SparPlay 🔥");
 
-   res.json({success:true});
-}));
+    res.json({ success: true });
+  })
+);
 
+app.post(
+  "/api/send-tournament-notification",
+  expressAsyncHandler(async (req, res) => {
+    const { tournamentName } = req.body;
 
-app.post('/api/send-tournament-notification', expressAsyncHandler(async (req, res)=>{
-    const {tournamentName} = req.body;
-
-    try{
+    try {
       const users = await sql`
           SELECT username, phone FROM users WHERE phone IS NOT NULL
       `;
 
-      
-      for(const user of users){
-          const messageTemplate = `Hi ${user.username}!, Spar Weekend Championship kicks off Friday 7PM. Test your skills, compete with others and win ₵50 cash. Register now at https://sparplay.com`;
-          const phone = '233'+ user.phone.substr(1);
-          console.log('realphone', phone);
-          await sendSMS(phone, messageTemplate);
+      for (const user of users) {
+        const messageTemplate = `Hi ${user.username}!, Spar Weekend Championship kicks off Friday 7PM. Test your skills, compete with others and win ₵50 cash. Register now at https://sparplay.com`;
+        const phone = "233" + user.phone.substr(1);
+        console.log("realphone", phone);
+        await sendSMS(phone, messageTemplate);
       }
 
-      res.json({success:true, message: 'Tournament notifications sent successfully'});
+      res.json({
+        success: true,
+        message: "Tournament notifications sent successfully",
+      });
+    } catch (error) {
+      console.error("Error sending tournament notifications:", error);
+    }
+  })
+);
 
-  }
-  catch(error){
-      console.error('Error sending tournament notifications:', error);
-  }
+app.post(
+  "/api/tournament-notification-reminder",
+  expressAsyncHandler(async (req, res) => {
+    const { tournamentName } = req.body;
 
-}))
-
-app.post('/api/tournament-notification-reminder', expressAsyncHandler(async (req, res)=>{
-    const {tournamentName} = req.body;
-
-    try{
+    try {
       const users = await sql`
           SELECT username, phone FROM users WHERE phone IS NOT NULL
       `;
 
-      for(const user of users){
-          const messageTemplate = `Hi ${user.username}!, reminder! The Spar Weekend Championship starts tomorrow at 8PM. ₵50 cash prize awaits the winner. Register now at https://sparplay.com`;
-          const phone = '233'+ user.phone.substr(1);
-          console.log('realphone', phone);
-          await sendSMS(phone, messageTemplate);
+      for (const user of users) {
+        const messageTemplate = `Hi ${user.username}! Spar Weekend Championship starts tomorrow 8PM. 
+Feel the thrill, challenge top players & compete for the ₵50 prize. 
+Register now: sparplay.com`;
+        const phone = "233" + user.phone.substr(1);
+        console.log("realphone", phone);
+        await sendSMS(phone, messageTemplate);
       }
-
-    }catch(error){
-      console.error('Error sending tournament reminder notifications:', error);
+    } catch (error) {
+      console.error("Error sending tournament reminder notifications:", error);
     }
 
-    res.json({success:true, message: 'Tournament reminder notifications sent successfully'});
-}))
+    res.json({
+      success: true,
+      message: "Tournament reminder notifications sent successfully",
+    });
+  })
+);
 
-app.post('/api/tournament-notification-reminder-final', expressAsyncHandler(async (req, res)=>{
-    const {tournamentName} = req.body;
+app.post(
+  "/api/tournament-notification-reminder-final",
+  expressAsyncHandler(async (req, res) => {
+    const { tournamentName } = req.body;
 
-    try{
+    try {
       const users = await sql`
           SELECT username, phone FROM users WHERE phone IS NOT NULL
       `;
 
-      for(const user of users){
-          const messageTemplate = `Hi ${user.username}!, final reminder that the Spar Weekend Championship starts in 1 hour!. Registration ends in 30 minutes. Don't miss out on the action and the chance to win ₵50 cash. Register now at https://sparplay.com if you haven't already!`;
-          const phone = '233'+ user.phone.substr(1);
-          console.log('realphone', phone);
-          await sendSMS(phone, messageTemplate);
+      for (const user of users) {
+        const messageTemplate = `Hi ${user.username}!, final reminder that the Spar Weekend Championship starts in 1 hour!. Registration ends in 30 minutes. Don't miss out on the action and the chance to win ₵50 cash. Register now at https://sparplay.com if you haven't already!`;
+        const phone = "233" + user.phone.substr(1);
+        console.log("realphone", phone);
+        await sendSMS(phone, messageTemplate);
       }
-
-    }catch(error){
-      console.error('Error sending tournament reminder notifications:', error);
+    } catch (error) {
+      console.error("Error sending tournament reminder notifications:", error);
     }
 
-    res.json({success:true, message: 'Tournament reminder notifications sent successfully'});
-}))
+    res.json({
+      success: true,
+      message: "Tournament reminder notifications sent successfully",
+    });
+  })
+);
 
 app.use(errorHandler);
 
@@ -186,85 +197,89 @@ const s3Client = new S3Client({
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
-  },  
-});  
+  },
+});
 
-
-async function uploadFileToS3(bucketName: string, fileName: string, fileContent: Buffer) {
+async function uploadFileToS3(
+  bucketName: string,
+  fileName: string,
+  fileContent: Buffer
+) {
   const command = new PutObjectCommand({
     Bucket: bucketName,
     Key: fileName,
     Body: fileContent,
-  });  
-  
+  });
+
   try {
     const response = await s3Client.send(command);
-    console.log(`File uploaded successfully. ${response.$metadata.httpStatusCode}`);
+    console.log(
+      `File uploaded successfully. ${response.$metadata.httpStatusCode}`
+    );
   } catch (error) {
     console.error("Error uploading file:", error);
-  }  
-}  
+  }
+}
 
 // Websocket's connection to the server to allow bidirectional communication
 
 const port = process.env.PORT || 5000;
 
-
 server.listen(port, () => {
   console.log(`[server]: Server is running at https://localhost:${port}`);
-});  
+});
 
 export const matchmaker = new Matchmaker();
 export const matchForfeiter = new MatchForfeiter(serverSocket);
 
-
 initializeSocketHandler(serverSocket);
 
-const getTotalMemoryUsage = () =>{
-  return (process.memoryUsage().rss /1000000) + (process.memoryUsage().heapUsed / 1000000) + (process.memoryUsage().external / 1000000) + (process.memoryUsage().arrayBuffers / 1000000)
-}  
+const getTotalMemoryUsage = () => {
+  return (
+    process.memoryUsage().rss / 1000000 +
+    process.memoryUsage().heapUsed / 1000000 +
+    process.memoryUsage().external / 1000000 +
+    process.memoryUsage().arrayBuffers / 1000000
+  );
+};
 
-const logMemoryUsage = () =>{
-  setInterval(()=>{
-    console.log('MemoryUsage: ',
-      {
-        process: `${(process.memoryUsage().rss / 1000000).toFixed(2)}mb`,
-        heapTotal: `${(process.memoryUsage().heapTotal / 1000000).toFixed(2)}mb`,
-        heapUsed: `${(process.memoryUsage().heapUsed / 1000000).toFixed(2)}mb`,
-        arrayBuffers: `${(process.memoryUsage().arrayBuffers / 1000000).toFixed(2)}mb`,
-        external:`${(process.memoryUsage().external / 1000000).toFixed(2)}mb`,
-        totalMemoryUsage: `${getTotalMemoryUsage().toFixed(2)}mb`
-      }  
-    )  
-  }, 30000);  
-}  
+const logMemoryUsage = () => {
+  setInterval(() => {
+    console.log("MemoryUsage: ", {
+      process: `${(process.memoryUsage().rss / 1000000).toFixed(2)}mb`,
+      heapTotal: `${(process.memoryUsage().heapTotal / 1000000).toFixed(2)}mb`,
+      heapUsed: `${(process.memoryUsage().heapUsed / 1000000).toFixed(2)}mb`,
+      arrayBuffers: `${(process.memoryUsage().arrayBuffers / 1000000).toFixed(2)}mb`,
+      external: `${(process.memoryUsage().external / 1000000).toFixed(2)}mb`,
+      totalMemoryUsage: `${getTotalMemoryUsage().toFixed(2)}mb`,
+    });
+  }, 30000);
+};
 
-const logEventLoopLag = () =>{
-  setInterval(()=>{
-    console.log('Event Loop Lag: ',{
+const logEventLoopLag = () => {
+  setInterval(() => {
+    console.log("Event Loop Lag: ", {
       eventLoopLagMs: Math.round(h.mean / 1e6),
-      memory:  process.memoryUsage().rss / 1024 / 1024
-    })  
-  }, 5000);  
-}  
+      memory: process.memoryUsage().rss / 1024 / 1024,
+    });
+  }, 5000);
+};
 
-const logCpuUsage = ()=> {
-  setInterval(()=>{
-      const usage = process.cpuUsage(last);
-      last = process.cpuUsage();
-  
-      const userMs = usage.user / 1000;
-      const systemMs = usage.system / 1000;
-  
-      console.log('cpu Usage: ', {userMs, systemMs});
-  }, 1000)    
-}  
+const logCpuUsage = () => {
+  setInterval(() => {
+    const usage = process.cpuUsage(last);
+    last = process.cpuUsage();
 
+    const userMs = usage.user / 1000;
+    const systemMs = usage.system / 1000;
 
+    console.log("cpu Usage: ", { userMs, systemMs });
+  }, 1000);
+};
 
 // Cleanup on server shutdown
 process.on("SIGTERM", () => {
-//  matchmaker.stop();
- // matchForfeiter.stop();
- // ...existing cleanup code..
+  //  matchmaker.stop();
+  // matchForfeiter.stop();
+  // ...existing cleanup code..
 });

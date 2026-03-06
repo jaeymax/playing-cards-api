@@ -421,6 +421,14 @@ export const closeTournamentRegistration = async (
             Math.floor(i / 2) + 1
           );
 
+          if(tournament[0].format === "Swiss"){
+            await sql`
+              UPDATE tournament_participants
+              SET score = score + 1
+              WHERE tournament_id = ${tournamentId} AND user_id = ${player1.id}
+            `;
+          }
+
           rounds[1].push({
             id: match.id,
             player1: player1.username,
@@ -598,20 +606,21 @@ export const getTournamentLobby = async (
     }
 
     // Fetch participants with their global ranking
-    const participants = await sql`
-      SELECT 
-        u.id, 
-        u.username, 
-        u.image_url, 
-        u.rating,
-        u.is_rated,
-        tp.status,
-        tp.score,
-        RANK() OVER (ORDER BY u.rating DESC) as rank
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournamentId}
-    `;
+    // const participants = await sql`
+    //   SELECT 
+    //     u.id, 
+    //     u.username, 
+    //     u.image_url, 
+    //     u.rating,
+    //     u.is_rated,
+    //     tp.status,
+    //     tp.score,
+    //     RANK() OVER (ORDER BY u.rating DESC) as rank
+    //   FROM users u
+    //   JOIN tournament_participants tp ON u.id = tp.user_id
+    //   WHERE tp.tournament_id = ${tournamentId}
+    // `;
+    const participants = await getSingleEliminationTournamentParticipants(tournamentId);
 
     const rules =
       await sql`SELECT id, title, message as content from tournament_rules WHERE tournament_id = ${tournamentId}`;
@@ -800,18 +809,22 @@ export const startTournament = async (
     `;
 
     // Fetch participants with their global ranking
-    const participants = await sql`
-      SELECT 
-        u.id, 
-        u.username, 
-        u.image_url, 
-        u.rating,
-        tp.status,
-        RANK() OVER (ORDER BY u.rating DESC) as rank
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournamentId}
-    `;
+    // const participants = await sql`
+    //   SELECT 
+    //     u.id, 
+    //     u.username, 
+    //     u.image_url, 
+    //     u.rating,
+    //     u.is_rated,
+    //     tp.status,
+    //     tp.score,
+    //     tp.losses
+    //     RANK() OVER (ORDER BY u.rating DESC) as rank
+    //   FROM users u
+    //   JOIN tournament_participants tp ON u.id = tp.user_id
+    //   WHERE tp.tournament_id = ${tournamentId}
+    // `;
+    const participants = await getSingleEliminationTournamentParticipants(tournamentId);
 
     tournament = await sql`
       SELECT * FROM tournaments WHERE id = ${tournamentId} `;
