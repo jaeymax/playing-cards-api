@@ -32,7 +32,7 @@ import sql from "./config/db";
 import authMiddleware from "./middlewares/authMiddleware";
 import Mixpanel from "mixpanel";
 import fs from "fs";
-import MatchForfeiter from "./services/matchForfeiterEnhanced";
+import MatchForfeiter from "./services/matchForfeiter";
 import { monitorEventLoopDelay } from "perf_hooks";
 import { TwilioClient } from "./config/twilio";
 import { sendSMS } from "./services/smsService";
@@ -145,9 +145,8 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! Spar Weekend Championship starts tomorrow 8PM. 
-Feel the thrill, challenge top players & compete for the ₵50 prize. 
-Register now: sparplay.com`;
+        const messageTemplate = `Hi ${user.username}! The Spar Saturday Challenge begins tomorrow at 8PM. Format: Swiss Round. 
+Challenge top players & compete for the ₵50 prize. Register now on sparplay.com and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
@@ -174,7 +173,8 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}!, final reminder that the Spar Weekend Championship starts in 1 hour!. Registration ends in 30 minutes. Don't miss out on the action and the chance to win ₵50 cash. Register now at https://sparplay.com if you haven't already!`;
+        const messageTemplate = `Hi ${user.username}! Last call! The Spar Weekend Championship starts in 40 minutes. 
+Join the competition & battle for the ₵50 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com if you haven't already!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
@@ -227,6 +227,7 @@ const port = process.env.PORT || 5000;
 
 server.listen(port, () => {
   console.log(`[server]: Server is running at https://localhost:${port}`);
+  console.log(`[server]: Environment: ${process.env.NODE_ENV}`);
 });
 
 export const matchmaker = new Matchmaker();

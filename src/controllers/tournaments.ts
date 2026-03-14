@@ -21,7 +21,7 @@ import {
   getSwissTournamentStandings,
 } from "../utils/tournament";
 import { create, get } from "axios";
-import { getGamesByCodes } from "../utils/utils";
+import { getGamesByCodes } from "../utils";
 
 interface TournamentMatch {
   id: number;
@@ -42,8 +42,6 @@ interface RoundMatches {
   round: number;
   matches: TournamentBracketMatch[];
 }
-
-
 
 export const getTournamentResults = expressAsyncHandler(
   async (req: Request, res: Response) => {
@@ -103,7 +101,30 @@ export const getLatestSingleEliminationTournamentWinners = expressAsyncHandler(
   GROUP BY u.id, u.username, u.image_url
   ORDER BY wins DESC LIMIT 3`;
 
-    res.status(200).json(results);
+    res.status(200).json({
+      tournamentId: tournament_id[0].id,
+      winners: results,
+    });
+  }
+);
+
+export const getLatestSwissTournamentWinners = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const tournament_id =
+      await sql`SELECT id from tournaments WHERE format = 'Swiss' AND status = 'completed' ORDER by created_at DESC LIMIT 1`;
+
+    if (!tournament_id || tournament_id.length == 0) {
+      res.status(400).json({ message: "No tournament found" });
+      return;
+    }
+
+    const results =
+      await sql`SELECT u.id, u.username as name, u.image_url, tp.score, tp.losses FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournament_id[0].id} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC LIMIT 3`;
+
+    res.status(200).json({
+      tournamentId: tournament_id[0].id,
+      winners: results,
+    });
   }
 );
 
@@ -187,7 +208,7 @@ export const getAllTournaments = async (req: Request, res: Response) => {
   }
 };
 
-export const getCurrentWeekendTournament = async (
+export const getLatestFeaturedTournament = async (
   req: Request,
   res: Response
 ) => {
@@ -198,7 +219,7 @@ export const getCurrentWeekendTournament = async (
 
     const tournament = await sql`
       SELECT * FROM tournaments 
-      WHERE name = 'Spar Weekend Championship' 
+      WHERE is_featured = 'true' 
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -246,7 +267,7 @@ export const createTournament = async (req: Request, res: Response) => {
       registration_fee,
       format,
       prize,
-      is_current,
+      is_featured,
       end_date,
     } = req.body;
 
@@ -275,7 +296,7 @@ export const createTournament = async (req: Request, res: Response) => {
         registration_fee,
         prize,
         format,
-        is_current
+        is_featured
       ) VALUES (
         ${name}, 
         ${description}, 
@@ -285,7 +306,7 @@ export const createTournament = async (req: Request, res: Response) => {
         ${registration_fee || 0},
         ${prize || 0},
         ${format},
-        ${is_current || false}
+        ${is_featured || false}
       ) 
       RETURNING id
     `;
@@ -321,11 +342,15 @@ export const joinTournament = async (
       return;
     }
 
-    await sql`
-      INSERT INTO tournament_participants (tournament_id, user_id)
-      VALUES (${tournamentId}, ${userId})
-      ON CONFLICT (tournament_id, user_id) DO NOTHING
-    `;
+    await sql.transaction((sql) => [
+      sql`
+        INSERT INTO tournament_participants (tournament_id, user_id)
+        VALUES (${tournamentId}, ${userId})
+        ON CONFLICT (tournament_id, user_id) DO NOTHING
+      `,
+
+      sql`UPDATE tournaments SET registered_participants = registered_participants + 1 WHERE id = ${tournamentId}`,
+    ]);
 
     res.json({
       success: true,
@@ -421,7 +446,7 @@ export const closeTournamentRegistration = async (
             Math.floor(i / 2) + 1
           );
 
-          if(tournament[0].format === "Swiss"){
+          if (tournament[0].format === "Swiss") {
             await sql`
               UPDATE tournament_participants
               SET score = score + 1
@@ -607,10 +632,10 @@ export const getTournamentLobby = async (
 
     // Fetch participants with their global ranking
     // const participants = await sql`
-    //   SELECT 
-    //     u.id, 
-    //     u.username, 
-    //     u.image_url, 
+    //   SELECT
+    //     u.id,
+    //     u.username,
+    //     u.image_url,
     //     u.rating,
     //     u.is_rated,
     //     tp.status,
@@ -620,7 +645,8 @@ export const getTournamentLobby = async (
     //   JOIN tournament_participants tp ON u.id = tp.user_id
     //   WHERE tp.tournament_id = ${tournamentId}
     // `;
-    const participants = await getSingleEliminationTournamentParticipants(tournamentId);
+    const participants =
+      await getSingleEliminationTournamentParticipants(tournamentId);
 
     const rules =
       await sql`SELECT id, title, message as content from tournament_rules WHERE tournament_id = ${tournamentId}`;
@@ -699,13 +725,15 @@ export const getTournamentLobby = async (
       matches,
     }));
 
-
     const tournamentFormat = tournament[0].format;
     let standings = null;
     if (tournamentFormat === "Swiss") {
       standings = await getSwissTournamentStandings(tournamentId);
-    }else if (tournamentFormat === "Single Elimination") {
-      standings = await getSingleEliminationTournamentStandings(tournamentId, tournament[0].status);
+    } else if (tournamentFormat === "Single Elimination") {
+      standings = await getSingleEliminationTournamentStandings(
+        tournamentId,
+        tournament[0].status
+      );
     }
 
     res.json({
@@ -714,7 +742,7 @@ export const getTournamentLobby = async (
       participants,
       rules,
       rounds,
-      standings
+      standings,
     });
   } catch (err) {
     console.error("Error fetching tournament lobby:", err);
@@ -810,10 +838,10 @@ export const startTournament = async (
 
     // Fetch participants with their global ranking
     // const participants = await sql`
-    //   SELECT 
-    //     u.id, 
-    //     u.username, 
-    //     u.image_url, 
+    //   SELECT
+    //     u.id,
+    //     u.username,
+    //     u.image_url,
     //     u.rating,
     //     u.is_rated,
     //     tp.status,
@@ -824,7 +852,8 @@ export const startTournament = async (
     //   JOIN tournament_participants tp ON u.id = tp.user_id
     //   WHERE tp.tournament_id = ${tournamentId}
     // `;
-    const participants = await getSingleEliminationTournamentParticipants(tournamentId);
+    const participants =
+      await getSingleEliminationTournamentParticipants(tournamentId);
 
     tournament = await sql`
       SELECT * FROM tournaments WHERE id = ${tournamentId} `;
@@ -883,8 +912,6 @@ export const startTournament = async (
       }
       await saveGame(code, game);
     }
-
-   
 
     // Format rounds with aggregated player data
     const roundsMap: Record<number, any[]> = {};
@@ -1040,8 +1067,6 @@ export const reportMatchResult = async (
     });
   }
 };
-
-
 
 export const getBracket = async (
   req: Request,

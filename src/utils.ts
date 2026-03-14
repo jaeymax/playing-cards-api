@@ -1,6 +1,6 @@
-import { redis } from "..";
-import { Game } from "../../types";
-import sql from "../config/db";
+import { redis } from ".";
+import { Game } from "../types";
+import sql from "./config/db";
 
 const updateWinnerWonCount = async (winnerId: number) => {
   await sql`
@@ -24,7 +24,7 @@ const markTournamentAsEndedAndCompleted = async (tournamentId: number) => {
       SET status = 'completed', end_date = NOW()
       WHERE id = ${tournamentId}
    `;
-}
+};
 
 // update games played for all players in a game
 const updateGamesPlayedForGamePlayers = async (gameId: number) => {
@@ -46,30 +46,30 @@ const getMatchWinner = (game: Game) => {
 
 // function go return loser of a match, but only for a  two player game
 const getMatchLoser = (game: Game) => {
-    if(game.players.length != 2) {
-        throw new Error('getMatchLoser only works for two player games');
-    }
-    const winner = getMatchWinner(game);
-    return game.players.find(player => player.id != winner?.id);
-}
+  if (game.players.length != 2) {
+    throw new Error("getMatchLoser only works for two player games");
+  }
+  const winner = getMatchWinner(game);
+  return game.players.find((player) => player.id != winner?.id);
+};
 
 // function to return losers of a match, for games with more than 2 players, it will return an array of losers
 const getMatchLosers = (game: Game) => {
-    const winner = getMatchWinner(game);
-    return game.players.filter(player => player.id != winner?.id);
-}
+  const winner = getMatchWinner(game);
+  return game.players.filter((player) => player.id != winner?.id);
+};
 
 const updateGamePlayersScores = async (game: Game) => {
   // for (const player of game.players) {
   //   await sql`
-  //       UPDATE game_players 
+  //       UPDATE game_players
   //       SET score = ${player.score}
   //       WHERE game_id = ${game.id} AND user_id = ${player.user.id}
   //   `;
   // }
 
-  const userIds = game.players.map(p => p.user.id);
-  const scores = game.players.map(p => p.score);
+  const userIds = game.players.map((p) => p.user.id);
+  const scores = game.players.map((p) => p.score);
 
   await sql`
     UPDATE game_players gp
@@ -85,35 +85,47 @@ const updateGamePlayersScores = async (game: Game) => {
 
 // function to determin whether a game is a tournament game
 const isTournamentMatch = async (gameId: number) => {
-   // join on tournaments table and return the format of the tournament
-    const result = await sql`
+  // join on tournaments table and return the format of the tournament
+  const result = await sql`
       SELECT tm.tournament_id, tr.round_number, t.format
            FROM tournament_matches tm
            JOIN tournament_rounds tr ON tm.round_id = tr.id
            JOIN tournaments t ON tm.tournament_id = t.id
         WHERE tm.game_id = ${gameId}
     `;
-    
-    return result.length > 0 ? {id:result[0].tournament_id, current_round_number:result[0].round_number, format: result[0].format} : null;
+
+  return result.length > 0
+    ? {
+        id: result[0].tournament_id,
+        current_round_number: result[0].round_number,
+        format: result[0].format,
+      }
+    : null;
 };
 
-const getGamesByCodes = async (codes: string[])=>{
-    try{
-      const keys = codes.map(code=> `${code}`);
-      const games = await redis.mget(keys);
-      return games.map(g => g && JSON.parse(g)).filter(Boolean);
-    }catch(err){
-      console.log('Error getting games from redis', err)
-      return null;
-    }
+const getGamesByCodes = async (codes: string[]) => {
+  try {
+    const keys = codes.map((code) => `${code}`);
+    const games = await redis.mget(keys);
+    return games.map((g) => g && JSON.parse(g)).filter(Boolean);
+  } catch (err) {
+    console.log("Error getting games from redis", err);
+    return null;
+  }
 };
 
-const createNotification = async(userId: number, type: string, title: string, message: string, action: string) => {
+const createNotification = async (
+  userId: number,
+  type: string,
+  title: string,
+  message: string,
+  action: string
+) => {
   await sql`
     INSERT INTO notifications (user_id, type, title, message, action)
     VALUES (${userId}, ${type}, ${title}, ${message}, ${action})
   `;
-} 
+};
 
 export {
   updateWinnerWonCount,
@@ -121,9 +133,9 @@ export {
   updateGamesPlayedForGamePlayers,
   getMatchWinner,
   updateGamePlayersScores,
- isTournamentMatch,
-    getMatchLoser,
-    markTournamentAsEndedAndCompleted,
-    getGamesByCodes,
-    createNotification
+  isTournamentMatch,
+  getMatchLoser,
+  markTournamentAsEndedAndCompleted,
+  getGamesByCodes,
+  createNotification,
 };
