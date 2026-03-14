@@ -10,7 +10,7 @@ import {
   getSingleEliminationTournamentStandings,
   updateSingleEliminationMatchResults,
   updateSwissMatchResults,
-  getSwissTournamentLobbyData
+  getSwissTournamentLobbyData,
 } from "./tournament";
 import {
   getGamesByCodes,
@@ -21,7 +21,7 @@ import {
   updateGamePlayersScores,
   updateGamesPlayedForGamePlayers,
   updateWinnerWonCount,
-} from "./utils";
+} from "../utils";
 
 export const getDealingSequence = (game: any) => {
   const dealingSequence: any[] = [];
@@ -89,7 +89,7 @@ export const dealCards = async (game: any) => {
   game.current_turn_user_id = game.players.find(
     (player: any) => player.position == game.current_player_position
   )?.user?.id;
-  if(game.is_rated){
+  if (game.is_rated) {
     await matchForfeiter.scheduleForfeit(
       game.code,
       game.turn_timeout_seconds * 1000
@@ -198,7 +198,7 @@ export const playCard = async (
   const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
   game.turn_ends_at = turn_ends_at;
 
-  if(game.is_rated){
+  if (game.is_rated) {
     await matchForfeiter.scheduleForfeit(
       game.code,
       game.turn_timeout_seconds * 1000
@@ -229,8 +229,6 @@ export const playCard = async (
 
   serverSocket.to(game.code).emit("updatedGameData", game);
 };
-
-
 
 const isHigherCard = (card: any, current_trick: any) => {
   if (current_trick.cards.length === 0) {
@@ -303,9 +301,9 @@ const endGame = async (game: any) => {
   await updateGamePlayersScores(game);
 
   if (winner.score >= game.win_points) {
-    game.status = 'completed';
+    game.status = "completed";
     game.ended_at = Date.now();
-    if(game.is_rated)await matchForfeiter.cancelForfeit(game.code);
+    if (game.is_rated) await matchForfeiter.cancelForfeit(game.code);
 
     winner.games_won += 1;
     setTimeout(() => {
@@ -314,7 +312,7 @@ const endGame = async (game: any) => {
       });
     }, 1000);
 
-    await markGameAsEndedAndCompleted(game.id);   
+    await markGameAsEndedAndCompleted(game.id);
     await updateGamesPlayedForGamePlayers(game.id);
     await updateWinnerWonCount(winner.user.id);
     await saveGame(game.code, game);
@@ -347,8 +345,8 @@ const endGame = async (game: any) => {
       console.log(
         "this game is part of a tournament match, reporting result to tournament system"
       );
-      const tournamentFormat =  tournament.format;
-      console.log('tournamentFormat', tournamentFormat);
+      const tournamentFormat = tournament.format;
+      console.log("tournamentFormat", tournamentFormat);
       if (tournamentFormat == "Single Elimination") {
         const loser = getMatchLoser(game) as GamePlayer;
 
@@ -372,25 +370,33 @@ const endGame = async (game: any) => {
           tournament.current_round_number,
           serverSocket
         );
-      }else if(tournamentFormat == "Swiss"){
-        
+      } else if (tournamentFormat == "Swiss") {
         const loser = getMatchLoser(game) as GamePlayer;
-        await updateSwissMatchResults(game.id, winner.user.id, loser.user.id, tournament.id);
+        await updateSwissMatchResults(
+          game.id,
+          winner.user.id,
+          loser.user.id,
+          tournament.id
+        );
         const lobbyData = await getSwissTournamentLobbyData(tournament.id);
-        serverSocket.to(`tournament_${tournament.id}`).emit("lobbyUpdate", lobbyData);
+        serverSocket
+          .to(`tournament_${tournament.id}`)
+          .emit("lobbyUpdate", lobbyData);
 
-        await advanceSwissTournamentToNextRound(tournament.id, tournament.current_round_number, serverSocket);
+        await advanceSwissTournamentToNextRound(
+          tournament.id,
+          tournament.current_round_number,
+          serverSocket
+        );
       }
     }
-
   } else {
     await saveGame(game.code, game);
-    setTimeout(()=>{
+    setTimeout(() => {
       serverSocket.to(game.code).emit("gameEnded", {
         winner: { ...winner, points, hand_number: game.current_hand_number },
       });
-
-    }, 1000)
+    }, 1000);
 
     if (tournament) {
       const tournamentFormat = tournament.format;
@@ -401,9 +407,11 @@ const endGame = async (game: any) => {
         serverSocket
           .to(`tournament_${tournament.id}`)
           .emit("lobbyUpdate", lobbyData);
-      }else if(tournamentFormat == "Swiss"){
+      } else if (tournamentFormat == "Swiss") {
         const lobbyData = await getSwissTournamentLobbyData(tournament.id);
-        serverSocket.to(`tournament_${tournament.id}`).emit("lobbyUpdate", lobbyData);
+        serverSocket
+          .to(`tournament_${tournament.id}`)
+          .emit("lobbyUpdate", lobbyData);
       }
     }
   }
@@ -481,7 +489,7 @@ const calculateSpecialPoints = (
 
   if (winning_card_rank == "7") {
     // check if the 7 was used to counter a six
-  //  console.log("trick cards", trick.cards);
+    //  console.log("trick cards", trick.cards);
     let sameSuitCards = trick.cards.filter(
       (card: any) => card.card.suit == trick.leading_suit
     );
@@ -510,7 +518,7 @@ const calculateSpecialPoints = (
           )
         );
       } else {
-      //  console.log("7 was used to counter a six");
+        //  console.log("7 was used to counter a six");
         if (trick_number == last_trick_index) return 1;
         return 0;
       }
@@ -531,7 +539,6 @@ const calculateSpecialPoints = (
 
   return 0;
 };
-
 
 export const getSingleEliminationTournamentLobbyData = async (
   tournamentId: number
@@ -630,7 +637,10 @@ export const getSingleEliminationTournamentLobbyData = async (
     matches,
   }));
 
-  const standings = await getSingleEliminationTournamentStandings(tournamentId, tournament[0].status);
+  const standings = await getSingleEliminationTournamentStandings(
+    tournamentId,
+    tournament[0].status
+  );
 
   return {
     success: true,

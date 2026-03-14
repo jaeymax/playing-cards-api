@@ -168,6 +168,8 @@ CREATE TABLE tournaments (
     registration_closing_date TIMESTAMP WITH TIME ZONE NOT NULL,
     is_current BOOLEAN DEFAULT false,
     registration_fee NUMERIC(10,2) DEFAULT '0.00'
+    registered_participants INTEGER DEFAULT 0,
+    max_participants INTEGER DEFAULT 64,
     end_date TIMESTAMP WITH TIME ZONE NOT NULL,
     status VARCHAR(20) CHECK (status IN ('upcoming', 'ongoing', 'completed', 'cancelled')) DEFAULT 'upcoming',
     format VARCHAR(50) NOT NULL, -- e.g., 'single_elimination', 'round_robin'

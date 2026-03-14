@@ -5,14 +5,15 @@ import {
   createTournament,
   joinTournament,
   startTournament,
-  getCurrentWeekendTournament,
+  getLatestFeaturedTournament,
   closeTournamentRegistration,
   getTournamentLobby,
   reportMatchResult,
   addTournamentRule,
   getTournamentResults,
   getTopThreePlayersFromTournamentResults,
-  getLatestSingleEliminationTournamentWinners
+  getLatestSingleEliminationTournamentWinners,
+  getLatestSwissTournamentWinners
 } from "../controllers/tournaments";
 import authMiddleware from "../middlewares/authMiddleware";
 
@@ -20,7 +21,7 @@ const router = Router();
 
 router.get("/", getAllTournaments);
 router.get("/:id/lobby", authMiddleware, getTournamentLobby)
-router.post("/weekly/current", getCurrentWeekendTournament);
+router.post("/weekly/current", getLatestFeaturedTournament);
 router.post("/", createTournament);
 router.post("/join/:id", authMiddleware, joinTournament);
 router.get("/:id/close-registration", authMiddleware, closeTournamentRegistration);
@@ -28,6 +29,7 @@ router.post("/:id/start", startTournament);
 router.post("/:id/rules", addTournamentRule);
 router.post("/matches/:gameId/result", authMiddleware, reportMatchResult);
 router.get("/single-elimination/results", getLatestSingleEliminationTournamentWinners)
+router.get('/swiss/results', getLatestSwissTournamentWinners);
 router.get("/:id/results", authMiddleware, getTournamentResults)
 router.get("/:id/results/top-three", getTopThreePlayersFromTournamentResults);
 // router.post('/:id/payout', authMiddleware, async (req, res) => {
