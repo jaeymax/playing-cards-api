@@ -186,6 +186,8 @@ CREATE TABLE tournament_participants (
     score INTEGER DEFAULT 0;
     losses INTEGER DEFAULT 0;
     buchholz_score INTEGER DEFAULT 0;
+    sonneborn_berger_score INTEGER DEFAULT 0;
+    has_received_bye BOOLEAN DEFAULT FALSE;
     registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(20) CHECK (status IN ('registered', 'eliminated', 'winner')) DEFAULT 'registered',
     UNIQUE(tournament_id, user_id) -- Prevent duplicate registrations
