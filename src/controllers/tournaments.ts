@@ -413,7 +413,7 @@ export const closeTournamentRegistration = async (
       `;
 
       const roundId = round[0].id;
-      fisherYatesShuffle(participants);
+      //fisherYatesShuffle(participants);
       const rounds: Record<number, any[]> = { 1: [] };
       const is_final_round = participants.length === 2;
 

@@ -20,8 +20,60 @@ const createNextSwissRoundMatches = async (
   try {
     const round = await createSwissRound(tournamentId, roundNumber);
 
-    const participants =
+    let participants =
       await getSwissTournamentParticipantsByScore(tournamentId);
+
+
+    let byePlayer = null;
+
+    if(participants.length % 2 != 0){
+      // grant the lowest player who hasn't received a bye yet a bye
+      for(let i = participants.length - 1; i >= 0; i--){
+        if(!participants[i].has_received_bye){
+          byePlayer = participants[i];
+          break;
+        }
+      }
+
+      if(!byePlayer){
+        byePlayer = participants[participants.length - 1];
+      }
+    }
+
+    if(byePlayer){
+      participants = participants.filter((p)=>p.id !== byePlayer.id);
+         const game = await createByeMatch(byePlayer.id);
+
+        const gameplayer = await createMatchGamePlayer(
+          game.id,
+          byePlayer.id,
+          0,
+          true
+        );
+
+        await createSingleEliminationByeMatch(
+          tournamentId,
+          game.id,
+          round.id,
+          byePlayer.id,
+          Math.floor((participants.length)  / 2) + 1
+        );
+        console.log(`created match for only ${byePlayer.username}`);
+
+        const newGame = {
+          ...game,
+          players: [gameplayer],
+          cards: null,
+        };
+
+        await saveGame(game.code, newGame);
+        console.log("game saved to memory", game.code);
+
+    }
+
+    console.log('bye player', byePlayer);
+
+    participants = await pairSwissRoundParticipants(participants, tournamentId);
 
     console.log("swiss participants by score", participants);
     const lastRoundNumber = Math.ceil(Math.log2(participants.length));
@@ -92,8 +144,8 @@ const createNextSwissRoundMatches = async (
 
       // update tournaments current round number
       await sql`
-          UPDATE tournaments 
-          SET current_round_number = ${roundNumber} 
+          UPDATE tournaments
+          SET current_round_number = ${roundNumber}
           WHERE id = ${tournamentId}
         `;
 
@@ -174,27 +226,37 @@ const createNextSingleEliminationRoundMatches = async (
   try {
     const round = await createSingleEliminationRound(tournamentId, roundNumber);
 
-    const participants =
+    let participants =
       await getSingleEliminationTournamentParticipantsByStatus(
         tournamentId,
         "qualified"
       );
     const is_final_match = participants.length == 2;
 
-    fisherYatesShuffle(participants);
 
-    // Pair players and create matches
-    for (let i = 0; i < participants.length; i += 2) {
-      const player1 = participants[i];
-      const player2 = participants[i + 1];
+    let byePlayer = null;
 
-      if (!player2) {
-        // Handle odd number of players - auto-advance
-        const game = await createByeMatch(player1.id);
+    if(participants.length % 2 != 0){
+      // grant the lowest player who hasn't received a bye yet a bye
+      for(let i = participants.length - 1; i >= 0; i--){
+        if(!participants[i].has_received_bye){
+          byePlayer = participants[i];
+          break;
+        }
+      }
+
+      if(!byePlayer){
+        byePlayer = participants[participants.length - 1];
+      }
+    }
+
+    if(byePlayer){
+      participants = participants.filter((p)=>p.id !== byePlayer.id);
+         const game = await createByeMatch(byePlayer.id);
 
         const gameplayer = await createMatchGamePlayer(
           game.id,
-          player1.id,
+          byePlayer.id,
           0,
           true
         );
@@ -203,10 +265,10 @@ const createNextSingleEliminationRoundMatches = async (
           tournamentId,
           game.id,
           round.id,
-          player1.id,
-          Math.floor(i / 2) + 1
+          byePlayer.id,
+          Math.floor((participants.length)  / 2) + 1
         );
-        console.log(`created match for only ${player1.username}`);
+        console.log(`created match for only ${byePlayer.username}`);
 
         const newGame = {
           ...game,
@@ -216,8 +278,48 @@ const createNextSingleEliminationRoundMatches = async (
 
         await saveGame(game.code, newGame);
         console.log("game saved to memory", game.code);
-        break;
-      }
+
+    }
+
+    console.log('bye player', byePlayer);
+
+    fisherYatesShuffle(participants);
+
+    // Pair players and create matches
+    for (let i = 0; i < participants.length; i += 2) {
+      const player1 = participants[i];
+      const player2 = participants[i + 1];
+
+      // if (!player2) {
+      //   // Handle odd number of players - auto-advance
+      //   const game = await createByeMatch(player1.id);
+
+      //   const gameplayer = await createMatchGamePlayer(
+      //     game.id,
+      //     player1.id,
+      //     0,
+      //     true
+      //   );
+
+      //   await createSingleEliminationByeMatch(
+      //     tournamentId,
+      //     game.id,
+      //     round.id,
+      //     player1.id,
+      //     Math.floor(i / 2) + 1
+      //   );
+      //   console.log(`created match for only ${player1.username}`);
+
+      //   const newGame = {
+      //     ...game,
+      //     players: [gameplayer],
+      //     cards: null,
+      //   };
+
+      //   await saveGame(game.code, newGame);
+      //   console.log("game saved to memory", game.code);
+      //   break;
+      // }
 
       const game = await createTwoPlayerMatch(
         player1.id,
@@ -243,8 +345,8 @@ const createNextSingleEliminationRoundMatches = async (
 
       // update tournaments current round number
       await sql`
-        UPDATE tournaments 
-        SET current_round_number = ${roundNumber} 
+        UPDATE tournaments
+        SET current_round_number = ${roundNumber}
         WHERE id = ${tournamentId}
       `;
 
@@ -281,7 +383,7 @@ const createNextSingleEliminationRoundMatches = async (
 
 const getSwissTournamentParticipantsByScore = async (tournamentId: number) => {
   const participants = await sql`
-    SELECT u.id, u.username, u.is_rated, u.image_url, tp.score
+    SELECT u.id, u.username, u.is_rated, u.image_url, tp.score, tp.has_received_bye
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId}
@@ -294,7 +396,7 @@ const getSingleEliminationTournamentParticipants = async (
   tournamentId: number
 ) => {
   const participants = await sql`
-    SELECT u.id, u.username, u.rating, u.is_rated, u.image_url, tp.status, tp.score, tp.losses
+    SELECT u.id, u.username, u.rating, u.is_rated, u.image_url, tp.status, tp.has_received_bye, tp.score, tp.losses
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId}
@@ -308,7 +410,7 @@ const getSingleEliminationTournamentParticipantsByStatus = async (
   status: string
 ) => {
   const participants = await sql`
-    SELECT u.id, tp.user_id, u.username, u.image_url, tp.status, tp.score, tp.losses
+    SELECT u.id, tp.user_id, tp.has_received_bye, u.username, u.image_url, tp.status, tp.score, tp.losses
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId} AND status = ${status}
@@ -358,6 +460,8 @@ const createSingleEliminationByeMatch = async (
           )
           RETURNING id, status
         `;
+
+  await sql`UPDATE tournament_participants SET has_received_bye = TRUE where user_id = ${playerId} AND tournament_id = ${tournamentId}`;
   return match[0];
 };
 
@@ -453,13 +557,13 @@ const createTwoPlayerMatchGamePlayers = async (
     sql`
           INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
           VALUES (
-            ${matchId}, 
-            ${player1Id}, 
-            0, 
+            ${matchId},
+            ${player1Id},
+            0,
             true,
             'active'
           )
-          RETURNING 
+          RETURNING
             id,
             game_id,
             score,
@@ -477,13 +581,13 @@ const createTwoPlayerMatchGamePlayers = async (
     sql`
           INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
           VALUES (
-            ${matchId}, 
-            ${player2Id}, 
-            1, 
+            ${matchId},
+            ${player2Id},
+            1,
             false,
             'active'
           )
-          RETURNING 
+          RETURNING
             id,
             game_id,
             score,
@@ -513,13 +617,13 @@ const createGameCardsForMatch = async (
   const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
   const gameCards = await sql`
       INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
-      SELECT 
+      SELECT
         ${matchId},
         unnest(${cards.map((c) => c.card_id)}::integer[]),
         ${player1GamePlayerId},
         -1,
         'in_deck'
-      RETURNING 
+      RETURNING
           id,
           game_id,
           player_id,
@@ -552,13 +656,13 @@ const createMatchGamePlayer = async (
   const gameplayer = await sql`
           INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
           VALUES (
-            ${matchId}, 
-            ${playerId}, 
-            ${player_position}, 
-            ${is_dealer}, 
+            ${matchId},
+            ${playerId},
+            ${player_position},
+            ${is_dealer},
             'active'
           )
-          RETURNING 
+          RETURNING
             id,
             game_id,
             score,
@@ -585,7 +689,7 @@ const updateSingleEliminationMatchResults = async (
   tournamentId: number
 ) => {
   await sql`
-  UPDATE tournament_matches 
+  UPDATE tournament_matches
   SET winner_id = ${winnerId}, status = 'completed'
   WHERE game_id = ${matchId}
 `;
@@ -605,7 +709,7 @@ const updateSwissMatchResults = async (
   tournamentId: number
 ) => {
   await sql`
-  UPDATE tournament_matches 
+  UPDATE tournament_matches
   SET winner_id = ${winnerId}, status = 'completed'
   WHERE game_id = ${matchId}
 `;
@@ -619,7 +723,7 @@ const updateSwissMatchResults = async (
  `;
 
   // update the losers score by 1
-  await sql` 
+  await sql`
       UPDATE tournament_participants
       SET losses = losses + 1
       WHERE tournament_id = ${tournamentId}
@@ -658,6 +762,87 @@ const calculateBuchholzScoresForSwissRound = async (
   }
 };
 
+const calculateSonneBornBergerScoresForSwissRound = async (tournamentId:number, participants:any[]) =>{
+    for(let participant of participants){
+
+      const sonneBornBergerResult = await sql`
+        SELECT COALESCE(SUM(op_tp.score), 0) AS sonneborn_berger_score
+        FROM tournament_matches tm
+        JOIN tournament_participants op_tp ON
+         op_tp.user_id = tm.player2_id
+         OR op_tp.user_id = tm.player1_id
+         WHERE tm.tournament_id = ${tournamentId}
+         AND tm.winner_id = ${participant.id}
+         AND op_tp.user_id != ${participant.id}
+      `
+
+      const sonneBornBergerScore = sonneBornBergerResult[0]?.sonneborn_berger_score || 0; 
+
+      await sql`UPDATE tournament_participants SET sonneborn_berger_score = ${sonneBornBergerScore}
+      WHERE tournament_id = ${tournamentId} AND user_id = ${participant.id}
+      `
+    }
+}
+
+const pairSwissRoundParticipants = async (participants: any[], tournamentId:number) => {
+  const pairedParticipants = [];
+  const used = new Set();
+
+
+
+  for (let i = 0; i < participants.length; i++) {
+    if (used.has(participants[i].id)) continue;
+
+    let player1 = participants[i];
+    let opponent = null;
+
+    // Try to find a valid opponent for player1
+    for (let j = i + 1; j < participants.length; j++) {
+      if (used.has(participants[j].id)) continue;
+      // const test = !(await hasPlayedBefore(player1.id, participants[j].id, tournamentId))
+      // console.log('test',player1.username, participants[j].username, test);
+      if(!(await hasPlayedBefore(player1.id, participants[j].id, tournamentId))) {
+          opponent = participants[j];
+          console.log('found valid match for', player1.username, 'and', opponent.username);
+          break;
+      }
+
+    }
+
+    // If no valid opponent is found, pair with the next available participant (last resort)
+    if (!opponent) {
+      console.log('allowing rematch last resort for player', player1.username);
+      for (let j = i + 1; j < participants.length; j++) {
+        if (used.has(participants[j].id)) continue;
+        opponent = participants[j];
+        console.log('repeated match for', player1.username, 'and', opponent.username);
+        break;
+
+      }
+
+    }
+
+    pairedParticipants.push(player1)
+    pairedParticipants.push(opponent);
+    used.add(player1.id);
+    used.add(opponent.id);
+  }
+
+  console.log('paired_participants', pairedParticipants);
+  return pairedParticipants;
+}
+
+const hasPlayedBefore = async (playerId: number, opponentId: number, tournamentId:number):Promise<boolean> => {
+    // This function should check the database to see if playerId and opponentId have been matched against each other in previous rounds of the tournament
+    const query =  await sql`SELECT id from tournament_matches WHERE tournament_id = ${tournamentId} AND status in ('completed', 'forfeited') AND (
+      (player1_id = ${playerId} AND player2_id = ${opponentId}) OR (player1_id = ${opponentId} AND player2_id = ${playerId})
+    ) LIMIT 1`;
+
+    console.log('query result for ', playerId, 'and', opponentId, '', query, '', query.length);
+
+  return query.length > 0;
+}
+
 const advanceSwissTournamentToNextRound = async (
   tournamentId: number,
   currentRoundNumber: number,
@@ -680,6 +865,7 @@ const advanceSwissTournamentToNextRound = async (
   console.log("isLastRound", isLastRound);
   if (allMatchesCompleted && !isLastRound) {
     await calculateBuchholzScoresForSwissRound(tournamentId, participants);
+    await calculateBuchholzScoresForSwissRound(tournamentId, participants);
     await createNextSwissRoundMatches(currentRoundNumber + 1, tournamentId);
     const lobbyData = await getSwissTournamentLobbyData(tournamentId);
     serverSocket
@@ -688,6 +874,7 @@ const advanceSwissTournamentToNextRound = async (
   } else if (allMatchesCompleted && isLastRound) {
     // tournament has ended
     await calculateBuchholzScoresForSwissRound(tournamentId, participants);
+    await calculateSonneBornBergerScoresForSwissRound(tournamentId, participants);
     console.log("this is the last round and match for swiss tournament");
     await markTournamentAsEndedAndCompleted(tournamentId);
     const lobbyData = await getSwissTournamentLobbyData(tournamentId);
@@ -906,10 +1093,10 @@ const getSwissTournamentLobbyData = async (tournamentId: number) => {
  `;
   // Fetch participants with their global ranking
   const participants = await sql`
-    SELECT 
-      u.id, 
-      u.username, 
-      u.image_url, 
+    SELECT
+      u.id,
+      u.username,
+      u.image_url,
       u.is_rated,
       u.rating,
       tp.status,
@@ -923,7 +1110,7 @@ const getSwissTournamentLobbyData = async (tournamentId: number) => {
 
   // Fetch current round matches with player details and scores
   const matches = await sql`
-    SELECT 
+    SELECT
       tr.round_number,
       tm.id,
       tm.game_id,
@@ -1277,7 +1464,7 @@ ORDER BY wins DESC LIMIT 3`;
 };
 
 const getSwissTournamentWinners = async (tournamentId: number) => {
-  const winners = await sql`SELECT u.id, u.username as name, u.image_url, tp.score FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC LIMIT 3`;
+  const winners = await sql`SELECT u.id, u.username as name, u.image_url, tp.score FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, tp.sonneborn_berger_score DESC, u.rating DESC LIMIT 3`;
   return winners;
 }
 
@@ -1286,7 +1473,7 @@ const getRatingChangeForTournament = async (
   tournamentId: number
 ) => {
   let ratingChange = 0;
-  const ratingChanges = await sql`SELECT 
+  const ratingChanges = await sql`SELECT
    rating_change
    FROM rating_changes
    WHERE user_id = ${userId} AND tournament_id = ${tournamentId}
@@ -1305,7 +1492,7 @@ const getSingleEliminationTournamentWinner = async (tournamentId: number) => {
   const winner = await sql`
       SELECT user_id
       FROM tournament_participants
-      WHERE tournament_id = ${tournamentId} AND status = 'qualified' 
+      WHERE tournament_id = ${tournamentId} AND status = 'qualified'
       LIMIT 1
   `;
   return winner[0];
@@ -1342,7 +1529,7 @@ const getSingleEliminationTournamentMatches = async (
 
 const getSwissTournamentStandings = async (tournamentId: number) => {
   const standings =
-    await sql`SELECT u.id, u.username, u.image_url, tp.score, tp.losses, tp.status, tp.buchholz_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC`;
+    await sql`SELECT u.id, u.username, u.image_url, tp.score, tp.losses, tp.status, tp.buchholz_score, tp.sonneborn_berger_score, u.rating FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, tp.sonneborn_berger_score DESC, u.rating DESC`;
   return standings;
 };
 
