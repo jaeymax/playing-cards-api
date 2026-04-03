@@ -145,7 +145,7 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins tomorrow at 8PM. Format: Single Elimination. 
+        const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins today at 8PM. Format: Single Elimination. 
 Challenge top players & compete for the ₵50 prize. Register now on sparplay.com and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
@@ -173,7 +173,7 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! Last call! The Friday Spar Championship starts in an 40 minutes. 
+        const messageTemplate = `Hi ${user.username}! Last call! The Friday Spar Championship starts in 50 minutes. Registeration closes at 7:45PM. Format: Single Elimination. 
 Join the competition & battle for the ₵50 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com if you haven't already!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
