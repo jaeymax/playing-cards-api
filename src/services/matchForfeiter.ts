@@ -86,6 +86,13 @@ export default class MatchForfeiter {
 
     const match = await getGameByCode(gameCode);
     if (!match || !match.is_rated) return;
+    // if the match is already completed or forfeited, do nothing
+    if (match.status === "completed" || match.status === "forfeited") {
+      console.log(
+        `Match ${gameCode} already completed or forfeited. No action taken.`
+      );
+      return;
+    }
 
     const winnerId = match.players.find(
       (p: any) => p.user.id !== match.current_turn_user_id
