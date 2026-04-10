@@ -191,13 +191,25 @@ export const addTournamentRule = expressAsyncHandler(
 
 // GET ALL TOURNAMENTS
 export const getAllTournaments = async (req: Request, res: Response) => {
+  const userId = req.user?.userId || null;
+
   try {
     const tournaments = await sql`
-      SELECT * FROM tournaments ORDER BY created_at DESC
+     SELECT 
+        t.*,
+        CASE 
+          WHEN tp.user_id IS NOT NULL THEN true
+          ELSE false
+        END AS registered
+      FROM tournaments t
+      LEFT JOIN tournament_participants tp
+        ON t.id = tp.tournament_id
+        AND tp.user_id = ${userId}
+      ORDER BY t.created_at DESC
     `;
 
     // Log request query for debugging
-    console.log(req.query);
+    console.log('user', req.user);
 
     res.json({ success: true, data: tournaments });
   } catch (err) {
@@ -413,7 +425,7 @@ export const closeTournamentRegistration = async (
       `;
 
       const roundId = round[0].id;
-      //fisherYatesShuffle(participants);
+      fisherYatesShuffle(participants);
       const rounds: Record<number, any[]> = { 1: [] };
       const is_final_round = participants.length === 2;
 
@@ -617,9 +629,21 @@ export const getTournamentLobby = async (
       return;
     }
 
+    const userId = req.user?.userId || null;
+
     // Fetch tournament details
     const tournament = await sql`
-      SELECT * FROM tournaments WHERE id = ${tournamentId}
+       SELECT 
+        t.*,
+        CASE 
+          WHEN tp.user_id IS NOT NULL THEN true
+          ELSE false
+        END AS registered
+      FROM tournaments t
+      LEFT JOIN tournament_participants tp
+        ON t.id = tp.tournament_id
+        AND tp.user_id = ${userId}
+      WHERE t.id = ${tournamentId}
     `;
 
     if (!tournament.length) {
