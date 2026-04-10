@@ -16,11 +16,12 @@ import {
   getLatestSwissTournamentWinners
 } from "../controllers/tournaments";
 import authMiddleware from "../middlewares/authMiddleware";
+import optionalAuthMiddleware from "../middlewares/optionalAuthMiddleware";
 
 const router = Router();
 
-router.get("/", getAllTournaments);
-router.get("/:id/lobby", authMiddleware, getTournamentLobby)
+router.get("/", optionalAuthMiddleware, getAllTournaments);
+router.get("/:id/lobby", optionalAuthMiddleware, getTournamentLobby)
 router.post("/weekly/current", getLatestFeaturedTournament);
 router.post("/", createTournament);
 router.post("/join/:id", authMiddleware, joinTournament);

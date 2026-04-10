@@ -83,8 +83,9 @@ export default class MatchForfeiter {
     const { gameCode } = job.data;
     console.log(`Processing forfeit for match ${gameCode}`);
     // Add your forfeit logic here
-
+    
     const match = await getGameByCode(gameCode);
+    console.log(`Match ${gameCode} status: ${match.status}`);
     if (!match || !match.is_rated) return;
     // if the match is already completed or forfeited, do nothing
     if (match.status === "completed" || match.status === "forfeited") {
