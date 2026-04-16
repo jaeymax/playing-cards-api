@@ -280,6 +280,7 @@ export const createTournament = async (req: Request, res: Response) => {
       format,
       prize,
       is_featured,
+      difficulty,
       end_date,
     } = req.body;
 
@@ -308,6 +309,7 @@ export const createTournament = async (req: Request, res: Response) => {
         registration_fee,
         prize,
         format,
+        difficulty,
         is_featured
       ) VALUES (
         ${name}, 
@@ -318,6 +320,7 @@ export const createTournament = async (req: Request, res: Response) => {
         ${registration_fee || 0},
         ${prize || 0},
         ${format},
+        ${difficulty},
         ${is_featured || false}
       ) 
       RETURNING id
@@ -354,7 +357,47 @@ export const joinTournament = async (
       return;
     }
 
+    // check if users wallet balance is greater or equal to tournament- registration fee
+    const tournament = await sql`
+      SELECT registration_fee FROM tournaments WHERE id = ${tournamentId}
+    `;
+
+    if (!tournament.length) {
+      res.status(404).json({
+        success: false,
+        message: "Tournament not found",
+      });
+      return;
+    }
+
+    const registrationFee = tournament[0].registration_fee;
+
+    const userWallet = await sql`
+      SELECT balance FROM wallets WHERE user_id = ${userId}
+    `;
+
+    if (userWallet.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+      return;
+    }
+
+    if (parseFloat(userWallet[0].balance) < parseFloat(registrationFee)) {
+      res.status(400).json({
+        success: false,
+        message: "Insufficient wallet balance to join tournament",
+      });
+      return;
+    }
+
+    // update the users wallet balance by subtracting the tournament registration fee
+    
     await sql.transaction((sql) => [
+      
+      sql` UPDATE wallets SET balance = balance - ${registrationFee} WHERE user_id = ${userId} `,
+
       sql`
         INSERT INTO tournament_participants (tournament_id, user_id)
         VALUES (${tournamentId}, ${userId})

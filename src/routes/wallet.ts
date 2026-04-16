@@ -99,8 +99,6 @@ router.post('/withdrawal', authMiddleware, expressAsyncHandler(async(req: Reques
      return;
   }
 
-
-
   const reference = crypto.randomUUID();
 
   // Deduct amount from wallet
