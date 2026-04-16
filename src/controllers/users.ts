@@ -18,9 +18,15 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   const users = await sql`
     WITH UserRank AS (
-      SELECT id, username, email, phone, is_guest, is_rated, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at,
-             RANK() OVER (ORDER BY rating DESC) as rank
-      FROM users WHERE is_bot = false
+      SELECT u.id, u.username, u.email, u.phone, u.is_guest, u.is_rated, u.gold_medals, u.silver_medals, u.bronze_medals, u.tournaments_played, u.tournaments_won, u.image_url, u.games_played, u.games_won, u.rating, u.location, u.created_at, u.updated_at,
+             RANK() OVER (ORDER BY u.rating DESC) as rank,
+
+             w.balance
+      FROM users u
+
+      LEFT JOIN wallets w ON u.id = w.user_id
+
+      WHERE u.is_bot = false
     )
     SELECT *
     FROM UserRank
@@ -49,7 +55,7 @@ const updateUserProfile = asyncHandler(
     if (!phone && !location) {
       res.status(400);
       throw new Error(
-        "At least one field (phone or location) must be provided"
+        "At least one field (phone or location) must be provided",
       );
     }
 
@@ -69,7 +75,7 @@ const updateUserProfile = asyncHandler(
     }
 
     res.status(200).json(user[0]);
-  }
+  },
 );
 
 const getUsers = asyncHandler(async (req: Request, res: Response) => {

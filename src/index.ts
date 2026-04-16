@@ -173,7 +173,7 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! Last call! The Friday Spar Championship starts in 25 minutes. Registeration closes at 7:50PM. Format: Single Elimination. 
+        const messageTemplate = `Hi ${user.username}! Last call! The Friday Spar Championship starts in 30 minutes. Registeration closes at 7:50PM. Format: Single Elimination. 
 Join the competition & battle for the ₵50 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com if you haven't already!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
