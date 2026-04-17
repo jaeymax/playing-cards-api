@@ -99,6 +99,33 @@ CREATE TABLE game_chat_messages (
   created_at TIMESTAMP DEFAULT NOW() -- Timestamp
 );
 
+CREATE TABLE tournament_chat_messages (
+  id SERIAL PRIMARY KEY,
+  tournament_id INTEGER REFERENCES tournaments(id) ON DELETE CASCADE, -- Tournament ID
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- Sender ID
+  username VARCHAR(50) NOT NULL, -- Sender's username for easy display
+  message TEXT NOT NULL, -- Message content
+  created_at TIMESTAMP DEFAULT NOW() -- Timestamp
+);
+
+CREATE TABLE friend_chat_messages (
+  id SERIAL PRIMARY KEY,
+  sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- Sender ID
+  receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- Receiver ID
+  message TEXT NOT NULL, -- Message content
+  is_read BOOLEAN DEFAULT FALSE, -- Whether the receiver has read it
+  created_at TIMESTAMP DEFAULT NOW() -- Timestamp
+);
+
+CREATE TABLE spectator_chat_messages (
+  id SERIAL PRIMARY KEY,
+  game_id INTEGER REFERENCES games(id) ON DELETE CASCADE, -- Game room ID
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- Sender ID
+  username VARCHAR(50) NOT NULL, -- Sender's username for easy display
+  message TEXT NOT NULL, -- Message content
+  created_at TIMESTAMP DEFAULT NOW() -- Timestamp
+);
+
 
 CREATE TABLE private_chat_messages (
   id SERIAL PRIMARY KEY,

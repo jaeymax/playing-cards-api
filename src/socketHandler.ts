@@ -332,6 +332,25 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       console.log({user_id, username, avatar, mime_type, timestamp, audio, game_code});
     });
 
+    socket.on("tournamentChatMessage", async ({tournament_id, user_id, username, message, timestamp})=>{
+      console.log(`Message received in tournament ${tournament_id} from user ${user_id}: ${message}`);
+
+      //store the message in tournament_chat_messages table
+      try {
+        await sql`insert into tournament_chat_messages (tournament_id, user_id, username, message, created_at) values (${tournament_id}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+      } catch (error: any) {
+        console.error("Error storing tournament chat message:", error.message);
+      }
+
+      // Broadcast the message to all clients in the tournament room
+      socket.to(`tournament_${tournament_id}`).emit("tournamentChatMessage", {user_id, username, message, timestamp, tournament_id});
+      console.log({user_id, username, message, timestamp, tournament_id})
+
+    });
+
+    socket.on('typingTournamentChat', ({tournament_id, user_id, username})=>{
+      socket.to(`tournament_${tournament_id}`).emit('typingTournamentChat', {user_id, username, tournament_id});
+    });
 
     socket.on("disconnect", () => {
       console.log(`User ${userId} disconnected`)
