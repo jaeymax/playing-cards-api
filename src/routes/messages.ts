@@ -44,6 +44,25 @@ router.get("/games/:code", asyncHandler(async (req, res) => {
   res.json(messages);
 }));
 
+// get tournament chat messages
+router.get("/tournaments/:id", asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const messages = await sql`
+        SELECT 
+            m.id,
+            m.message,
+            m.created_at as timestamp,
+            u.id as user_id,
+            u.username,
+            u.image_url as avatar
+        FROM tournament_chat_messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.tournament_id = ${id}
+        ORDER BY m.created_at ASC
+    `;
+  res.json(messages);
+}));
+
 router.post("/game/:code", asyncHandler(async (req, res) => {
   const { code } = req.params;
   const { user_id, message } = req.body;
