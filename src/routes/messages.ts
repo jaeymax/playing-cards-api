@@ -44,6 +44,26 @@ router.get("/games/:code", asyncHandler(async (req, res) => {
   res.json(messages);
 }));
 
+// spectator game chat messages
+router.get('/spectator/:code', asyncHandler(async (req, res) => {
+  const { code } = req.params;
+  const messages = await sql`
+        SELECT 
+            m.id,
+            m.message,
+            m.created_at as timestamp,
+            u.id as user_id,
+            u.username,
+            u.image_url as avatar
+        FROM spectator_chat_messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.game_code = ${code}
+        ORDER BY m.created_at ASC
+    `;
+  res.json(messages);
+}));
+
+
 // get tournament chat messages
 router.get("/tournaments/:id", asyncHandler(async (req, res) => {
   const { id } = req.params;

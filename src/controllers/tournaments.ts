@@ -348,6 +348,15 @@ export const joinTournament = async (
     const userId = req.user?.userId;
     //console.log('user:', req.user);
 
+    if(!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Unauthorized: User ID not found in request",
+      });
+      return;
+    }
+
+
     // Validate tournament ID
     if (!tournamentId || isNaN(tournamentId)) {
       res.status(400).json({
@@ -372,16 +381,16 @@ export const joinTournament = async (
 
     const registrationFee = tournament[0].registration_fee;
 
-    const userWallet = await sql`
+    let userWallet = await sql`
       SELECT balance FROM wallets WHERE user_id = ${userId}
     `;
 
     if (userWallet.length === 0) {
-      res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-      return;
+      // create a wallet for the user with 0 balance
+      userWallet = await sql`
+        INSERT INTO wallets (user_id) VALUES (${userId})
+      RETURNING balance`;
+      console.log(`Wallet created for user ${userId} with 0 balance`);
     }
 
     if (parseFloat(userWallet[0].balance) < parseFloat(registrationFee)) {

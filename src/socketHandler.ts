@@ -324,6 +324,12 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
     });
 
+    // typing game_chat_messages
+    socket.on('typingGameChat', async({game_code, user_id, username, avatar})=>{
+      socket.to(game_code).emit('typingGameChat', {user_id, username, avatar, game_code});
+    })
+
+
     socket.on("voiceMessage", async ({user_id, username, avatar, mime_type, timestamp, audio, game_code})=>{
       console.log(`Voice message received in game ${game_code} from user ${user_id}`);
 
@@ -332,7 +338,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       console.log({user_id, username, avatar, mime_type, timestamp, audio, game_code});
     });
 
-    socket.on("tournamentChatMessage", async ({tournament_id, user_id, username, message, timestamp})=>{
+    socket.on("tournamentChatMessage", async ({tournament_id, user_id, avatar, username, message, timestamp})=>{
       console.log(`Message received in tournament ${tournament_id} from user ${user_id}: ${message}`);
 
       //store the message in tournament_chat_messages table
@@ -343,21 +349,49 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       }
 
       // Broadcast the message to all clients in the tournament room
-      socket.to(`tournament_${tournament_id}`).emit("tournamentChatMessage", {user_id, username, message, timestamp, tournament_id});
-      console.log({user_id, username, message, timestamp, tournament_id})
+      socket.to(`tournament_${tournament_id}`).emit("tournamentChatMessage", {user_id, avatar, username, message, timestamp, tournament_id});
+      console.log({user_id, avatar, username, message, timestamp, tournament_id})
 
     });
 
-    socket.on('typingTournamentChat', ({tournament_id, user_id, username})=>{
-      socket.to(`tournament_${tournament_id}`).emit('typingTournamentChat', {user_id, username, tournament_id});
+    socket.on('typingTournamentChat', ({tournament_id, user_id, avatar, username})=>{
+      socket.to(`tournament_${tournament_id}`).emit('typingTournamentChat', {user_id, avatar, username, tournament_id});
     });
+
+    // typing indicator for spectator chat
+    socket.on('typingSpectatorChat', ({game_code, user_id, avatar, username})=>{
+      socket.to(game_code).emit('typingSpectatorChat', {user_id, avatar, username, game_code});
+    });
+
+    // spectator messages
+    socket.on('spectatorChatMessage', async ({game_code, avatar, user_id, username, message, timestamp})=>{
+      console.log(`Spectator message received in game ${game_code} from user ${user_id}: ${message}`);
+
+      // Broadcast the spectator message to all clients in the game room
+      socket.to(game_code).emit("spectatorChatMessage", {user_id, avatar, username, message, timestamp, game_code});
+      console.log({user_id, avatar, username, message, timestamp, game_code})
+
+      // store the spectator message in spectator_chat_messages table
+      try {
+        await sql`insert into spectator_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+      } catch (error: any) {
+        console.error("Error storing spectator chat message:", error.message);
+      }
+
+    });
+
+    // spectator typing indicator
+    socket.on('typingSpectatorChat', ({game_code, user_id, username})=>{
+      socket.to(game_code).emit('typingSpectatorChat', {user_id, username, game_code});
+    });
+
 
     socket.on("disconnect", () => {
       console.log(`User ${userId} disconnected`)
       userSocketMap.delete(userId);
     });
   });
-
+  
   // Handle match found events
   matchmaker.on("matchFound", ({ gameCode, gameId, players }) => {
     console.log('players',players)
