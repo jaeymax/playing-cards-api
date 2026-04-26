@@ -662,6 +662,12 @@ const googleSignup = asyncHandler(
     RETURNING *
   `;
 
+  // create wallet for user
+  await sql`
+    INSERT INTO wallets (user_id) VALUES (${user[0].id})
+  `;
+
+
     const { accessToken, refreshToken } = generateTokens(user[0].id);
 
     // Store refresh token

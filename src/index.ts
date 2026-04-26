@@ -37,6 +37,7 @@ import { monitorEventLoopDelay } from "perf_hooks";
 import { TwilioClient } from "./config/twilio";
 import { sendSMS } from "./services/smsService";
 import expressAsyncHandler from "express-async-handler";
+const cron = require("node-cron");
 
 const h = monitorEventLoopDelay();
 h.enable();
@@ -57,6 +58,15 @@ const redisConfig = {
   host: "127.0.0.1",
   port: 6379,
 };
+
+cron.schedule("* * * * *", async () => {
+  console.log('Checking tournaments...');
+
+  const now = new Date();
+  console.log('date', now.toISOString());
+
+
+});
 
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
@@ -146,7 +156,7 @@ app.post(
 
       for (const user of users) {
         const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins tomorrow at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵50 prize. Register now on sparplay.com and don't miss out on the action! See you there!`;
+Challenge top players & compete for the ₵50 prize. Register now on sparplay.com/tournaments/23 and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
@@ -173,8 +183,8 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! Last call! The Friday Spar Championship starts in 30 minutes. Registeration closes at 7:50PM. Format: Single Elimination. 
-Join the competition & battle for the ₵50 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com if you haven't already!`;
+        const messageTemplate = `Hi ${user.username}! Last call! The Friday Spar Championship starts in 40 minutes. Registeration closes at 7:45PM. Format: Single Elimination. 
+Join the competition & battle for the ₵50 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/23 if you haven't already!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
