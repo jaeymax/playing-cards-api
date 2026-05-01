@@ -66,6 +66,8 @@ cron.schedule("* * * * *", async () => {
   const now = new Date();
   console.log('date', now.toISOString());
 
+  const bufferTime = 1 * 60 * 1000; // 1 minute buffer time
+
   try{
 
     const tournaments = await getAllUpcomingTournaments();
@@ -76,13 +78,13 @@ cron.schedule("* * * * *", async () => {
       const registrationCloseTime = new Date(tournament.registration_closing_date);
       const startTime = new Date(tournament.start_date);
       console.log(`Tournament ${tournament.name} - Registration Close: ${registrationCloseTime.toISOString()}, Start Time: ${startTime.toISOString()}`);
-  
-      if (now >= registrationCloseTime && !tournament.registration_closed) {
+      // add some buffer time to ensure registration is closed before starting the tournament
+      if (now.getTime() >= registrationCloseTime.getTime() + bufferTime && !tournament.registration_closed) {
         console.log(`Closing registration for tournament ${tournament.name}`);
         await closeTournamentRegistration(tournament.id);
       }
   
-        if (now >= startTime && !tournament.started) {
+        if (now.getTime() >= startTime.getTime() && !tournament.started) {
           console.log(`Starting tournament ${tournament.name}`);
           await startTournament(tournament.id);
         }
