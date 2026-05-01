@@ -456,6 +456,16 @@ export const closeTournamentRegistration = async (
       return;
     }
 
+    if (tournament[0].registration_closed) {
+      //console.log("Tournament registration is already closed.");
+      res.status(400).json({
+        success: false,
+        message: "Tournament registration is already closed",
+      });
+      return;
+    }
+
+
     // Fetch all participants
     const participants =
       await getSingleEliminationTournamentParticipants(tournamentId);
@@ -586,6 +596,15 @@ export const closeTournamentRegistration = async (
           status: match.status,
         });
       }
+
+      // Update tournament registration status
+       await sql`
+        UPDATE tournaments
+        SET registration_closed = true
+        WHERE id = ${tournamentId}
+      `;
+
+
     } catch (err) {
       console.error("Error during transaction:", err);
       throw err;
@@ -848,6 +867,15 @@ export const startTournament = async (
       SELECT status FROM tournaments WHERE id = ${tournamentId}
     `;
 
+    if (tournament[0].started) {
+     // throw new Error("Tournament has already started.");
+     res.status(400).json({
+      success: false,
+      message: "Tournament has already started",
+    });
+    return;
+    }
+
     if (!tournament.length) {
       res.status(404).json({
         success: false,
@@ -988,6 +1016,14 @@ export const startTournament = async (
       }
       await saveGame(code, game);
     }
+
+     // update tournament started to true
+    await sql`
+      UPDATE tournaments
+      SET started = true
+      WHERE id = ${tournamentId}
+    `;
+
 
     // Format rounds with aggregated player data
     const roundsMap: Record<number, any[]> = {};

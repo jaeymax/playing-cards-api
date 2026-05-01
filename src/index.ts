@@ -37,6 +37,7 @@ import { monitorEventLoopDelay } from "perf_hooks";
 import { TwilioClient } from "./config/twilio";
 import { sendSMS } from "./services/smsService";
 import expressAsyncHandler from "express-async-handler";
+import { closeTournamentRegistration, getAllUpcomingTournaments, startTournament } from "./services/tournament";
 const cron = require("node-cron");
 
 const h = monitorEventLoopDelay();
@@ -65,6 +66,30 @@ cron.schedule("* * * * *", async () => {
   const now = new Date();
   console.log('date', now.toISOString());
 
+  try{
+
+    const tournaments = await getAllUpcomingTournaments();
+  
+    console.log('upcoming tournaments', tournaments);
+  
+    for (const tournament of tournaments) {
+      const registrationCloseTime = new Date(tournament.registration_closing_date);
+      const startTime = new Date(tournament.start_date);
+      console.log(`Tournament ${tournament.name} - Registration Close: ${registrationCloseTime.toISOString()}, Start Time: ${startTime.toISOString()}`);
+  
+      if (now >= registrationCloseTime && !tournament.registration_closed) {
+        console.log(`Closing registration for tournament ${tournament.name}`);
+        await closeTournamentRegistration(tournament.id);
+      }
+  
+        if (now >= startTime && !tournament.started) {
+          console.log(`Starting tournament ${tournament.name}`);
+          await startTournament(tournament.id);
+        }
+    }
+  }catch(error){
+    console.error('Error checking tournaments:', error);
+  }
 
 });
 
@@ -156,7 +181,7 @@ app.post(
 
       for (const user of users) {
         const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins tomorrow at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵50 prize. Register now on sparplay.com/tournaments/23 and don't miss out on the action! See you there!`;
+Challenge top players & compete for the ₵50 prize. Register now on sparplay.com/tournaments/24 and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);

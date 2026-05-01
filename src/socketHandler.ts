@@ -7,7 +7,7 @@ import { getGameByCode } from "./utils/gameFunctions";
 import { Game } from "../types";
 
 export const userSocketMap = new Map();
-
+export const onlineUsers: any[] = [];
 
 async function acquireLock(gameCode:string, timeout = 5000) {
   const lockKey = `lock:${gameCode}`;
@@ -26,16 +26,26 @@ async function releaseLock(gameCode:string) {
 export const initializeSocketHandler = (serverSocket: Server) => {
   serverSocket.on("connection", (socket: Socket) => {
     const userId = socket.handshake.auth.userId;
+    const username = socket.handshake.auth.username || "Unknown";
     
     if(!userId){
       socket.disconnect(true);
       return;
     }
 
-  
+    onlineUsers.push({ user_id: userId, username, socketId: socket.id, status:"Active" });
 
     console.log(`User connected: ${userId} (socket ${socket.id})`);
     userSocketMap.set(userId, socket.id);
+
+
+    // emit status change of online users to all clients
+    serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
+
+    socket.on('getOnlineUsers', ()=>{
+      console.log('Online users requested');
+      socket.emit("onlineUsers", onlineUsers);
+    })
     
     socket.on("message", async (message) => {
       console.log(`Message received: ${message}`);
@@ -388,6 +398,13 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
     socket.on("disconnect", () => {
       console.log(`User ${userId} disconnected`)
+
+      const index = onlineUsers.findIndex((user) => user.user_id === userId);
+      if (index !== -1) {
+        onlineUsers.splice(index, 1);
+      }
+
+      serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
       userSocketMap.delete(userId);
     });
   });
