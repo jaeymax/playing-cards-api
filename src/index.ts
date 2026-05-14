@@ -60,8 +60,43 @@ const redisConfig = {
   port: 6379,
 };
 
-cron.schedule("* * * * *", async () => {
-  console.log('Checking tournaments...');
+// cron.schedule("* * * * *", async () => {
+//   console.log('Checking tournaments...');
+
+//   const now = new Date();
+//   console.log('date', now.toISOString());
+
+//   const bufferTime = 1 * 60 * 1000; // 1 minute buffer time
+
+//   try{
+
+//     const tournaments = await getAllUpcomingTournaments();
+  
+//     console.log('upcoming tournaments', tournaments);
+  
+//     for (const tournament of tournaments) {
+//       const registrationCloseTime = new Date(tournament.registration_closing_date);
+//       const startTime = new Date(tournament.start_date);
+//       console.log(`Tournament ${tournament.name} - Registration Close: ${registrationCloseTime.toISOString()}, Start Time: ${startTime.toISOString()}`);
+//       // add some buffer time to ensure registration is closed before starting the tournament
+//       if (now.getTime() >= registrationCloseTime.getTime() + bufferTime && !tournament.registration_closed) {
+//         console.log(`Closing registration for tournament ${tournament.name}`);
+//         await closeTournamentRegistration(tournament.id);
+//       }
+  
+//         if (now.getTime() >= startTime.getTime() && !tournament.started) {
+//           console.log(`Starting tournament ${tournament.name}`);
+//           await startTournament(tournament.id);
+//         }
+//     }
+//   }catch(error){
+//     console.error('Error checking tournaments:', error);
+//   }
+
+// });
+
+cron.schedule("52 19 * * *", async () => {
+  console.log('Checking tournaments regsitration closure...');
 
   const now = new Date();
   console.log('date', now.toISOString());
@@ -84,6 +119,33 @@ cron.schedule("* * * * *", async () => {
         await closeTournamentRegistration(tournament.id);
       }
   
+        
+    }
+  }catch(error){
+    console.error('Error checking tournaments:', error);
+  }
+
+});
+
+cron.schedule("0 20 * * *", async () => {
+  console.log('Checking tournaments start times...');
+
+  const now = new Date();
+  console.log('date', now.toISOString());
+
+  const bufferTime = 1 * 60 * 1000; // 1 minute buffer time
+
+  try{
+
+    const tournaments = await getAllUpcomingTournaments();
+  
+    console.log('upcoming tournaments', tournaments);
+  
+    for (const tournament of tournaments) {
+      const registrationCloseTime = new Date(tournament.registration_closing_date);
+      const startTime = new Date(tournament.start_date);
+      console.log(`Tournament ${tournament.name} - Registration Close: ${registrationCloseTime.toISOString()}, Start Time: ${startTime.toISOString()}`);
+  
         if (now.getTime() >= startTime.getTime() && !tournament.started) {
           console.log(`Starting tournament ${tournament.name}`);
           await startTournament(tournament.id);
@@ -94,6 +156,8 @@ cron.schedule("* * * * *", async () => {
   }
 
 });
+
+
 
 const server = http.createServer(app);
 export const resend = new Resend(process.env.RESEND_API_KEY);
@@ -210,8 +274,8 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! Last call! The Friday Spar Championship starts in 40 minutes. Registeration closes at 7:45PM. Format: Single Elimination. 
-Join the competition & battle for the ₵50 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/23 if you haven't already!`;
+        const messageTemplate = `Hi ${user.username}! Last call! The Saturday Spar Challenge starts in an hour. Registration closes at 7:50PM. Entry Fee: ₵5. Format: Single Elimination. 
+Join the competition & battle for the ₵80 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/26 if you haven't already!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);

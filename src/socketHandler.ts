@@ -33,23 +33,23 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       return;
     }
 
-    onlineUsers.push({ user_id: userId, username, socketId: socket.id, status:"Active" });
+    //onlineUsers.push({ user_id: userId, username, socketId: socket.id, status:"Active" });
 
     console.log(`User connected: ${userId} (socket ${socket.id})`);
     userSocketMap.set(userId, socket.id);
 
 
     // emit status change of online users to all clients
-    serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
+    //serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
 
-    socket.on('getOnlineUsers', ()=>{
-      console.log('Online users requested');
-      socket.emit("onlineUsers", onlineUsers);
-    })
+    // socket.on('getOnlineUsers', ()=>{
+    //   console.log('Online users requested');
+    //   socket.emit("onlineUsers", onlineUsers);
+    // })
     
     socket.on("message", async (message) => {
       console.log(`Message received: ${message}`);
-
+      
       //store the message in global_chat_messages table
       try {
         await sql`insert into global_chat_messages (user_id, message) values (${message.sender_id}, ${message.text})`;
@@ -330,6 +330,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
       // Broadcast the message to all clients in the game room
       socket.to(game_code).emit("chatMessage", {user_id, type:"text", username, avatar, timestamp, message, game_code});
+      socket.to(game_code).emit("spectatorChatMessage", {user_id, avatar, username, message, timestamp, game_code});
       console.log({user_id, username, avatar, timestamp, message, game_code})
 
     });
@@ -372,13 +373,16 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     socket.on('typingSpectatorChat', ({game_code, user_id, avatar, username})=>{
       socket.to(game_code).emit('typingSpectatorChat', {user_id, avatar, username, game_code});
     });
-
+    
     // spectator messages
     socket.on('spectatorChatMessage', async ({game_code, avatar, user_id, username, message, timestamp})=>{
       console.log(`Spectator message received in game ${game_code} from user ${user_id}: ${message}`);
-
+      
+      
+      
       // Broadcast the spectator message to all clients in the game room
       socket.to(game_code).emit("spectatorChatMessage", {user_id, avatar, username, message, timestamp, game_code});
+      socket.to(game_code).emit("chatMessage", {user_id, type:"text", username, avatar, timestamp, message, game_code});
       console.log({user_id, avatar, username, message, timestamp, game_code})
 
       // store the spectator message in spectator_chat_messages table
