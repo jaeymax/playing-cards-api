@@ -324,6 +324,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
       //store the message in game_chat_messages table
       try {
         await sql`insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${type}, ${timestamp})`;
+        await sql`insert into spectator_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
       } catch (error: any) {
         console.error("Error storing game message:", error.message);
       }
@@ -387,6 +388,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
       // store the spectator message in spectator_chat_messages table
       try {
+        await sql`insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, 'text', ${timestamp})`;
         await sql`insert into spectator_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
       } catch (error: any) {
         console.error("Error storing spectator chat message:", error.message);
