@@ -127,6 +127,8 @@ cron.schedule("52 19 * * *", async () => {
 
 });
 
+
+
 cron.schedule("0 20 * * *", async () => {
   console.log('Checking tournaments start times...');
 
@@ -157,6 +159,103 @@ cron.schedule("0 20 * * *", async () => {
 
 });
 
+
+cron.schedule("30 18 * * *", async () => {
+  console.log('Checking if any tournaments is starting today and sending notifications...');
+
+  const now = new Date();
+  console.log('date', now.toISOString());
+
+  const bufferTime = 1 * 60 * 1000; // 1 minute buffer time
+
+  try{
+
+    const tournaments = await getAllUpcomingTournaments();
+  
+    console.log('upcoming tournaments', tournaments);
+  
+    for (const tournament of tournaments) {
+     const startTime = new Date(tournament.start_date);
+     // tournaments usually start at 8PM, so we check around 7:30PM to send notifications to users
+        if (now.getDate() === startTime.getDate() && now.getMonth() === startTime.getMonth() && now.getFullYear() === startTime.getFullYear()) {
+          console.log(`Sending notifications for tournament ${tournament.name} starting today`);
+          // send notifications to users about the tournament starting today
+          // you can implement a function to send notifications here, e.g. sendTournamentStartNotifications(tournament);
+          sendTournamentStartNotifications(tournament);
+        }
+    }
+  }catch(error){
+    console.error('Error checking tournaments:', error);
+  }
+
+});
+
+
+const sendTournamentStartNotifications = async (tournament: any) => {
+  try {
+
+   // const testId = 48;
+    const users = await sql`
+        SELECT username, phone FROM users WHERE phone IS NOT NULL
+    `;
+
+    // if its friday then the cash prize is 30ghc, if its saturday then the cash prize is 90ghc with first position getting 60ghc and second position getting 30ghc, if its sunday then there is no cash prize you can customize the message based on the tournament details
+
+      const tournamentDate = new Date(tournament.start_date);
+    const dayOfWeek = tournamentDate.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
+
+    let prizeMessage = "";
+
+    const entryMessage =
+  Number(tournament.registration_fee) === 0
+    ? "Free"
+    : `GHS ${Number(tournament.registration_fee)}`;
+
+    switch (dayOfWeek) {
+      case 5: // Friday
+        prizeMessage =
+          "💰 Prize Pool: GHS 30 winner-takes-all!";
+        break;
+
+      case 6: // Saturday
+        prizeMessage =
+          "🏆 Prize Pool: GHS 90! 1st Place wins GHS 60 and 2nd Place wins GHS 30.";
+        break;
+
+      case 0: // Sunday
+        prizeMessage =
+          "🎮 This is our free community tournament. No cash prizes, just fun, bragging rights, and a chance to sharpen your skills!";
+        break;
+
+      default:
+        prizeMessage = "";
+    }
+
+    for (const user of users) {
+     // const messageTemplate = `Hi ${user.username}! Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Don't forget to join the lobby before the start time to avoid forfeiting. Register now on sparplay.com/tournaments/${tournament.id} if you haven't already!`;
+       const messageTemplate = `Hi ${user.username}!
+
+Just a reminder that the ${tournament.name} tournament starts today at ${tournamentDate.toLocaleTimeString([], {
+  hour: "2-digit",
+  minute: "2-digit",
+})}.
+
+🎮 Format: ${tournament.format}
+🎟️ Entry: ${entryMessage}
+
+${prizeMessage}
+
+Be sure to join the lobby before the start time to avoid forfeiting your spot.
+
+Register now: sparplay.com/tournaments/${tournament.id} if you want to participate!`;
+      const phone = "233" + user.phone.substr(1);
+      console.log("realphone", phone);
+      await sendSMS(phone, messageTemplate);
+    }
+  } catch (error) {
+    console.error("Error sending tournament start notifications:", error);
+  }
+};
 
 
 const server = http.createServer(app);
@@ -274,8 +373,7 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! Last call! The Saturday Spar Challenge starts in an hour. Registration closes at 7:50PM. Entry Fee: ₵5. Format: Single Elimination. 
-Join the competition & battle for the ₵80 prize. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/26 if you haven't already!`;
+         const messageTemplate = `Hi ${user.username}! Last call! The Saturday Spar Challenge starts at 8:00 PM. Prize pool: 90 GHC. First Position: 60 GHC. Second Position: 30 GHC. Entry is 5 GHC. Registration closes at 7:50PM. Format: Single Elimination. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/33 if you haven't already!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
