@@ -231,8 +231,8 @@ export const getLatestFeaturedTournament = async (
 
     const tournament = await sql`
       SELECT * FROM tournaments 
-      WHERE is_featured = 'true' 
-      ORDER BY start_date DESC
+      WHERE is_featured = 'true' and status IN ('upcoming', 'ongoing') 
+      ORDER BY start_date ASC
       LIMIT 1
     `;
 
