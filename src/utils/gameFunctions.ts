@@ -3,7 +3,7 @@ import { Game, GamePlayer } from "../../types";
 import sql from "../config/db";
 import { mixpanel, redis, matchForfeiter } from "../index";
 import { serverSocket } from "../index";
-import { updateRatings } from "../utils/rating";
+import { updateRatings } from "../../rating";
 import {
   advanceSingleEliminationTournamentToNextRound,
   advanceSwissTournamentToNextRound,
@@ -20,6 +20,7 @@ import {
   markGameAsEndedAndCompleted,
   updateGamePlayersScores,
   updateGamesPlayedForGamePlayers,
+  updateLoserWinningStreak,
   updateWinnerWonCount,
 } from "../utils";
 
@@ -27,7 +28,7 @@ export const getDealingSequence = (game: any) => {
   const dealingSequence: any[] = [];
 
   const dealerPosition = game.players.find(
-    (player: any) => player.is_dealer == true
+    (player: any) => player.is_dealer == true,
   )?.position;
 
   let currentPlayerPosition = dealerPosition;
@@ -35,7 +36,7 @@ export const getDealingSequence = (game: any) => {
   while (true) {
     let nextPlayerPosition = (currentPlayerPosition + 1) % game.player_count;
     const player = game.players.find(
-      (player: any) => player.position == nextPlayerPosition
+      (player: any) => player.position == nextPlayerPosition,
     ).id;
     dealingSequence.push(player);
     currentPlayerPosition = nextPlayerPosition;
@@ -87,12 +88,12 @@ export const dealCards = async (game: any) => {
   game.current_player_position =
     (game.current_player_position + 1) % game.player_count;
   game.current_turn_user_id = game.players.find(
-    (player: any) => player.position == game.current_player_position
+    (player: any) => player.position == game.current_player_position,
   )?.user?.id;
   if (game.is_rated) {
     await matchForfeiter.scheduleForfeit(
       game.code,
-      game.turn_timeout_seconds * 1000
+      game.turn_timeout_seconds * 1000,
     );
   }
 };
@@ -120,7 +121,7 @@ export const playCard = async (
   game: any,
   card_id: number,
   player_id: number,
-  socket: any
+  socket: any,
 ) => {
   const player = game.players.find((player: any) => player.id === player_id);
   if (player.position !== game.current_player_position) {
@@ -165,7 +166,7 @@ export const playCard = async (
         "gameMessage",
         `The leading suit of the current trick is ${leading_suit.toLowerCase()}, you have a ${leading_suit
           .toLowerCase()
-          .slice(0, -1)} you must follow suit`
+          .slice(0, -1)} you must follow suit`,
       );
       return;
     }
@@ -185,7 +186,7 @@ export const playCard = async (
   console.log(
     `Room ${game.code} has ${
       serverSocket.sockets.adapter.rooms.get(game.code)?.size
-    } players connected`
+    } players connected`,
   );
 
   serverSocket.to(game.code).emit("playedCard", {
@@ -201,7 +202,7 @@ export const playCard = async (
   if (game.is_rated) {
     await matchForfeiter.scheduleForfeit(
       game.code,
-      game.turn_timeout_seconds * 1000
+      game.turn_timeout_seconds * 1000,
     );
   }
 
@@ -212,17 +213,17 @@ export const playCard = async (
   }
 
   const before_player = game.players.find(
-    (p: any) => p.user.id == game.current_turn_user_id
+    (p: any) => p.user.id == game.current_turn_user_id,
   )?.user.username;
 
   const current_turn_user_id = game.players.find(
-    (p: any) => p.position === game.current_player_position
+    (p: any) => p.position === game.current_player_position,
   )?.user.id;
 
   game.current_turn_user_id = current_turn_user_id;
 
   const after_player = game.players.find(
-    (p: any) => p.user.id == game.current_turn_user_id
+    (p: any) => p.user.id == game.current_turn_user_id,
   ).user.username;
 
   await saveGame(game.code, game);
@@ -241,7 +242,7 @@ const isHigherCard = (card: any, current_trick: any) => {
   if (current_card_suit !== leading_suit) return false;
 
   const current_winning_card = current_trick.cards.find(
-    (card: any) => card.player_position === current_trick.leader_position
+    (card: any) => card.player_position === current_trick.leader_position,
   );
   const current_winning_card_value = getCardValue(current_winning_card);
   const card_value = getCardValue(card);
@@ -272,7 +273,7 @@ const completeTrick = async (game: any) => {
 const endGame = async (game: any) => {
   const final_trick = game.completed_tricks[game.completed_tricks.length - 1];
   const winning_card = final_trick.cards.find(
-    (card: any) => card.player_position === final_trick.leader_position
+    (card: any) => card.player_position === final_trick.leader_position,
   );
 
   let points = 1;
@@ -291,11 +292,12 @@ const endGame = async (game: any) => {
       game.completed_tricks,
       game.completed_tricks.length - 1,
       "",
-      game.completed_tricks.length - 1
+      game.completed_tricks.length - 1,
     );
   }
 
   const winner = getMatchWinner(game) as GamePlayer;
+  const loser = getMatchLoser(game) as GamePlayer;
   winner.score += points;
   const tournament = await isTournamentMatch(game.id);
   await updateGamePlayersScores(game);
@@ -315,6 +317,7 @@ const endGame = async (game: any) => {
     await markGameAsEndedAndCompleted(game.id);
     await updateGamesPlayedForGamePlayers(game.id);
     await updateWinnerWonCount(winner.user.id);
+    await updateLoserWinningStreak(loser.user.id);
     await saveGame(game.code, game);
 
     console.log("tournamentData", tournament);
@@ -332,7 +335,7 @@ const endGame = async (game: any) => {
           await sql`SELECT rating from users WHERE id = ${player.user.id}`;
         const newRating = player.user.rating;
         console.log(
-          `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`
+          `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`,
         );
         await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
         const ratingChange = newRating - oldRating[0].rating;
@@ -343,7 +346,7 @@ const endGame = async (game: any) => {
 
     if (tournament) {
       console.log(
-        "this game is part of a tournament match, reporting result to tournament system"
+        "this game is part of a tournament match, reporting result to tournament system",
       );
       const tournamentFormat = tournament.format;
       console.log("tournamentFormat", tournamentFormat);
@@ -354,11 +357,11 @@ const endGame = async (game: any) => {
           game.id,
           winner.user.id,
           loser.user.id,
-          tournament.id
+          tournament.id,
         );
 
         const lobbyData = await getSingleEliminationTournamentLobbyData(
-          tournament.id
+          tournament.id,
         );
 
         serverSocket
@@ -368,7 +371,7 @@ const endGame = async (game: any) => {
         await advanceSingleEliminationTournamentToNextRound(
           tournament.id,
           tournament.current_round_number,
-          serverSocket
+          serverSocket,
         );
       } else if (tournamentFormat == "Swiss") {
         const loser = getMatchLoser(game) as GamePlayer;
@@ -376,7 +379,7 @@ const endGame = async (game: any) => {
           game.id,
           winner.user.id,
           loser.user.id,
-          tournament.id
+          tournament.id,
         );
         const lobbyData = await getSwissTournamentLobbyData(tournament.id);
         serverSocket
@@ -386,7 +389,7 @@ const endGame = async (game: any) => {
         await advanceSwissTournamentToNextRound(
           tournament.id,
           tournament.current_round_number,
-          serverSocket
+          serverSocket,
         );
       }
     }
@@ -402,7 +405,7 @@ const endGame = async (game: any) => {
       const tournamentFormat = tournament.format;
       if (tournamentFormat == "Single Elimination") {
         const lobbyData = await getSingleEliminationTournamentLobbyData(
-          tournament.id
+          tournament.id,
         );
         serverSocket
           .to(`tournament_${tournament.id}`)
@@ -421,14 +424,14 @@ const endGame = async (game: any) => {
 
 const allCardsPlayed = (game: any) => {
   const dealt_cards = game.cards.filter(
-    (card: any) => card.status !== "in_drawpile"
+    (card: any) => card.status !== "in_drawpile",
   );
   return dealt_cards.every((card: any) => card.status === "played");
 };
 
 export const getPlayerHand = (game: any, player_id: number) => {
   const hand = game.cards.filter(
-    (card: any) => card.player_id === player_id && card.status === "in_hand"
+    (card: any) => card.player_id === player_id && card.status === "in_hand",
   );
   return hand;
 };
@@ -459,14 +462,14 @@ const calculateSpecialPoints = (
   completed_tricks: any,
   trick_number: number,
   next_card_suit: string,
-  last_trick_index: number
+  last_trick_index: number,
 ): number => {
   if (trick_number <= 0) return 0;
 
   const trick = completed_tricks[trick_number];
 
   const winning_card = trick.cards.find(
-    (card: any) => card.player_position === trick.leader_position
+    (card: any) => card.player_position === trick.leader_position,
   );
   const winning_card_suit = getSuit(winning_card);
   const winning_card_rank = getRank(winning_card);
@@ -482,7 +485,7 @@ const calculateSpecialPoints = (
         completed_tricks,
         trick_number - 1,
         winning_card_suit,
-        last_trick_index
+        last_trick_index,
       )
     );
   }
@@ -491,7 +494,7 @@ const calculateSpecialPoints = (
     // check if the 7 was used to counter a six
     //  console.log("trick cards", trick.cards);
     let sameSuitCards = trick.cards.filter(
-      (card: any) => card.card.suit == trick.leading_suit
+      (card: any) => card.card.suit == trick.leading_suit,
     );
     //console.log("same suit cards", sameSuitCards);
     let isaSix = sameSuitCards.find((card: any) => card.card.rank == "6");
@@ -500,11 +503,11 @@ const calculateSpecialPoints = (
     if (isaSix) {
       let indexOfSix = trick.cards.findIndex(
         (card: any) =>
-          card.card.rank == "6" && card.card.suit == trick.leading_suit
+          card.card.rank == "6" && card.card.suit == trick.leading_suit,
       );
       let indexOfSeven = trick.cards.findIndex(
         (card: any) =>
-          card.card.rank == "7" && card.card.suit == trick.leading_suit
+          card.card.rank == "7" && card.card.suit == trick.leading_suit,
       );
       if (indexOfSeven < indexOfSix) {
         //console.log("the seven was played before the six");
@@ -514,7 +517,7 @@ const calculateSpecialPoints = (
             completed_tricks,
             trick_number - 1,
             winning_card_suit,
-            last_trick_index
+            last_trick_index,
           )
         );
       } else {
@@ -532,7 +535,7 @@ const calculateSpecialPoints = (
         completed_tricks,
         trick_number - 1,
         winning_card_suit,
-        last_trick_index
+        last_trick_index,
       )
     );
   }
@@ -541,7 +544,7 @@ const calculateSpecialPoints = (
 };
 
 export const getSingleEliminationTournamentLobbyData = async (
-  tournamentId: number
+  tournamentId: number,
 ) => {
   // Fetch tournament details
   const tournament = await sql`
@@ -639,7 +642,7 @@ export const getSingleEliminationTournamentLobbyData = async (
 
   const standings = await getSingleEliminationTournamentStandings(
     tournamentId,
-    tournament[0].status
+    tournament[0].status,
   );
 
   return {
@@ -680,7 +683,7 @@ export async function getGameByCode(gameCode: string): Promise<any> {
 export async function createGamePlayer(
   gameId: number,
   userId: number,
-  position: number
+  position: number,
 ) {
   try {
     const player =

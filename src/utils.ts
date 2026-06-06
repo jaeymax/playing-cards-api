@@ -8,6 +8,22 @@ const updateWinnerWonCount = async (winnerId: number) => {
       SET games_won = games_won + 1
       WHERE id = ${winnerId}
    `;
+
+   // update winning streak for winner, add 1 to current winning streak, and update max winning streak if current winning streak is greater than max winning streak
+   await sql`
+      UPDATE users
+      SET current_winning_streak = current_winning_streak + 1,
+          max_winning_streak = GREATEST(current_winning_streak + 1, max_winning_streak)
+      WHERE id = ${winnerId}
+   `;
+};
+
+const updateLoserWinningStreak = async (loserId: number) => {
+  await sql`
+      UPDATE users
+      SET current_winning_streak = 0
+      WHERE id = ${loserId}
+   `;
 };
 
 const markGameAsEndedAndCompleted = async (gameId: number) => {
@@ -129,6 +145,7 @@ const createNotification = async (
 
 export {
   updateWinnerWonCount,
+  updateLoserWinningStreak,
   markGameAsEndedAndCompleted,
   updateGamesPlayedForGamePlayers,
   getMatchWinner,

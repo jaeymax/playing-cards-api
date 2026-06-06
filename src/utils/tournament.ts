@@ -924,17 +924,29 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         tournamentId
       );
 
-      ratingChange += 2; // add 2 rating points for participation
+      const participationReward = 2;
+      ratingChange += participationReward; // add 2 rating points for participation
 
       const ratingMesssageTitle =
         ratingChange >= 0 ? "Rating Increased 📈" : "Rating Decreased 📉";
       const ratingMessage = `Your performance in the tournament has resulted in a rating change of ${ratingChange >= 0 ? "+" : ""}${ratingChange}. Keep competing to climb the leaderboard!. Your leaderboard position have been updated`;
 
-      await sql`
-      UPDATE users
-      SET rating = rating + 2
-      WHERE id = ${participant.id}
-      `;
+      // update peak rating also to be max of current rating and peak rating
+
+
+      await sql.transaction((sql) => [
+        sql`
+       UPDATE users
+       SET peak_rating = GREATEST(rating + ${participationReward}, peak_rating)
+       WHERE id = ${participant.id}
+       `,
+       sql`
+       UPDATE users
+       SET rating = rating + ${participationReward}
+       WHERE id = ${participant.id}
+       `
+    ]);
+      
 
       createNotification(
         participant.id,

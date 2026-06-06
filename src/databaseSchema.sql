@@ -7,7 +7,12 @@ CREATE TABLE users (
   password_hash TEXT NOT NULL, 
   image_url TEXT DEFAULT NULL,
   rating INTEGER DEFAULT 1000, 
+  peak_rating INTEGER DEFAULT 1000,
+  max_winning_streak INTEGER DEFAULT 0,
+  current_winning_streak INTEGER DEFAULT 0,
+  podium_finishes INTEGER DEFAULT 0,
   is_rated BOOLEAN DEFAULT false,
+  country_code CHAR(2) DEFAULT NULL,
   tournaments_played INTEGER DEFAULT 0,
   tournaments_won INTEGER DEFAULT 0,
   gold_medals INTEGER DEFAULT 0,
@@ -21,6 +26,11 @@ CREATE TABLE users (
   games_won INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE countries (
+  code VARCHAR(2) PRIMARY KEY, -- ISO 3166-1 alpha-2 country code
+  name VARCHAR(100) NOT NULL
 );
 
 

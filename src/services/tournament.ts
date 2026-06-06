@@ -28,7 +28,7 @@ export const getTournamentById = async (id: string) => {
 
 export const getAllUpcomingTournaments = async () => {
   const tournaments =
-    await sql`SELECT id, format, name, registration_closed, started, start_date, registration_closing_date FROM tournaments WHERE status = 'upcoming' ORDER BY start_date ASC`;
+    await sql`SELECT id, format, name, registration_closed, registration_fee, start_date, registration_closing_date FROM tournaments WHERE status = 'upcoming' ORDER BY start_date ASC`;
   return tournaments;
 };
 
