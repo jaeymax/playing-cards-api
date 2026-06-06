@@ -232,7 +232,7 @@ export const getLatestFeaturedTournament = async (
     const tournament = await sql`
       SELECT * FROM tournaments 
       WHERE is_featured = 'true' 
-      ORDER BY created_at DESC
+      ORDER BY start_date DESC
       LIMIT 1
     `;
 
