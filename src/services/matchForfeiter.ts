@@ -13,7 +13,7 @@ import {
   advanceSwissTournamentToNextRound,
   getSwissTournamentLobbyData,
 } from "../utils/tournament";
-import { updateRatings } from "../../rating";
+import { updateRatings } from "../utils/rating";
 
 export default class MatchForfeiter {
   private queue: Queue;

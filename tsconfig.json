@@ -1,5 +1,5 @@
 {
-  "include": ["tests", "src", "rating.ts"],
+  "include": ["tests", "src", "src/utils/rating.ts"],
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */
 
