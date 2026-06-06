@@ -3,7 +3,7 @@ import { Game, GamePlayer } from "../../types";
 import sql from "../config/db";
 import { mixpanel, redis, matchForfeiter } from "../index";
 import { serverSocket } from "../index";
-import { updateRatings } from "../../rating";
+import { updateRatings } from "./rating";
 import {
   advanceSingleEliminationTournamentToNextRound,
   advanceSwissTournamentToNextRound,
