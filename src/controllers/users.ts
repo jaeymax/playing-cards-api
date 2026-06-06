@@ -10,6 +10,7 @@ interface AuthRequest extends Request {
 
 const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.user?.userId;
+  console.log("Fetching profile for user ID:", userId);
 
   if (!userId) {
     res.status(401);
@@ -18,14 +19,12 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   const users = await sql`
     WITH UserRank AS (
-      SELECT u.id, u.username, u.email, u.phone, u.is_guest, u.is_rated, u.gold_medals, u.silver_medals, u.bronze_medals, u.tournaments_played, u.tournaments_won, u.image_url, u.games_played, u.games_won, u.rating, u.location, u.created_at, u.updated_at,
-             RANK() OVER (ORDER BY u.rating DESC) as rank,
+      SELECT u.id, u.username, u.email, u.phone, u.is_guest, u.is_rated, u.peak_rating, u.max_winning_streak, u.podium_finishes, u.current_winning_streak, u.gold_medals, u.silver_medals, u.bronze_medals, u.tournaments_played, u.tournaments_won, u.image_url, u.games_played, u.games_won, u.rating, u.location, u.created_at, u.updated_at,
+             RANK() OVER (ORDER BY u.rating DESC) as global_rank,
 
              w.balance
       FROM users u
-
       LEFT JOIN wallets w ON u.id = w.user_id
-
       WHERE u.is_bot = false
     )
     SELECT *
@@ -50,12 +49,12 @@ const updateUserProfile = asyncHandler(
       throw new Error("Not authorized");
     }
 
-    const { phone, location } = req.body;
+    const { phone, location, country } = req.body;
 
-    if (!phone && !location) {
+    if (!phone && !country) {
       res.status(400);
       throw new Error(
-        "At least one field (phone or location) must be provided",
+        "At least one field (phone or country) must be provided",
       );
     }
 
@@ -63,7 +62,7 @@ const updateUserProfile = asyncHandler(
       UPDATE users
       SET 
         phone = COALESCE(${phone}, phone),
-        location = COALESCE(${location}, location),
+        country_code = COALESCE(${country}, country_code),
         updated_at = NOW()
       WHERE id = ${userId}
       RETURNING id, username, email, phone, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at

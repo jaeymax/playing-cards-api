@@ -335,6 +335,39 @@ app.post(
 );
 
 app.post(
+  "/api/tournament-failed-notification",
+  expressAsyncHandler(async (req, res) => {
+    const { tournamentName } = req.body;
+
+    // list of phone numbers to send the notification to, you can fetch this from your database based on your requirements
+    const phoneNumbers = ["233544136394", "233538599553", "233503145542", "233242825836", "233559187525", "233505954496", "233241586158", "233542169953", "233542901511", "233592409107", "233554839565", "233552262000", "233507726059", "233205479345", "233558384883", "233552700648", "233538159551", "233503408628", "233508793292", "233544296549", "233503860625", "233503020301", "233538776736", "233206870946", "233598064978", "233200397987", "233542697025", "233550350303", "233595329956", "233544159671", "233508742502", "233206508435", "233555503026", "233257772464", "233507252222", "233257509994", "233504063271"]; // replace with actual phone numbers
+
+    try {
+
+      for (const user of phoneNumbers) {
+        const messageTemplate = `Hi! Just a reminder that the Sunday Community Tournament starts today at 08:00PM. 
+             
+        Format: Swiss
+        Entry: Free
+
+        This is our free community tournament. No cash prizes, just fun, bragging rights, and a chance to sharpen your skills! Join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/34 if you want to participate!
+        `;
+        const phone = user; // Assuming the phone numbers in the list are already in the correct format with country code
+        console.log("realphone", phone);
+        await sendSMS(phone, messageTemplate);
+      }
+    } catch (error) {
+      console.error("Error sending tournament reminder notifications:", error);
+    }
+
+    res.json({
+      success: true,
+      message: "Tournament reminder notifications sent successfully",
+    });
+  })
+);
+
+app.post(
   "/api/tournament-notification-reminder",
   expressAsyncHandler(async (req, res) => {
     const { tournamentName } = req.body;
