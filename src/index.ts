@@ -61,6 +61,7 @@ const serviceAccount = require(path.join(__dirname, "../private_keys/serviceAcco
 //   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
 //   cert: fs.readFileSync("certs/192.168.43.218.pem"),
 // }
+console.log('test')
 
 const redisConfig = {
   host: "127.0.0.1",
