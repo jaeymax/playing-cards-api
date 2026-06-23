@@ -34,11 +34,16 @@ import Mixpanel from "mixpanel";
 import fs from "fs";
 import MatchForfeiter from "./services/matchForfeiter";
 import { monitorEventLoopDelay } from "perf_hooks";
-import { TwilioClient } from "./config/twilio";
+//import { TwilioClient } from "./config/twilio";
 import { sendSMS } from "./services/smsService";
 import expressAsyncHandler from "express-async-handler";
 import { closeTournamentRegistration, getAllUpcomingTournaments, startTournament } from "./services/tournament";
+//import admin from "firebase-admin"
+
 const cron = require("node-cron");
+const admin = require("firebase-admin");
+
+//console.log('admin', admin);
 
 const h = monitorEventLoopDelay();
 h.enable();
@@ -50,15 +55,52 @@ dotenv.config();
 
 export const app: Express = express();
 
-// const options = {
-//   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
-//   cert: fs.readFileSync("certs/192.168.43.218.pem"),
-// }
+const serviceAccount = require("../private_keys/serviceAccountKey.json");
+const options = {
+  key: fs.readFileSync("certs/192.168.43.218-key.pem"),
+  cert: fs.readFileSync("certs/192.168.43.218.pem"),
+}
 
 const redisConfig = {
   host: "127.0.0.1",
   port: 6379,
 };
+
+admin.initializeApp({
+  credential: admin.cert(serviceAccount)
+});
+
+
+const testPushNotification = async () => {
+  await admin.messaging().send({
+  
+   token: "",
+  
+   notification:{
+    title:"Spar Tournament",
+    body:"Your match starts in 15 minutes"
+   }
+  
+  });
+}
+
+const sendPushNotification = async(token: string, title: string, body: string) => {
+  try {
+    const message = {
+      token: token,
+      notification: {
+        title: title,
+        body: body,
+      },
+    };
+
+    const response = await admin.messaging().send(message);
+    console.log("Successfully sent push notification:", response);
+  } catch (error) {
+    console.error("Error sending push notification:", error);
+  }
+}
+
 
 // cron.schedule("* * * * *", async () => {
 //   console.log('Checking tournaments...');
@@ -307,6 +349,18 @@ app.post(
   })
 );
 
+//test a push notification route
+app.post(
+  "/api/test-push-notification",
+  expressAsyncHandler(async (req, res) => {
+    const { token } = req.body;
+
+    await sendPushNotification(token, "Test Push Notification", "This is a test push notification from SparPlay 🔥");
+
+    res.json({ success: true });
+  })
+);
+
 app.post(
   "/api/send-tournament-notification",
   expressAsyncHandler(async (req, res) => {
@@ -378,8 +432,8 @@ app.post(
       `;
 
       for (const user of users) {
-        const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins tomorrow at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵50 prize. Register now on sparplay.com/tournaments/24 and don't miss out on the action! See you there!`;
+        const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
+Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/42 and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
@@ -406,7 +460,8 @@ app.post(
       `;
 
       for (const user of users) {
-         const messageTemplate = `Hi ${user.username}! Last call! The Saturday Spar Challenge starts at 8:00 PM. Prize pool: 90 GHC. First Position: 60 GHC. Second Position: 30 GHC. Entry is 5 GHC. Registration closes at 7:50PM. Format: Single Elimination. Remember to join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/33 if you haven't already!`;
+          const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
+Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/42 and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);

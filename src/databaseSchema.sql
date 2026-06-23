@@ -7,6 +7,8 @@ CREATE TABLE users (
   password_hash TEXT NOT NULL, 
   image_url TEXT DEFAULT NULL,
   rating INTEGER DEFAULT 1000, 
+  push_token VARCHAR(255) DEFAULT NULL,
+  notification_enabled BOOLEAN DEFAULT false,
   peak_rating INTEGER DEFAULT 1000,
   max_winning_streak INTEGER DEFAULT 0,
   current_winning_streak INTEGER DEFAULT 0,
@@ -32,6 +34,8 @@ CREATE TABLE countries (
   code VARCHAR(2) PRIMARY KEY, -- ISO 3166-1 alpha-2 country code
   name VARCHAR(100) NOT NULL
 );
+
+
 
 
 -- CREATE TABLE games (
@@ -307,4 +311,24 @@ CREATE TABLE rating_changes (
     rating_change INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE ratings_history (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  tournament_id INTEGER REFERENCES tournaments(id) ON DELETE SET NULL,
+  rating_change INTEGER NOT NULL,
+  new_rating INTEGER NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE notification_devices (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_token VARCHAR(255) NOT NULL,
+    platform VARCHAR(20) CHECK (platform IN ('ios', 'android')) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, device_token) -- Prevent duplicate device entries for the same user
 );
