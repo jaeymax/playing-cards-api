@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Server } from "socket.io";
 import https from "https";
+import path from "path";
 import http from "http";
 import authRoutes from "./routes/auth";
 import gameRoutes from "./routes/game";
@@ -55,7 +56,7 @@ dotenv.config();
 
 export const app: Express = express();
 
-const serviceAccount = require("../private_keys/serviceAccountKey.json");
+const serviceAccount = require(path.join(__dirname, "../private_keys/serviceAccountKey.json"));
 // const options = {
 //   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
 //   cert: fs.readFileSync("certs/192.168.43.218.pem"),
