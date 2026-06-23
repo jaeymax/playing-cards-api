@@ -56,10 +56,10 @@ dotenv.config();
 export const app: Express = express();
 
 const serviceAccount = require("../private_keys/serviceAccountKey.json");
-const options = {
-  key: fs.readFileSync("certs/192.168.43.218-key.pem"),
-  cert: fs.readFileSync("certs/192.168.43.218.pem"),
-}
+// const options = {
+//   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
+//   cert: fs.readFileSync("certs/192.168.43.218.pem"),
+// }
 
 const redisConfig = {
   host: "127.0.0.1",
