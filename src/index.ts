@@ -43,6 +43,7 @@ import { closeTournamentRegistration, getAllUpcomingTournaments, startTournament
 
 const cron = require("node-cron");
 const admin = require("firebase-admin");
+const {getMessaging} = require("firebase-admin/messaging");
 
 //console.log('admin', admin);
 
@@ -74,7 +75,7 @@ admin.initializeApp({
 
 
 const testPushNotification = async () => {
-  await admin.messaging().send({
+  await getMessaging().send({
   
    token: "",
   
@@ -96,7 +97,7 @@ const sendPushNotification = async(token: string, title: string, body: string) =
       },
     };
 
-    const response = await admin.messaging().send(message);
+    const response = await getMessaging().send(message);
     console.log("Successfully sent push notification:", response);
   } catch (error) {
     console.error("Error sending push notification:", error);
