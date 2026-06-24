@@ -12,5 +12,5 @@ router.get("/me", authMiddleware_1.default, users_1.getUserProfile);
 router.get('/', users_1.getUsers);
 // Generic routes for any user ID - should come after specific routes
 router.get("/:id", users_1.getUserProfile);
-router.put("/:id", users_1.updateUserProfile);
+router.patch("/:id", authMiddleware_1.default, users_1.updateUserProfile);
 exports.default = router;

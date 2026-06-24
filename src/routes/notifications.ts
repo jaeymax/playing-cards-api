@@ -11,7 +11,7 @@ router.get("/user/:id", authMiddleware, getUserNotifications);
 router.post("/mark-as-read/:notificationId", authMiddleware, markNotificationAsRead);
 router.post("/register", authMiddleware, async (req, res) => {
   // Placeholder for notification registration logic
-  const userId = req.user.id; // Assuming user ID is available in the request object after authentication
+  const userId = req.user.userId; // Assuming user ID is available in the request object after authentication
     const { token } = req.body;
     if(!token) {
       return res.status(400).json({ message: "Token is required" });

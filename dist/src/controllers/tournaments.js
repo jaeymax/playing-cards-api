@@ -12,20 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBracket = exports.completeMatch = exports.reportMatchResult = exports.startTournament = exports.getTournamentLobby = exports.closeTournamentRegistration = exports.joinTournament = exports.createTournament = exports.getCurrentWeekendTournament = exports.getAllTournaments = exports.addTournamentRule = exports.getTopThreePlayersFromTournamentResults = exports.getLatestSingleEliminationTournamentWinners = exports.getTournamentResults = void 0;
+exports.getBracket = exports.reportMatchResult = exports.startTournament = exports.getTournamentLobby = exports.closeTournamentRegistration = exports.joinTournament = exports.createTournament = exports.getLatestFeaturedTournament = exports.getAllTournaments = exports.addTournamentRule = exports.getTopThreePlayersFromTournamentResults = exports.getLatestSwissTournamentWinners = exports.getLatestSingleEliminationTournamentWinners = exports.getTournamentResults = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const gameFunctions_1 = require("../utils/gameFunctions");
 const __1 = require("..");
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
-// Utility function for shuffling arrays
-const shuffleArray = (array) => {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-};
+const tournament_1 = require("../utils/tournament");
+const utils_1 = require("../utils");
 exports.getTournamentResults = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const tournament_id = req.params.id;
     const tournament = yield (0, db_1.default) `SELECT * from tournaments WHERE id = ${tournament_id}`;
@@ -52,7 +45,7 @@ exports.getTournamentResults = (0, express_async_handler_1.default)((req, res) =
     res.status(200).json(results);
 }));
 exports.getLatestSingleEliminationTournamentWinners = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const tournament_id = yield (0, db_1.default) `SELECT id from tournaments WHERE format = 'Single Elimination' AND status = 'completed' ORDER by end_date DESC LIMIT 1`;
+    const tournament_id = yield (0, db_1.default) `SELECT id from tournaments WHERE format = 'Single Elimination' AND status = 'completed' ORDER by created_at DESC LIMIT 1`;
     if (!tournament_id || tournament_id.length == 0) {
         res.status(400).json({ message: "No tournament found" });
         return;
@@ -71,7 +64,22 @@ exports.getLatestSingleEliminationTournamentWinners = (0, express_async_handler_
   WHERE tp.tournament_id = ${tournament_id[0].id}
   GROUP BY u.id, u.username, u.image_url
   ORDER BY wins DESC LIMIT 3`;
-    res.status(200).json(results);
+    res.status(200).json({
+        tournamentId: tournament_id[0].id,
+        winners: results,
+    });
+}));
+exports.getLatestSwissTournamentWinners = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const tournament_id = yield (0, db_1.default) `SELECT id from tournaments WHERE format = 'Swiss' AND status = 'completed' ORDER by created_at DESC LIMIT 1`;
+    if (!tournament_id || tournament_id.length == 0) {
+        res.status(400).json({ message: "No tournament found" });
+        return;
+    }
+    const results = yield (0, db_1.default) `SELECT u.id, u.username as name, u.image_url, tp.score, tp.losses FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournament_id[0].id} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC LIMIT 3`;
+    res.status(200).json({
+        tournamentId: tournament_id[0].id,
+        winners: results,
+    });
 }));
 exports.getTopThreePlayersFromTournamentResults = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const tournament_id = req.params.id;
@@ -118,12 +126,24 @@ exports.addTournamentRule = (0, express_async_handler_1.default)((req, res) => _
 }));
 // GET ALL TOURNAMENTS
 const getAllTournaments = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const userId = ((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) || null;
     try {
         const tournaments = yield (0, db_1.default) `
-      SELECT * FROM tournaments ORDER BY created_at DESC
+     SELECT 
+        t.*,
+        CASE 
+          WHEN tp.user_id IS NOT NULL THEN true
+          ELSE false
+        END AS registered
+      FROM tournaments t
+      LEFT JOIN tournament_participants tp
+        ON t.id = tp.tournament_id
+        AND tp.user_id = ${userId}
+      ORDER BY t.created_at DESC
     `;
         // Log request query for debugging
-        console.log(req.query);
+        console.log('user', req.user);
         res.json({ success: true, data: tournaments });
     }
     catch (err) {
@@ -134,15 +154,14 @@ const getAllTournaments = (req, res) => __awaiter(void 0, void 0, void 0, functi
     }
 });
 exports.getAllTournaments = getAllTournaments;
-const getCurrentWeekendTournament = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getLatestFeaturedTournament = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = req.body.userId || null;
         console.log("request body", req.body);
         const tournament = yield (0, db_1.default) `
       SELECT * FROM tournaments 
-      WHERE name = 'Weekend Championship' 
-      AND is_current = true
-      ORDER BY created_at DESC
+      WHERE is_featured = 'true' and status IN ('upcoming', 'ongoing') 
+      ORDER BY start_date ASC
       LIMIT 1
     `;
         if (tournament.length === 0) {
@@ -172,10 +191,10 @@ const getCurrentWeekendTournament = (req, res) => __awaiter(void 0, void 0, void
             .json({ success: false, message: "Error fetching weekend tournaments" });
     }
 });
-exports.getCurrentWeekendTournament = getCurrentWeekendTournament;
+exports.getLatestFeaturedTournament = getLatestFeaturedTournament;
 const createTournament = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { name, description, start_date, registration_closing_date, registration_fee, format, prize, is_current, end_date, } = req.body;
+        const { name, description, start_date, registration_closing_date, registration_fee, format, prize, is_featured, difficulty, end_date, } = req.body;
         // Basic validation
         if (!name ||
             !start_date ||
@@ -197,7 +216,8 @@ const createTournament = (req, res) => __awaiter(void 0, void 0, void 0, functio
         registration_fee,
         prize,
         format,
-        is_current
+        difficulty,
+        is_featured
       ) VALUES (
         ${name}, 
         ${description}, 
@@ -207,7 +227,8 @@ const createTournament = (req, res) => __awaiter(void 0, void 0, void 0, functio
         ${registration_fee || 0},
         ${prize || 0},
         ${format},
-        ${is_current || false}
+        ${difficulty},
+        ${is_featured || false}
       ) 
       RETURNING id
     `;
@@ -231,6 +252,13 @@ const joinTournament = (req, res) => __awaiter(void 0, void 0, void 0, function*
         const tournamentId = parseInt(req.params.id);
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         //console.log('user:', req.user);
+        if (!userId) {
+            res.status(401).json({
+                success: false,
+                message: "Unauthorized: User ID not found in request",
+            });
+            return;
+        }
         // Validate tournament ID
         if (!tournamentId || isNaN(tournamentId)) {
             res.status(400).json({
@@ -239,11 +267,45 @@ const joinTournament = (req, res) => __awaiter(void 0, void 0, void 0, function*
             });
             return;
         }
-        yield (0, db_1.default) `
-      INSERT INTO tournament_participants (tournament_id, user_id)
-      VALUES (${tournamentId}, ${userId})
-      ON CONFLICT (tournament_id, user_id) DO NOTHING
+        // check if users wallet balance is greater or equal to tournament- registration fee
+        const tournament = yield (0, db_1.default) `
+      SELECT registration_fee FROM tournaments WHERE id = ${tournamentId}
     `;
+        if (!tournament.length) {
+            res.status(404).json({
+                success: false,
+                message: "Tournament not found",
+            });
+            return;
+        }
+        const registrationFee = tournament[0].registration_fee;
+        let userWallet = yield (0, db_1.default) `
+      SELECT balance FROM wallets WHERE user_id = ${userId}
+    `;
+        if (userWallet.length === 0) {
+            // create a wallet for the user with 0 balance
+            userWallet = yield (0, db_1.default) `
+        INSERT INTO wallets (user_id) VALUES (${userId})
+      RETURNING balance`;
+            console.log(`Wallet created for user ${userId} with 0 balance`);
+        }
+        if (parseFloat(userWallet[0].balance) < parseFloat(registrationFee)) {
+            res.status(400).json({
+                success: false,
+                message: "Insufficient wallet balance to join tournament",
+            });
+            return;
+        }
+        // update the users wallet balance by subtracting the tournament registration fee
+        yield db_1.default.transaction((sql) => [
+            sql ` UPDATE wallets SET balance = balance - ${registrationFee} WHERE user_id = ${userId} `,
+            sql `
+        INSERT INTO tournament_participants (tournament_id, user_id)
+        VALUES (${tournamentId}, ${userId})
+        ON CONFLICT (tournament_id, user_id) DO NOTHING
+      `,
+            sql `UPDATE tournaments SET registered_participants = registered_participants + 1 WHERE id = ${tournamentId}`,
+        ]);
         res.json({
             success: true,
             message: "Joined tournament successfully!",
@@ -268,7 +330,6 @@ const closeTournamentRegistration = (req, res) => __awaiter(void 0, void 0, void
             });
             return;
         }
-        // Fetch tournament details
         const tournament = yield (0, db_1.default) `
       SELECT * FROM tournaments WHERE id = ${tournamentId}
     `;
@@ -279,14 +340,16 @@ const closeTournamentRegistration = (req, res) => __awaiter(void 0, void 0, void
             });
             return;
         }
+        if (tournament[0].registration_closed) {
+            //console.log("Tournament registration is already closed.");
+            res.status(400).json({
+                success: false,
+                message: "Tournament registration is already closed",
+            });
+            return;
+        }
         // Fetch all participants
-        const participants = yield (0, db_1.default) `
-      SELECT u.id, u.username, u.image_url, u.rating, tp.status
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournamentId}
-      ORDER BY u.username
-    `;
+        const participants = yield (0, tournament_1.getSingleEliminationTournamentParticipants)(tournamentId);
         if (participants.length < 2) {
             res.status(400).json({
                 success: false,
@@ -294,14 +357,7 @@ const closeTournamentRegistration = (req, res) => __awaiter(void 0, void 0, void
             });
             return;
         }
-        // Start transaction
         try {
-            // Update tournament registration closing date
-            // await sql`
-            //   UPDATE tournaments
-            //   SET registration_closing_date = CURRENT_TIMESTAMP
-            //   WHERE id = ${tournamentId}
-            // `;
             // Create first round
             const round = yield (0, db_1.default) `
         INSERT INTO tournament_rounds (tournament_id, round_number, status)
@@ -309,228 +365,62 @@ const closeTournamentRegistration = (req, res) => __awaiter(void 0, void 0, void
         RETURNING id
       `;
             const roundId = round[0].id;
-            const shuffled = shuffleArray(participants);
+            (0, gameFunctions_1.fisherYatesShuffle)(participants);
             const rounds = { 1: [] };
+            const is_final_round = participants.length === 2;
             // Pair players and create matches
-            for (let i = 0; i < shuffled.length; i += 2) {
-                const player1 = shuffled[i];
-                const player2 = shuffled[i + 1];
+            for (let i = 0; i < participants.length; i += 2) {
+                const player1 = participants[i];
+                const player2 = participants[i + 1];
                 if (!player2) {
+                    console.log("creating bye match");
                     // Handle odd player (auto-advance)
-                    // create a game with only one player
-                    const game = yield (0, db_1.default) `
-            INSERT INTO games (
-              code,
-              created_by,
-              player_count,
-              status,
-              current_turn_user_id,
-              is_rated
-            ) VALUES (
-              ${Math.random().toString(36).substring(2, 12)},
-              ${player1.id},
-              2,
-              'waiting',
-              ${player1.id},
-              true
-            )
-            RETURNING *
-          `;
-                    // create game player
-                    const result = yield (0, db_1.default) `
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player1.id}, 
-              0, 
-              true,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `;
+                    const game = yield (0, tournament_1.createByeMatch)(player1.id);
+                    console.log("game created for bye match", game.id, game.code);
+                    const { gameplayer } = yield (0, tournament_1.createMatchGamePlayer)(game.id, player1.id, 0, true);
+                    console.log("game player created for bye match", gameplayer);
                     // create tournament match
-                    const match = yield (0, db_1.default) `
-            INSERT INTO tournament_matches (
-              tournament_id,
-              game_id,
-              round_id,
-              player1_id,
-              player2_id,
-              status,
-              winner_id,
-              match_order
-            ) VALUES (
-              ${tournamentId},
-              ${game[0].id},
-              ${roundId},
-              ${player1.id},
-              NULL,
-              'completed',
-              ${player1.id},
-              ${Math.floor(i / 2) + 1}
-            )
-            RETURNING id, status
-          `;
+                    const match = yield (0, tournament_1.createSingleEliminationByeMatch)(tournamentId, game.id, roundId, player1.id, Math.floor(i / 2) + 1);
+                    if (tournament[0].format === "Swiss") {
+                        yield (0, db_1.default) `
+              UPDATE tournament_participants
+              SET score = score + 1
+              WHERE tournament_id = ${tournamentId} AND user_id = ${player1.id}
+            `;
+                    }
                     rounds[1].push({
-                        id: match[0].id,
+                        id: match.id,
                         player1: player1.username,
                         player2: null,
-                        status: match[0].status,
+                        status: match.status,
                     });
                     console.log(`created match for only ${player1.username}`);
-                    continue;
+                    const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer], cards: null });
+                    yield (0, gameFunctions_1.saveGame)(game.code, newGame);
+                    console.log("game saved to memory", game.code);
+                    break;
                 }
-                const cards = yield (0, db_1.default) `SELECT card_id FROM cards ORDER BY RANDOM()`;
-                // Create game
-                const game = yield (0, db_1.default) `
-          INSERT INTO games (
-            code,
-            created_by,
-            player_count,
-            status,
-            current_player_position,
-            current_turn_user_id,
-            is_rated
-          ) VALUES (
-            ${Math.random().toString(36).substring(2, 12)},
-            ${player1.id},
-            2,
-            'waiting',
-             0,
-            ${player1.id},
-            true
-          )
-          RETURNING *
-        `;
-                // create game players
-                const result = yield db_1.default.transaction((sql) => [
-                    sql `
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player1.id}, 
-              0, 
-              true,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `,
-                    sql `
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player2.id}, 
-              1, 
-              false,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `,
-                ]);
-                // create game cards
-                const player1Id = result[0][0].id;
-                const gameCards = yield (0, db_1.default) `
-      INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
-      SELECT 
-        ${game[0].id},
-        unnest(${cards.map((c) => c.card_id)}::integer[]),
-        ${player1Id},
-        -1,
-        'in_deck'
-      RETURNING 
-          id,
-          game_id,
-          player_id,
-          status,
-          hand_position,
-          trick_number,
-          pos_x,
-          pos_y,
-          rotation,
-          z_index,
-          animation_state,
-          (SELECT json_build_object(
-           'card_id', card_id,
-            'suit', suit,
-            'value', value,
-            'rank', rank,
-            'image_url', image_url
-          ) FROM cards WHERE card_id = game_cards.card_id) as card
-    `;
-                // Create match
-                const match = yield (0, db_1.default) `
-          INSERT INTO tournament_matches (
-            tournament_id,
-            game_id,
-            round_id,
-            player1_id,
-            player2_id,
-            status,
-            match_order
-          ) VALUES (
-            ${tournamentId},
-            ${game[0].id},
-            ${roundId},
-            ${player1.id},
-            ${player2.id},
-            'pending',
-            ${Math.floor(i / 2) + 1}
-          )
-          RETURNING id, status
-        `;
+                const game = yield (0, tournament_1.createTwoPlayerMatch)(player1.id, "waiting", is_final_round, true);
+                const { gameplayer1, gameplayer2 } = yield (0, tournament_1.createTwoPlayerMatchGamePlayers)(game.id, player1.id, player2.id);
+                const gameCards = yield (0, tournament_1.createGameCardsForMatch)(game.id, gameplayer1.id);
+                const match = yield (0, tournament_1.createSingleEliminationMatch)(tournamentId, game.id, roundId, player1.id, player2.id, "pending", Math.floor(i / 2) + 1);
                 console.log(`created match for ${player1.username} an ${player2.username}`);
-                const g = game[0];
-                // g.turn_started_at = Date.now();
-                // g.turn_ends_at = g.turn_started_at + (g.turn_timeout_seconds + 60) * 1000
-                const newGame = Object.assign(Object.assign({}, g), { players: [result[0][0], result[1][0]], cards: gameCards });
-                yield (0, gameFunctions_1.saveGame)(game[0].code, newGame);
-                console.log("game saved to memory", game[0].code);
+                const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
+                yield (0, gameFunctions_1.saveGame)(game.code, newGame);
+                console.log("game saved to memory", game.code);
                 rounds[1].push({
-                    id: match[0].id,
+                    id: match.id,
                     player1: player1.username,
                     player2: player2.username,
-                    status: match[0].status,
+                    status: match.status,
                 });
             }
+            // Update tournament registration status
+            yield (0, db_1.default) `
+        UPDATE tournaments
+        SET registration_closed = true
+        WHERE id = ${tournamentId}
+      `;
         }
         catch (err) {
             console.error("Error during transaction:", err);
@@ -606,6 +496,7 @@ const closeTournamentRegistration = (req, res) => __awaiter(void 0, void 0, void
 });
 exports.closeTournamentRegistration = closeTournamentRegistration;
 const getTournamentLobby = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const tournamentId = parseInt(req.params.id);
         if (!tournamentId || isNaN(tournamentId)) {
@@ -615,9 +506,20 @@ const getTournamentLobby = (req, res) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
+        const userId = ((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) || null;
         // Fetch tournament details
         const tournament = yield (0, db_1.default) `
-      SELECT * FROM tournaments WHERE id = ${tournamentId}
+       SELECT 
+        t.*,
+        CASE 
+          WHEN tp.user_id IS NOT NULL THEN true
+          ELSE false
+        END AS registered
+      FROM tournaments t
+      LEFT JOIN tournament_participants tp
+        ON t.id = tp.tournament_id
+        AND tp.user_id = ${userId}
+      WHERE t.id = ${tournamentId}
     `;
         if (!tournament.length) {
             res.status(404).json({
@@ -627,18 +529,21 @@ const getTournamentLobby = (req, res) => __awaiter(void 0, void 0, void 0, funct
             return;
         }
         // Fetch participants with their global ranking
-        const participants = yield (0, db_1.default) `
-      SELECT 
-        u.id, 
-        u.username, 
-        u.image_url, 
-        u.rating,
-        tp.status,
-        RANK() OVER (ORDER BY u.rating DESC) as rank
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournamentId}
-    `;
+        // const participants = await sql`
+        //   SELECT
+        //     u.id,
+        //     u.username,
+        //     u.image_url,
+        //     u.rating,
+        //     u.is_rated,
+        //     tp.status,
+        //     tp.score,
+        //     RANK() OVER (ORDER BY u.rating DESC) as rank
+        //   FROM users u
+        //   JOIN tournament_participants tp ON u.id = tp.user_id
+        //   WHERE tp.tournament_id = ${tournamentId}
+        // `;
+        const participants = yield (0, tournament_1.getSingleEliminationTournamentParticipants)(tournamentId);
         const rules = yield (0, db_1.default) `SELECT id, title, message as content from tournament_rules WHERE tournament_id = ${tournamentId}`;
         // Fetch current round matches with player details and scores
         const matches = yield (0, db_1.default) `
@@ -667,9 +572,17 @@ const getTournamentLobby = (req, res) => __awaiter(void 0, void 0, void 0, funct
       WHERE tm.tournament_id = ${tournamentId}
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
+        const gamesList = yield (0, db_1.default) `SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+        const codes = gamesList.map((gameData) => gameData.gamecode);
+        const games = yield (0, utils_1.getGamesByCodes)(codes);
+        let gamesMap = {};
+        if (games) {
+            gamesMap = Object.fromEntries(games.map((game) => [game.code, game]));
+        }
         // Format rounds with aggregated player data
         const roundsMap = {};
         matches.forEach((match) => {
+            var _a, _b;
             if (!roundsMap[match.round_number]) {
                 roundsMap[match.round_number] = [];
             }
@@ -693,25 +606,29 @@ const getTournamentLobby = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 game_id: match.game_id,
                 game_code: match.code,
                 winner_id: match.winner_id,
+                turn_ends_at: (_a = gamesMap[match.code]) === null || _a === void 0 ? void 0 : _a.turn_ends_at,
+                forfeiter_user_id: (_b = gamesMap[match.code]) === null || _b === void 0 ? void 0 : _b.forfeited_by,
             });
         });
         const rounds = Object.entries(roundsMap).map(([round, matches]) => ({
             round: parseInt(round),
             matches,
         }));
-        // serverSocket.to(`tournament_${tournamentId}`).emit("lobbyUpdate", {
-        //   success: true,
-        //   tournament: tournament[0],
-        //   participants,
-        //   rounds,
-        // });
-        // console.log('tournament lobby emitted to socket room:', `tournament_${tournamentId}`);
+        const tournamentFormat = tournament[0].format;
+        let standings = null;
+        if (tournamentFormat === "Swiss") {
+            standings = yield (0, tournament_1.getSwissTournamentStandings)(tournamentId);
+        }
+        else if (tournamentFormat === "Single Elimination") {
+            standings = yield (0, tournament_1.getSingleEliminationTournamentStandings)(tournamentId, tournament[0].status);
+        }
         res.json({
             success: true,
             tournament: tournament[0],
             participants,
             rules,
             rounds,
+            standings,
         });
     }
     catch (err) {
@@ -733,12 +650,33 @@ const startTournament = (req, res) => __awaiter(void 0, void 0, void 0, function
             });
             return;
         }
-        // Get all participants
-        const players = yield (0, db_1.default) `
-      SELECT user_id 
-      FROM tournament_participants 
-      WHERE tournament_id = ${tournamentId}
+        let tournament = yield (0, db_1.default) `
+      SELECT status FROM tournaments WHERE id = ${tournamentId}
     `;
+        if (tournament[0].started) {
+            // throw new Error("Tournament has already started.");
+            res.status(400).json({
+                success: false,
+                message: "Tournament has already started",
+            });
+            return;
+        }
+        if (!tournament.length) {
+            res.status(404).json({
+                success: false,
+                message: "Tournament not found",
+            });
+            return;
+        }
+        if (tournament[0].status !== "upcoming") {
+            res.status(400).json({
+                success: false,
+                message: "Tournament cannot be started",
+            });
+            return;
+        }
+        // Get all participants
+        const players = yield (0, tournament_1.getSingleEliminationTournamentParticipants)(tournamentId);
         if (players.length < 2) {
             res.status(400).json({
                 success: false,
@@ -777,30 +715,25 @@ const startTournament = (req, res) => __awaiter(void 0, void 0, void 0, function
       SET status = 'ongoing'
       WHERE tournament_id = ${tournamentId} AND round_number = 1
     `;
-        // Fetch tournament details
-        const tournament = yield (0, db_1.default) `
-      SELECT * FROM tournaments WHERE id = ${tournamentId}
-    `;
-        if (!tournament.length) {
-            res.status(404).json({
-                success: false,
-                message: "Tournament not found",
-            });
-            return;
-        }
         // Fetch participants with their global ranking
-        const participants = yield (0, db_1.default) `
-      SELECT 
-        u.id, 
-        u.username, 
-        u.image_url, 
-        u.rating,
-        tp.status,
-        RANK() OVER (ORDER BY u.rating DESC) as rank
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournamentId}
-    `;
+        // const participants = await sql`
+        //   SELECT
+        //     u.id,
+        //     u.username,
+        //     u.image_url,
+        //     u.rating,
+        //     u.is_rated,
+        //     tp.status,
+        //     tp.score,
+        //     tp.losses
+        //     RANK() OVER (ORDER BY u.rating DESC) as rank
+        //   FROM users u
+        //   JOIN tournament_participants tp ON u.id = tp.user_id
+        //   WHERE tp.tournament_id = ${tournamentId}
+        // `;
+        const participants = yield (0, tournament_1.getSingleEliminationTournamentParticipants)(tournamentId);
+        tournament = yield (0, db_1.default) `
+      SELECT * FROM tournaments WHERE id = ${tournamentId} `;
         // Fetch current round matches with player details and scores
         const matches = yield (0, db_1.default) `
       SELECT 
@@ -828,12 +761,38 @@ const startTournament = (req, res) => __awaiter(void 0, void 0, void 0, function
       WHERE tm.tournament_id = ${tournamentId}
       ORDER BY tr.round_number ASC, tm.match_order ASC
     `;
+        const gamesList = yield (0, db_1.default) `SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+        //console.log("games", games);
+        const codes = gamesList.map((gameData) => gameData.gamecode);
+        const games = yield (0, utils_1.getGamesByCodes)(codes);
+        let gamesMap = {};
+        if (games) {
+            gamesMap = Object.fromEntries(games.map((game) => [game.code, game]));
+        }
+        for (let code of codes) {
+            const game = gamesMap[code];
+            game.turn_started_at = Date.now();
+            game.turn_ends_at =
+                (game === null || game === void 0 ? void 0 : game.turn_started_at) + (game.turn_timeout_seconds + 0) * 1000;
+            if (game.status == "waiting") {
+                game.status = "in_progress";
+                yield __1.matchForfeiter.scheduleForfeit(code, (game.turn_timeout_seconds + 0) * 1000);
+            }
+            yield (0, gameFunctions_1.saveGame)(code, game);
+        }
+        // update tournament started to true
+        yield (0, db_1.default) `
+      UPDATE tournaments
+      SET started = true
+      WHERE id = ${tournamentId}
+    `;
         // Format rounds with aggregated player data
         const roundsMap = {};
         matches.forEach((match) => {
             if (!roundsMap[match.round_number]) {
                 roundsMap[match.round_number] = [];
             }
+            const game = gamesMap[match.code];
             roundsMap[match.round_number].push({
                 id: match.id,
                 player1: {
@@ -854,6 +813,7 @@ const startTournament = (req, res) => __awaiter(void 0, void 0, void 0, function
                 game_id: match.game_id,
                 game_code: match.code,
                 winner_id: match.winner_id,
+                turn_ends_at: game.turn_ends_at,
             });
         });
         const rounds = Object.entries(roundsMap).map(([round, matches]) => ({
@@ -870,6 +830,11 @@ const startTournament = (req, res) => __awaiter(void 0, void 0, void 0, function
         res.json({
             success: true,
             message: "Tournament started successfully!",
+            data: {
+                tournament: tournament[0],
+                participants,
+                rounds,
+            },
         });
     }
     catch (err) {
@@ -957,127 +922,6 @@ const reportMatchResult = (req, res) => __awaiter(void 0, void 0, void 0, functi
     }
 });
 exports.reportMatchResult = reportMatchResult;
-const completeMatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const matchId = parseInt(req.params.matchId);
-        const winnerId = parseInt(req.body.winner_id);
-        if (!matchId || !winnerId) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid match ID or winner ID",
-            });
-            return;
-        }
-        // Get match data
-        const matchData = yield (0, db_1.default) `
-      SELECT * FROM tournament_matches WHERE id = ${matchId}
-    `;
-        if (!matchData.length) {
-            res.status(404).json({
-                success: false,
-                message: "Match not found",
-            });
-            return;
-        }
-        const match = matchData[0];
-        // Update match status
-        yield (0, db_1.default) `
-      UPDATE tournament_matches 
-      SET status = 'completed'
-      WHERE id = ${matchId}
-    `;
-        // Update game status
-        yield (0, db_1.default) `
-      UPDATE games 
-      SET status = 'completed'
-      WHERE id = ${match.game_id}
-    `;
-        // Check if round is completed
-        const pendingMatches = yield (0, db_1.default) `
-      SELECT COUNT(*) 
-      FROM tournament_matches 
-      WHERE tournament_id = ${match.tournament_id} 
-      AND round_number = ${match.round_number} 
-      AND status != 'completed'
-    `;
-        if (parseInt(pendingMatches[0].count) === 0) {
-            // Get winners from current round
-            const winners = yield (0, db_1.default) `
-        SELECT game_id 
-        FROM tournament_matches 
-        WHERE tournament_id = ${match.tournament_id} 
-        AND round_number = ${match.round_number}
-      `;
-            if (winners.length === 1) {
-                // Tournament completed
-                yield (0, db_1.default) `
-          UPDATE tournaments 
-          SET status = 'completed', 
-              winner_id = ${winnerId},
-              end_date = CURRENT_TIMESTAMP
-          WHERE id = ${match.tournament_id}
-        `;
-            }
-            else {
-                // Create next round matches
-                const nextRound = match.round_number + 1;
-                const shuffled = shuffleArray(winners.map((w) => w.game_id));
-                for (let i = 0; i < shuffled.length; i += 2) {
-                    const player1GameId = shuffled[i];
-                    const player2GameId = shuffled[i + 1];
-                    if (!player2GameId) {
-                        // Auto-advance single player
-                        yield (0, db_1.default) `
-              UPDATE tournament_participants 
-              SET status = 'winner' 
-              WHERE tournament_id = ${match.tournament_id} 
-              AND user_id = (
-                SELECT created_by FROM games WHERE id = ${player1GameId}
-              )
-            `;
-                        continue;
-                    }
-                    // Create new game and match for next round
-                    yield (0, db_1.default) `
-            INSERT INTO tournament_matches (
-              tournament_id,
-              round_number,
-              game_id
-            ) VALUES (
-              ${match.tournament_id},
-              ${nextRound},
-              (
-                INSERT INTO games (
-                  code,
-                  created_by,
-                  player_count,
-                  status
-                ) VALUES (
-                  ${Math.random().toString(36).substring(2, 12)},
-                  (SELECT created_by FROM games WHERE id = ${player1GameId}),
-                  2,
-                  'waiting'
-                ) RETURNING id
-              )
-            )
-          `;
-                }
-            }
-        }
-        res.json({
-            success: true,
-            message: "Match completed successfully",
-        });
-    }
-    catch (err) {
-        console.error("Error completing match:", err);
-        res.status(500).json({
-            success: false,
-            message: "Failed to complete match",
-        });
-    }
-});
-exports.completeMatch = completeMatch;
 const getBracket = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const tournamentId = parseInt(req.params.id);

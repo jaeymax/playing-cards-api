@@ -16,7 +16,6 @@ exports.startGame = exports.leaveQueue = exports.joinQueue = void 0;
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const db_1 = __importDefault(require("../config/db"));
 const index_1 = require("../index");
-const index_2 = require("../index");
 const gameFunctions_1 = require("../utils/gameFunctions");
 const __1 = require("..");
 exports.joinQueue = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -118,7 +117,6 @@ exports.startGame = (0, express_async_handler_1.default)((req, res) => __awaiter
             "game_type": "play now"
         });
         yield (0, gameFunctions_1.saveGame)(gameCode[0].code, game);
-        index_2.games.set(gameCode[0].code, game);
         res.json({
             success: true,
             gameId,

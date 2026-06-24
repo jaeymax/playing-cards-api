@@ -12,14 +12,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.gameExists = exports.getTournamentLobbyData = exports.advanceToNextRound = exports.reportMatchResult = exports.hasSuit = exports.getNextPlayerPosition = exports.getPlayerHand = exports.playCard = exports.shuffleDeck = exports.dealCards = exports.getDealingSequence = void 0;
+exports.gameExists = exports.getSingleEliminationTournamentLobbyData = exports.hasSuit = exports.getNextPlayerPosition = exports.getPlayerHand = exports.playCard = exports.shuffleDeck = exports.fisherYatesShuffle = exports.dealCards = exports.getDealingSequence = void 0;
 exports.saveGame = saveGame;
 exports.getGameByCode = getGameByCode;
 exports.createGamePlayer = createGamePlayer;
 const db_1 = __importDefault(require("../config/db"));
 const index_1 = require("../index");
 const index_2 = require("../index");
-const rating_1 = require("../utils/rating");
+const rating_1 = require("./rating");
+const tournament_1 = require("./tournament");
+const utils_1 = require("../utils");
 const getDealingSequence = (game) => {
     var _a;
     const dealingSequence = [];
@@ -73,11 +75,21 @@ const dealCards = (game) => __awaiter(void 0, void 0, void 0, function* () {
     }
     game.turn_started_at = Date.now();
     game.turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
-    game.current_player_position = (game.current_player_position + 1) % game.player_count;
+    game.current_player_position =
+        (game.current_player_position + 1) % game.player_count;
     game.current_turn_user_id = (_b = (_a = game.players.find((player) => player.position == game.current_player_position)) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.id;
-    yield index_1.redis.zadd('forfeit:index', game.turn_ends_at, game.code);
+    if (game.is_rated) {
+        yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
+    }
 });
 exports.dealCards = dealCards;
+const fisherYatesShuffle = (array) => {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+};
+exports.fisherYatesShuffle = fisherYatesShuffle;
 const shuffleDeck = (game) => __awaiter(void 0, void 0, void 0, function* () {
     game.cards.forEach((card) => {
         card.player_id = 0; // Reset player_id for shuffling
@@ -85,7 +97,7 @@ const shuffleDeck = (game) => __awaiter(void 0, void 0, void 0, function* () {
         card.hand_position = -1;
         card.animation_state = "shuffling";
     });
-    game.cards.sort(() => Math.random() - 0.5);
+    (0, exports.fisherYatesShuffle)(game.cards);
     console.log("shuffled deck");
 });
 exports.shuffleDeck = shuffleDeck;
@@ -147,8 +159,9 @@ const playCard = (game, card_id, player_id, socket) => __awaiter(void 0, void 0,
     game.turn_started_at = Date.now();
     const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
     game.turn_ends_at = turn_ends_at;
-    yield index_1.redis.zadd('forfeit:index', game.turn_ends_at, game.code);
-    // Move to next player or complete trick if needed
+    if (game.is_rated) {
+        yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
+    }
     if (game.current_trick.cards.length === game.players.length) {
         completeTrick(game);
     }
@@ -156,24 +169,13 @@ const playCard = (game, card_id, player_id, socket) => __awaiter(void 0, void 0,
         (0, exports.getNextPlayerPosition)(game);
     }
     const before_player = (_b = game.players.find((p) => p.user.id == game.current_turn_user_id)) === null || _b === void 0 ? void 0 : _b.user.username;
-    //console.log('before', game.current_turn_user_id, before_player)
     const current_turn_user_id = (_c = game.players.find((p) => p.position === game.current_player_position)) === null || _c === void 0 ? void 0 : _c.user.id;
     game.current_turn_user_id = current_turn_user_id;
     const after_player = game.players.find((p) => p.user.id == game.current_turn_user_id).user.username;
-    //console.log('after', game.current_turn_user_id, after_player)
     yield saveGame(game.code, game);
-    // await sql`UPDATE games SET current_turn_user_id = ${current_turn_user_id}, turn_started_at = NOW() WHERE id = ${game.id}`;
-    // serverSocket.to(game.code).emit("turnStarted", {
-    //   current_turn_user_id,
-    //   turn_ends_at,
-    // });
     index_2.serverSocket.to(game.code).emit("updatedGameData", game);
 });
 exports.playCard = playCard;
-const computeTurnEndsAt = (turnStartedAt, turnTimeoutSeconds) => {
-    const start = new Date(turnStartedAt);
-    return new Date(start.getTime() + turnTimeoutSeconds * 1000);
-};
 const isHigherCard = (card, current_trick) => {
     if (current_trick.cards.length === 0) {
         return true;
@@ -207,8 +209,8 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
     const final_trick = game.completed_tricks[game.completed_tricks.length - 1];
     const winning_card = final_trick.cards.find((card) => card.player_position === final_trick.leader_position);
     let points = 1;
-    game.status = "ended";
-    game.ended_at = new Date();
+    //game.status = "ended";
+    //game.ended_at = new Date();
     index_1.mixpanel.track("game_completed", {
         distinct_id: game.id,
         game_code: game.code,
@@ -217,135 +219,94 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
     if (winning_card.card.rank == "6" || winning_card.card.rank == "7") {
         points = calculateSpecialPoints(game.completed_tricks, game.completed_tricks.length - 1, "", game.completed_tricks.length - 1);
     }
-    const winner = game.players.find((player) => player.position === final_trick.leader_position);
+    const winner = (0, utils_1.getMatchWinner)(game);
+    const loser = (0, utils_1.getMatchLoser)(game);
     winner.score += points;
-    if (winner.score >= 3) {
-        // new line to increment games_won
-        const entry = yield index_1.redis.zrem("forfeit:index", game.code);
-        // console.log("Removed from forfeit index: first", entry, game.code);
-        // const entry2 = await redis.zrem('forfeit:index', game.code);
-        // const entry3 = await redis.zrem("forfeit:index", game.code);    
-        // console.log("Redis test first", entry2)
-        // console.log("Redis test aftermath", entry3)
+    const tournament = yield (0, utils_1.isTournamentMatch)(game.id);
+    yield (0, utils_1.updateGamePlayersScores)(game);
+    if (winner.score >= game.win_points) {
+        game.status = "completed";
+        game.ended_at = Date.now();
+        if (game.is_rated)
+            yield index_1.matchForfeiter.cancelForfeit(game.code);
         winner.games_won += 1;
         setTimeout(() => {
             index_2.serverSocket.to(game.code).emit("gameOver", {
                 winner: Object.assign(Object.assign({}, winner), { points, hand_number: game.current_hand_number }),
             });
         }, 1000);
-        // Update game status
-        yield (0, db_1.default) `UPDATE games SET status = 'completed', ended_at = NOW() WHERE id = ${game.id}`;
-        // Update all players scores and games_played in the database
-        for (const player of game.players) {
-            yield (0, db_1.default) `
-        UPDATE game_players 
-        SET score = ${player.score}
-        WHERE game_id = ${game.id} AND user_id = ${player.user.id}
-      `;
-            // update games_played for each user
-            yield (0, db_1.default) `
-        UPDATE users 
-        SET games_played = games_played + 1
-        WHERE id = ${player.user.id}
-      `;
-        }
-        // Update user's game_wons count
-        yield (0, db_1.default) `
-      UPDATE users 
-      SET games_won = games_won + 1
-      WHERE id = ${winner.user.id}
-    `;
+        yield (0, utils_1.markGameAsEndedAndCompleted)(game.id);
+        yield (0, utils_1.updateGamesPlayedForGamePlayers)(game.id);
+        yield (0, utils_1.updateWinnerWonCount)(winner.user.id);
+        yield (0, utils_1.updateLoserWinningStreak)(loser.user.id);
+        yield saveGame(game.code, game);
+        console.log("tournamentData", tournament);
         if (game.is_rated) {
             const tournament_id = yield (0, db_1.default) `
       SELECT tournament_id 
       FROM tournament_matches 
       WHERE game_id = ${game.id}
     `;
-            yield (0, exports.reportMatchResult)(game.id, winner.user.id, tournament_id[0].tournament_id);
-            const current_round_number = yield (0, db_1.default) `
-      SELECT tr.round_number
-      FROM tournament_matches tm
-      JOIN tournament_rounds tr ON tm.round_id = tr.id
-      WHERE tm.game_id = ${game.id}
-    `;
-            console.log("current_round_number", current_round_number[0].round_number);
-            // count all matches in progress for the current tournament's round
-            const ongoingMatches = yield (0, db_1.default) `
-        SELECT COUNT(*) AS ongoing_count
-        FROM tournament_matches tm
-        JOIN tournament_rounds tr ON tm.round_id = tr.id
-        WHERE tm.tournament_id = ${tournament_id[0].tournament_id}
-        AND tr.round_number = ${current_round_number[0].round_number}
-        AND (tm.status = 'in_progress' OR tm.status = 'pending')
-      `;
-            console.log("ongoingMatches", ongoingMatches[0].ongoing_count);
-            // if no ongoing matches remain, check active participants
-            console.log("type", typeof ongoingMatches[0].ongoing_count);
-            if (ongoingMatches[0].ongoing_count == 0) {
-                // proceed to check active participants
-                // count all active participants in the tournament
-                const activeParticipants = yield (0, db_1.default) `
-          SELECT COUNT(*) AS active_count
-          FROM tournament_participants
-          WHERE tournament_id = ${tournament_id[0].tournament_id} AND status = 'qualified'
-        `;
-                console.log("activeParticipants", activeParticipants[0].active_count);
-                if (activeParticipants[0].active_count <= 1) {
-                    // if only one active participant remains, mark the tournament as completed
-                    yield (0, db_1.default) `
-            UPDATE tournaments
-            SET status = 'completed', end_date = NOW()
-            WHERE id = ${tournament_id[0].tournament_id}
-          `;
-                    // set tournament winner to the last active participant
-                    const winnerParticipant = yield (0, db_1.default) `
-            SELECT user_id
-            FROM tournament_participants
-            WHERE tournament_id = ${tournament_id[0].tournament_id} AND status = 'qualified'
-            LIMIT 1
-          `;
-                    if (winnerParticipant.length > 0) {
-                        yield (0, db_1.default) `
-              UPDATE tournaments
-              SET winner_id = ${winnerParticipant[0].user_id}
-              WHERE id = ${tournament_id[0].tournament_id}
-            `;
-                    }
-                    // send a notification message to the winner in db
-                    yield (0, db_1.default) `
-            INSERT INTO notifications (user_id, type, title, message, action)
-            VALUES (
-              ${winnerParticipant[0].user_id},
-              'tournament',
-              'Tournament Champion 🏆',
-              'Congratulations! You won the Weekend Tournament. Your skill and strategy paid off — enjoy your rewards!',
-              'Claim Prize'
-            )
-          `;
-                }
-                else if (activeParticipants[0].active_count > 1) {
-                    // advance to next round
-                    yield (0, exports.advanceToNextRound)(game.id, current_round_number[0].round_number + 1, tournament_id[0].tournament_id);
-                }
-            }
-            else {
-                // exit if there are still ongoing matches
-            }
             //update ratings
             const players = (0, rating_1.updateRatings)(game.players, winner.user.id);
             for (let player of players) {
-                yield (0, db_1.default) `UPDATE users SET rating = ${player.user.rating} WHERE id = ${player.user.id}`;
+                const oldRating = yield (0, db_1.default) `SELECT rating from users WHERE id = ${player.user.id}`;
+                const newRating = player.user.rating;
+                console.log(`player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`);
+                yield (0, db_1.default) `UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+                const ratingChange = newRating - oldRating[0].rating;
+                // character suit there question //
+                yield (0, db_1.default) `INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`;
+            }
+        }
+        if (tournament) {
+            console.log("this game is part of a tournament match, reporting result to tournament system");
+            const tournamentFormat = tournament.format;
+            console.log("tournamentFormat", tournamentFormat);
+            if (tournamentFormat == "Single Elimination") {
+                const loser = (0, utils_1.getMatchLoser)(game);
+                yield (0, tournament_1.updateSingleEliminationMatchResults)(game.id, winner.user.id, loser.user.id, tournament.id);
+                const lobbyData = yield (0, exports.getSingleEliminationTournamentLobbyData)(tournament.id);
+                index_2.serverSocket
+                    .to(`tournament_${tournament.id}`)
+                    .emit("lobbyUpdate", lobbyData);
+                yield (0, tournament_1.advanceSingleEliminationTournamentToNextRound)(tournament.id, tournament.current_round_number, index_2.serverSocket);
+            }
+            else if (tournamentFormat == "Swiss") {
+                const loser = (0, utils_1.getMatchLoser)(game);
+                yield (0, tournament_1.updateSwissMatchResults)(game.id, winner.user.id, loser.user.id, tournament.id);
+                const lobbyData = yield (0, tournament_1.getSwissTournamentLobbyData)(tournament.id);
+                index_2.serverSocket
+                    .to(`tournament_${tournament.id}`)
+                    .emit("lobbyUpdate", lobbyData);
+                yield (0, tournament_1.advanceSwissTournamentToNextRound)(tournament.id, tournament.current_round_number, index_2.serverSocket);
             }
         }
     }
     else {
+        yield saveGame(game.code, game);
         setTimeout(() => {
             index_2.serverSocket.to(game.code).emit("gameEnded", {
                 winner: Object.assign(Object.assign({}, winner), { points, hand_number: game.current_hand_number }),
             });
         }, 1000);
+        if (tournament) {
+            const tournamentFormat = tournament.format;
+            if (tournamentFormat == "Single Elimination") {
+                const lobbyData = yield (0, exports.getSingleEliminationTournamentLobbyData)(tournament.id);
+                index_2.serverSocket
+                    .to(`tournament_${tournament.id}`)
+                    .emit("lobbyUpdate", lobbyData);
+            }
+            else if (tournamentFormat == "Swiss") {
+                const lobbyData = yield (0, tournament_1.getSwissTournamentLobbyData)(tournament.id);
+                index_2.serverSocket
+                    .to(`tournament_${tournament.id}`)
+                    .emit("lobbyUpdate", lobbyData);
+            }
+        }
     }
-    yield saveGame(game.code, game);
+    //await saveGame(game.code, game);
 });
 const allCardsPlayed = (game) => {
     const dealt_cards = game.cards.filter((card) => card.status !== "in_drawpile");
@@ -391,21 +352,21 @@ const calculateSpecialPoints = (completed_tricks, trick_number, next_card_suit, 
     }
     if (winning_card_rank == "7") {
         // check if the 7 was used to counter a six
-        console.log('trick cards', trick.cards);
+        //  console.log("trick cards", trick.cards);
         let sameSuitCards = trick.cards.filter((card) => card.card.suit == trick.leading_suit);
-        console.log('same suit cards', sameSuitCards);
-        let isaSix = sameSuitCards.find((card) => card.card.rank == '6');
-        console.log('isaSix', isaSix);
+        //console.log("same suit cards", sameSuitCards);
+        let isaSix = sameSuitCards.find((card) => card.card.rank == "6");
+        //console.log("isaSix", isaSix);
         if (isaSix) {
-            let indexOfSix = trick.cards.findIndex((card) => card.card.rank == '6' && card.card.suit == trick.leading_suit);
-            let indexOfSeven = trick.cards.findIndex((card) => card.card.rank == '7' && card.card.suit == trick.leading_suit);
+            let indexOfSix = trick.cards.findIndex((card) => card.card.rank == "6" && card.card.suit == trick.leading_suit);
+            let indexOfSeven = trick.cards.findIndex((card) => card.card.rank == "7" && card.card.suit == trick.leading_suit);
             if (indexOfSeven < indexOfSix) {
-                console.log('the seven was played before the six');
+                //console.log("the seven was played before the six");
                 return (2 +
                     calculateSpecialPoints(completed_tricks, trick_number - 1, winning_card_suit, last_trick_index));
             }
             else {
-                console.log('7 was used to counter a six');
+                //  console.log("7 was used to counter a six");
                 if (trick_number == last_trick_index)
                     return 1;
                 return 0;
@@ -419,291 +380,7 @@ const calculateSpecialPoints = (completed_tricks, trick_number, next_card_suit, 
     }
     return 0;
 };
-const reportMatchResult = (gameId, winnerId, tournament_id) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        // update match with winner
-        yield (0, db_1.default) `
-      UPDATE tournament_matches 
-      SET winner_id = ${winnerId}, status = 'completed'
-      WHERE game_id = ${gameId}
-    `;
-        // update the loser's participant status to 'eliminated'
-        const loserParticipant = yield (0, db_1.default) `
-    SELECT 
-      CASE 
-        WHEN player1_id = ${winnerId} 
-        THEN player2_id 
-        ELSE player1_id 
-      END AS loser_id
-    FROM tournament_matches 
-    WHERE game_id = ${gameId}
-  `;
-        yield (0, db_1.default) `
-    UPDATE tournament_participants
-    SET status = 'eliminated'
-    WHERE tournament_id = ${tournament_id}
-    AND user_id = ${loserParticipant[0].loser_id}
-  `;
-        const lobbyData = yield (0, exports.getTournamentLobbyData)(tournament_id);
-        index_2.serverSocket.to(`tournament_${tournament_id}`).emit("lobbyUpdate", lobbyData);
-    }
-    catch (error) {
-        console.error("Error reporting match result:", error);
-        throw error;
-    }
-});
-exports.reportMatchResult = reportMatchResult;
-const advanceToNextRound = (gameId, nextRoundNumber, tournament_id) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        // create a new round entry for the tournament if it doesn't exist
-        const existingRound = yield (0, db_1.default) `
-      SELECT id 
-      FROM tournament_rounds 
-      WHERE tournament_id = ${tournament_id} 
-      AND round_number = ${nextRoundNumber}
-    `;
-        let roundId;
-        if (existingRound.length === 0) {
-            const newRound = yield (0, db_1.default) `
-        INSERT INTO tournament_rounds (tournament_id, round_number) 
-        VALUES (${tournament_id}, ${nextRoundNumber})
-        RETURNING id
-      `;
-            roundId = newRound[0].id;
-        }
-        else {
-            roundId = existingRound[0].id;
-        }
-        // create new matches for the next round
-        const participants = yield (0, db_1.default) `
-      SELECT u.id, u.username, u.image_url
-      FROM users u
-      JOIN tournament_participants tp ON u.id = tp.user_id
-      WHERE tp.tournament_id = ${tournament_id} AND status = 'qualified'
-      ORDER BY u.username
-    `;
-        // Shuffle participants
-        const shuffled = participants.sort(() => Math.random() - 0.5);
-        // Pair players and create matches
-        for (let i = 0; i < shuffled.length; i += 2) {
-            const player1 = shuffled[i];
-            const player2 = shuffled[i + 1];
-            if (!player2) {
-                // Handle odd number of players - auto-advance
-                const game = yield (0, db_1.default) `
-            INSERT INTO games (
-              code,
-              created_by,
-              player_count,
-              status,
-              current_turn_user_id,
-              is_rated
-            ) VALUES (
-              ${Math.random().toString(36).substring(2, 12)},
-              ${player1.id},
-              2,
-              'completed',
-              ${player1.id},
-              true
-            )
-            RETURNING *
-          `;
-                // create game player
-                const result = yield (0, db_1.default) `
-            INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-            VALUES (
-              ${game[0].id}, 
-              ${player1.id}, 
-              0, 
-              true,
-              'active'
-            )
-            RETURNING 
-              id,
-              game_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status,
-              (SELECT json_build_object(
-                'id', id,
-                'username', username,
-                'image_url', image_url,
-                'rating', rating
-              ) FROM users WHERE id = user_id) as user
-          `;
-                // create tournament match
-                const match = yield (0, db_1.default) `
-            INSERT INTO tournament_matches (
-              tournament_id,
-              game_id,
-              round_id,
-              player1_id,
-              player2_id,
-              status,
-              winner_id,
-              match_order
-            ) VALUES (
-              ${tournament_id},
-              ${game[0].id},
-              ${roundId},
-              ${player1.id},
-              NULL,
-              'completed',
-              ${player1.id},
-              ${Math.floor(i / 2) + 1}
-            )
-            RETURNING id, status
-          `;
-                continue;
-            }
-            const cards = yield (0, db_1.default) `SELECT card_id FROM cards ORDER BY RANDOM()`;
-            const is_final_match = participants.length == 2;
-            // Create game
-            const game = yield (0, db_1.default) `
-        INSERT INTO games (
-          code,
-          created_by,
-          player_count,
-          status,
-          current_turn_user_id,
-          is_rated,
-          is_final_match
-        ) VALUES (
-          ${Math.random().toString(36).substring(2, 12)},
-          ${player1.id},
-          2,
-          'waiting',
-          ${player2.id},
-          true,
-          ${is_final_match}
-        )
-        RETURNING *
-      `;
-            // Create game players
-            const result = yield db_1.default.transaction((sql) => [
-                sql `
-          INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-          VALUES (
-            ${game[0].id}, 
-            ${player1.id}, 
-            0, 
-            true,
-            'active'
-          )
-          RETURNING 
-            id,
-            game_id,
-            score,
-            games_won,
-            position,
-            is_dealer,
-            status,
-            (SELECT json_build_object(
-              'id', id,
-              'username', username,
-              'image_url', image_url,
-              'rating', rating
-            ) FROM users WHERE id = user_id) as user
-        `,
-                sql `
-          INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
-          VALUES (
-            ${game[0].id}, 
-            ${player2.id}, 
-            1, 
-            false,
-            'active'
-          )
-          RETURNING 
-            id,
-            game_id,
-            score,
-            games_won,
-            position,
-            is_dealer,
-            status,
-            (SELECT json_build_object(
-              'id', id,
-              'username', username,
-              'image_url', image_url,
-              'rating', rating
-            ) FROM users WHERE id = user_id) as user
-        `,
-            ]);
-            // Create game cards
-            const gameCards = yield (0, db_1.default) `
-        INSERT INTO game_cards (game_id, card_id, player_id, hand_position, status)
-        SELECT 
-          ${game[0].id},
-          unnest(${cards.map((c) => c.card_id)}::integer[]),
-          ${result[0][0].id},
-          -1,
-          'in_deck'
-        RETURNING 
-          id,
-          game_id,
-          player_id,
-          status,
-          hand_position,
-          trick_number,
-          pos_x,
-          pos_y,
-          rotation,
-          z_index,
-          animation_state,
-          (SELECT json_build_object(
-            'card_id', card_id,
-            'suit', suit,
-            'value', value,
-            'rank', rank,
-            'image_url', image_url
-          ) FROM cards WHERE card_id = game_cards.card_id) as card
-      `;
-            // Create match
-            const match = yield (0, db_1.default) `
-        INSERT INTO tournament_matches (
-          tournament_id,
-          game_id,
-          round_id,
-          player1_id,
-          player2_id,
-          status,
-          match_order
-        ) VALUES (
-          ${tournament_id},
-          ${game[0].id},
-          ${roundId},
-          ${player1.id},
-          ${player2.id},
-          'in_progress',
-          ${Math.floor(i / 2) + 1}
-        )
-        RETURNING id, status
-      `;
-            // update tournaments current round number
-            yield (0, db_1.default) `
-        UPDATE tournaments 
-        SET current_round_number = ${nextRoundNumber} 
-        WHERE id = ${tournament_id}
-      `;
-            // Prepare and save game to Redis
-            const newGame = Object.assign(Object.assign({}, game[0]), { players: [result[0][0], result[1][0]], cards: gameCards });
-            yield saveGame(game[0].code, newGame);
-            console.log("game saved to memory successfully", game[0].code);
-            const lobbyData = yield (0, exports.getTournamentLobbyData)(tournament_id);
-            index_2.serverSocket.to(`tournament_${tournament_id}`).emit("lobbyUpdate", lobbyData);
-            //
-        }
-    }
-    catch (error) {
-        console.error("Error advancing to next round:", error);
-        throw error;
-    }
-});
-exports.advanceToNextRound = advanceToNextRound;
-const getTournamentLobbyData = (tournamentId) => __awaiter(void 0, void 0, void 0, function* () {
+const getSingleEliminationTournamentLobbyData = (tournamentId) => __awaiter(void 0, void 0, void 0, function* () {
     // Fetch tournament details
     const tournament = yield (0, db_1.default) `
   SELECT * FROM tournaments WHERE id = ${tournamentId}
@@ -714,12 +391,13 @@ const getTournamentLobbyData = (tournamentId) => __awaiter(void 0, void 0, void 
      u.id, 
      u.username, 
      u.image_url, 
+     u.is_rated,
      u.rating,
-     tp.status,
-     RANK() OVER (ORDER BY u.rating DESC) as rank
+     tp.status
    FROM users u
    JOIN tournament_participants tp ON u.id = tp.user_id
    WHERE tp.tournament_id = ${tournamentId}
+    ORDER BY u.rating DESC
  `;
     // Fetch current round matches with player details and scores
     const matches = yield (0, db_1.default) `
@@ -748,9 +426,17 @@ const getTournamentLobbyData = (tournamentId) => __awaiter(void 0, void 0, void 
    WHERE tm.tournament_id = ${tournamentId}
    ORDER BY tr.round_number ASC, tm.match_order ASC
  `;
+    const gamesList = yield (0, db_1.default) `SELECT code as gamecode from games where id = ANY(${matches.map((m) => m.game_id)}::integer[])`;
+    const codes = gamesList.map((gameData) => gameData.gamecode);
+    const games = yield (0, utils_1.getGamesByCodes)(codes);
+    let gamesMap = {};
+    if (games) {
+        gamesMap = Object.fromEntries(games.map((game) => [game.code, game]));
+    }
     // Format rounds with aggregated player data
     const roundsMap = {};
     matches.forEach((match) => {
+        var _a, _b;
         if (!roundsMap[match.round_number]) {
             roundsMap[match.round_number] = [];
         }
@@ -774,20 +460,24 @@ const getTournamentLobbyData = (tournamentId) => __awaiter(void 0, void 0, void 
             game_id: match.game_id,
             game_code: match.code,
             winner_id: match.winner_id,
+            turn_ends_at: (_a = gamesMap[match.code]) === null || _a === void 0 ? void 0 : _a.turn_ends_at,
+            forfeiter_user_id: (_b = gamesMap[match.code]) === null || _b === void 0 ? void 0 : _b.forfeited_by,
         });
     });
     const rounds = Object.entries(roundsMap).map(([round, matches]) => ({
         round: parseInt(round),
         matches,
     }));
+    const standings = yield (0, tournament_1.getSingleEliminationTournamentStandings)(tournamentId, tournament[0].status);
     return {
         success: true,
         tournament: tournament[0],
         participants,
         rounds,
+        standings,
     };
 });
-exports.getTournamentLobbyData = getTournamentLobbyData;
+exports.getSingleEliminationTournamentLobbyData = getSingleEliminationTournamentLobbyData;
 const gameExists = (gameCode) => __awaiter(void 0, void 0, void 0, function* () {
     const value = yield index_1.redis.exists(gameCode);
     return value === 1; // Redis returns 1 if the key exists, 0 if it does not

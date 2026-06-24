@@ -9,9 +9,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const generateTokens = (id) => {
     //console.log("SecretKey:", process.env.SECRET);
-    const accessToken = jsonwebtoken_1.default.sign({ userId: id }, process.env.JWT_ACCESS_SECRET, {
-        expiresIn: "7d",
-    });
+    const accessToken = jsonwebtoken_1.default.sign({ userId: id }, process.env.JWT_ACCESS_SECRET);
     const refreshToken = jsonwebtoken_1.default.sign({ userId: id }, process.env.JWT_REFRESH_SECRET, {
         expiresIn: "7d",
     });

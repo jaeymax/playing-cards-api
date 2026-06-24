@@ -143,6 +143,7 @@ const registerUser = asyncHandler((req, res, next) => __awaiter(void 0, void 0, 
         VALUES (${username}, ${email}, ${hashedPassword})
         RETURNING id, username, email
       `;
+    yield (0, db_1.default) `INSERT INTO wallets (user_id) VALUES (${newUser[0].id})`;
     // Delete the OTP record after successful registration
     yield (0, db_1.default) `DELETE FROM otp_verification WHERE email = ${email}`;
     // Generate JWT tokens
@@ -554,6 +555,10 @@ const googleSignup = asyncHandler((req, res) => __awaiter(void 0, void 0, void 0
     INSERT INTO users (username, email, password_hash, image_url, is_guest)
     VALUES (${username}, ${email}, NULL, ${picture || "https://github.com/shadcn.png"}, false)
     RETURNING *
+  `;
+    // create wallet for user
+    yield (0, db_1.default) `
+    INSERT INTO wallets (user_id) VALUES (${user[0].id})
   `;
     const { accessToken, refreshToken } = (0, generateToken_1.generateTokens)(user[0].id);
     // Store refresh token

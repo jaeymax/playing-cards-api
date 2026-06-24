@@ -54,6 +54,42 @@ router.get("/games/:code", (0, express_async_handler_1.default)((req, res) => __
     `;
     res.json(messages);
 })));
+// spectator game chat messages
+router.get('/spectator/:code', (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { code } = req.params;
+    const messages = yield (0, db_1.default) `
+        SELECT 
+            m.id,
+            m.message,
+            m.created_at as timestamp,
+            u.id as user_id,
+            u.username,
+            u.image_url as avatar
+        FROM spectator_chat_messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.game_code = ${code}
+        ORDER BY m.created_at ASC
+    `;
+    res.json(messages);
+})));
+// get tournament chat messages
+router.get("/tournaments/:id", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const messages = yield (0, db_1.default) `
+        SELECT 
+            m.id,
+            m.message,
+            m.created_at as timestamp,
+            u.id as user_id,
+            u.username,
+            u.image_url as avatar
+        FROM tournament_chat_messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.tournament_id = ${id}
+        ORDER BY m.created_at ASC
+    `;
+    res.json(messages);
+})));
 router.post("/game/:code", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { code } = req.params;
     const { user_id, message } = req.body;

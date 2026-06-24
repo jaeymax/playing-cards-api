@@ -14,8 +14,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteAllNotifications = exports.deleteNotification = exports.markAllNotificationsAsRead = exports.markNotificationAsRead = exports.getUserNotifications = void 0;
 const db_1 = __importDefault(require("../config/db"));
-const getUserNotifications = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { userId } = req.params;
+const express_async_handler_1 = __importDefault(require("express-async-handler"));
+exports.getUserNotifications = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    console.log("Fetching notifications for user ID:", id);
+    if (!id) {
+        res.status(400).json({ message: "User ID is required." });
+        return;
+    }
     const notifications = yield (0, db_1.default) `
         SELECT 
             n.id,
@@ -24,15 +30,14 @@ const getUserNotifications = (req, res) => __awaiter(void 0, void 0, void 0, fun
             n.message,
             n.is_read,
             n.action,
-            n.created_at as timestamp
+            n.created_at
         FROM notifications n
-        WHERE n.user_id = ${userId}
+        WHERE n.user_id = ${id}
         ORDER BY n.created_at DESC
     `;
     res.json(notifications);
-});
-exports.getUserNotifications = getUserNotifications;
-const markNotificationAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+}));
+exports.markNotificationAsRead = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { notificationId } = req.params;
     yield (0, db_1.default) `
         UPDATE notifications
@@ -40,9 +45,8 @@ const markNotificationAsRead = (req, res) => __awaiter(void 0, void 0, void 0, f
         WHERE id = ${notificationId}
     `;
     res.status(200).json({ message: "Notification marked as read." });
-});
-exports.markNotificationAsRead = markNotificationAsRead;
-const markAllNotificationsAsRead = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+}));
+exports.markAllNotificationsAsRead = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { userId } = req.params;
     yield (0, db_1.default) `
         UPDATE notifications
@@ -50,23 +54,20 @@ const markAllNotificationsAsRead = (req, res) => __awaiter(void 0, void 0, void 
         WHERE user_id = ${userId}
     `;
     res.status(200).json({ message: "All notifications marked as read." });
-});
-exports.markAllNotificationsAsRead = markAllNotificationsAsRead;
-const deleteNotification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+}));
+exports.deleteNotification = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { notificationId } = req.params;
     yield (0, db_1.default) `
         DELETE FROM notifications
         WHERE id = ${notificationId}
     `;
     res.status(200).json({ message: "Notification deleted." });
-});
-exports.deleteNotification = deleteNotification;
-const deleteAllNotifications = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+}));
+exports.deleteAllNotifications = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { userId } = req.params;
     yield (0, db_1.default) `
         DELETE FROM notifications
         WHERE user_id = ${userId}
     `;
     res.status(200).json({ message: "All notifications deleted." });
-});
-exports.deleteAllNotifications = deleteAllNotifications;
+}));
