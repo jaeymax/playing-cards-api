@@ -84,6 +84,7 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
         u.bronze_medals,
         u.tournaments_played,
         u.tournaments_won,
+        u.notifications_enabled,
         u.image_url,
         u.games_played,
         u.games_won,
