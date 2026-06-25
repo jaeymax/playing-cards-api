@@ -97,7 +97,7 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
       LEFT JOIN RankedUsers r ON u.id = r.id
       WHERE u.is_bot = false
     )
-    SELECT id, username, email, phone, is_guest, is_rated, peak_rating, max_winning_streak, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank
+    SELECT id, username, email, phone, is_guest, is_rated, peak_rating, max_winning_streak, notification_enabled, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank
     FROM UserProfile
     WHERE id = ${userId}
   `;
