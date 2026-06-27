@@ -94,6 +94,7 @@ const sendPushNotification = async(token: string, title: string, body: string, l
       notification: {
         title: title,
         body: body,
+        link:link
       },
       webpush: {
           fcmOptions: {
@@ -232,6 +233,7 @@ cron.schedule("30 18 * * *", async () => {
           // send notifications to users about the tournament starting today
           // you can implement a function to send notifications here, e.g. sendTournamentStartNotifications(tournament);
           sendTournamentStartNotifications(tournament);
+
         }
     }
   }catch(error){
@@ -246,7 +248,7 @@ const sendTournamentStartNotifications = async (tournament: any) => {
 
    // const testId = 48;
     const users = await sql`
-        SELECT username, phone FROM users WHERE phone IS NOT NULL
+        SELECT username, phone, push_token FROM users WHERE phone IS NOT NULL
     `;
 
     // if its friday then the cash prize is 30ghc, if its saturday then the cash prize is 90ghc with first position getting 60ghc and second position getting 30ghc, if its sunday then there is no cash prize you can customize the message based on the tournament details
@@ -301,6 +303,10 @@ Register now: sparplay.com/tournaments/${tournament.id} if you want to participa
       const phone = "233" + user.phone.substr(1);
       console.log("realphone", phone);
       await sendSMS(phone, messageTemplate);
+
+      if(user.push_token){
+         sendPushNotification(user.push_token, tournament.name , messageTemplate)
+      }
     }
   } catch (error) {
     console.error("Error sending tournament start notifications:", error);
