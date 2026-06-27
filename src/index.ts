@@ -87,7 +87,7 @@ const testPushNotification = async () => {
   });
 }
 
-const sendPushNotification = async(token: string, title: string, body: string) => {
+const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com') => {
   try {
     const message = {
       token: token,
@@ -95,6 +95,11 @@ const sendPushNotification = async(token: string, title: string, body: string) =
         title: title,
         body: body,
       },
+      webpush: {
+          fcmOptions: {
+            link: link // Opens or focuses this URL on click
+          }
+        }
     };
 
     const response = await getMessaging().send(message);
