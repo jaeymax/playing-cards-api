@@ -93,8 +93,7 @@ const sendPushNotification = async(token: string, title: string, body: string, l
       token: token,
       notification: {
         title: title,
-        body: body,
-        link:link
+        body: body
       },
       webpush: {
           fcmOptions: {
