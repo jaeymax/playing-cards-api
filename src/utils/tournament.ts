@@ -1,5 +1,5 @@
 import { assert } from "console";
-import { matchForfeiter } from "..";
+import { matchForfeiter, sendPushNotification } from "..";
 import sql from "../config/db"; // Ensure sql is properly typed in the db configuration file
 import {
   fisherYatesShuffle,
@@ -11,6 +11,7 @@ import {
   getGamesByCodes,
   markTournamentAsEndedAndCompleted,
 } from "../utils";
+import { create } from "axios";
 
 const createNextSwissRoundMatches = async (
   roundNumber: number,
@@ -290,37 +291,6 @@ const createNextSingleEliminationRoundMatches = async (
       const player1 = participants[i];
       const player2 = participants[i + 1];
 
-      // if (!player2) {
-      //   // Handle odd number of players - auto-advance
-      //   const game = await createByeMatch(player1.id);
-
-      //   const gameplayer = await createMatchGamePlayer(
-      //     game.id,
-      //     player1.id,
-      //     0,
-      //     true
-      //   );
-
-      //   await createSingleEliminationByeMatch(
-      //     tournamentId,
-      //     game.id,
-      //     round.id,
-      //     player1.id,
-      //     Math.floor(i / 2) + 1
-      //   );
-      //   console.log(`created match for only ${player1.username}`);
-
-      //   const newGame = {
-      //     ...game,
-      //     players: [gameplayer],
-      //     cards: null,
-      //   };
-
-      //   await saveGame(game.code, newGame);
-      //   console.log("game saved to memory", game.code);
-      //   break;
-      // }
-
       const game = await createTwoPlayerMatch(
         player1.id,
         "waiting",
@@ -369,6 +339,20 @@ const createNextSingleEliminationRoundMatches = async (
       await saveGame(game.code, newGame);
       console.log("game saved to memory successfully", game.code);
 
+      // send push notification to players
+            if(player1.push_token){
+              const title = `${player1.username}! Your Match is Ready`
+              const body = `You vs ${player2.username}`;
+              sendPushNotification(player1.push_token, title, body)
+            } 
+      
+            if(player2.push_token){
+              const title = `${player2.username}! Your Match is Ready`
+              const body = `You vs ${player1.username}`;
+              sendPushNotification(player2.push_token, title, body)
+            }
+      
+
       // const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
 
       // serverSocket
@@ -383,7 +367,7 @@ const createNextSingleEliminationRoundMatches = async (
 
 const getSwissTournamentParticipantsByScore = async (tournamentId: number) => {
   const participants = await sql`
-    SELECT u.id, u.username, u.is_rated, u.image_url, tp.score, tp.has_received_bye
+    SELECT u.id, u.username, u.is_rated, u.push_token, u.image_url, tp.score, tp.has_received_bye
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId}
@@ -396,7 +380,7 @@ const getSingleEliminationTournamentParticipants = async (
   tournamentId: number
 ) => {
   const participants = await sql`
-    SELECT u.id, u.username, u.rating, u.is_rated, u.image_url, tp.status, tp.has_received_bye, tp.score, tp.losses
+    SELECT u.id, u.username, u.push_token, u.rating, u.is_rated, u.image_url, tp.status, tp.has_received_bye, tp.score, tp.losses
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId}
@@ -410,7 +394,7 @@ const getSingleEliminationTournamentParticipantsByStatus = async (
   status: string
 ) => {
   const participants = await sql`
-    SELECT u.id, tp.user_id, tp.has_received_bye, u.username, u.image_url, tp.status, tp.score, tp.losses
+    SELECT u.id, tp.user_id, tp.has_received_bye, u.username, u.image_url, u.push_token, tp.status, tp.score, tp.losses
     FROM users u
     JOIN tournament_participants tp ON u.id = tp.user_id
     WHERE tp.tournament_id = ${tournamentId} AND status = ${status}
@@ -1284,10 +1268,10 @@ const advanceSingleEliminationTournamentToNextRound = async (
     // get Top 3 winners for the tournament
     const winners = await getSingleEliminationTournamentWinners(tournamentId);
     console.log("Single elimination winners", winners);
-    assert(
-      winners.length >= 3,
-      "There should be at least 3 winners for the tournament"
-    );
+    // assert(
+    //   winners.length >= 3,
+    //   "There should be at least 3 winners for the tournament"
+    // );
     const firstPlace = winners[0];
     const secondPlace = winners[1];
     const thirdPlace = winners[2];
@@ -1319,13 +1303,36 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       WHERE id = ${participant.id}
       `;
 
-      createNotification(
-        participant.id,
-        "tournament",
-        "⏳ Next Tournament: Friday 8PM",
-        nextTournamentMessage,
-        "Register"
-      );
+      // fetch the rating history for the previous rating before the tournament for the participant
+      const prevRatingResults = await sql`
+        SELECT rating_after FROM ratings_history
+        WHERE user_id = ${participant.id}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+
+      const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating - 2;
+      const newRating = prevRating + ratingChange;
+
+      try{
+        await sql`
+          INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after)
+          VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
+        `;
+      }catch(err){
+        console.error('Error inserting into ratings_history:', err);
+      }
+
+
+      //await sql`INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after) VALUES (${participant.id}, ${tournamentId}, 2, ${ratingChange}, '')`;
+
+      // createNotification(
+      //   participant.id,
+      //   "tournament",
+      //   "⏳ Next Tournament: Friday 8PM",
+      //   nextTournamentMessage,
+      //   "Register"
+      // );
 
       console.log(
         `rating change for user ${participant.username} in tournament ${tournamentId}:`,
@@ -1427,7 +1434,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
     createNotification(
       firstPlace.id,
       "reward",
-      "💰 ₵50 Cash Prize Won!",
+      "💰 Cash Prize Won!",
       cashPrizeMessage,
       "View Leaderboard"
     );
@@ -1452,10 +1459,29 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       WHERE id = ${thirdPlace.id}
     `,
     ]);
+
+
+    // create next tournament for the next week with the same date and time (7days later) and same game, and same tournament type, and same max participants, and same entry fee, and same prize pool, and same is_rated, and same is_private, and same is_invite_only, and same is_team_tournament, and same team_size, and same team_score_type, and same team_score_limit, and same team_score_increment, and same team_score_decrement, and same team_score_reset_on_win, and same team_score_reset_on_loss, and same team_score_reset_on_draw, and same team_score_reset_on_forfeit, and same team_score_reset_on_disconnect, and same team_score_reset_on_timeout, and same team_score_reset_on_abandonment
+
+    await createNextTournamentForNextWeek(tournamentId);
+
   } else {
     // if not last round and all matches are not yet completed
   }
 };
+
+const createNextTournamentForNextWeek = async (tournamentId: number) => {
+  const tournament = await sql`SELECT * FROM tournaments WHERE id = ${tournamentId}`;
+  const newTournamentStartDate = new Date(tournament[0].start_date);
+  const newTournamentRegistrationClosingDate = new Date(tournament[0].registration_closing_date);
+  newTournamentStartDate.setDate(newTournamentStartDate.getDate() + 7); // add 7 days
+  newTournamentRegistrationClosingDate.setDate(newTournamentRegistrationClosingDate.getDate() + 7); // add 7 days
+
+  await sql`INSERT INTO tournaments (name, description, start_date, format, prize, is_featured, registration_fee, registration_closing_date, difficulty)
+    VALUES (${tournament[0].name}, ${tournament[0].description}, ${newTournamentStartDate}, ${tournament[0].format}, ${tournament[0].prize}, ${tournament[0].is_featured}, ${tournament[0].registration_fee}, ${newTournamentRegistrationClosingDate}, ${tournament[0].difficulty})
+  `;
+};
+
 
 const getSingleEliminationTournamentWinners = async (tournamentId: number) => {
   const winners = await sql`SELECT

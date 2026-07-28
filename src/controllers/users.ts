@@ -47,6 +47,76 @@ export const getDivisionInfo = (rating: number) => {
   };
 };
 
+const getUserProfileByUsername = asyncHandler(async (req: Request, res: Response) => {
+  const { username } = req.params;
+
+  const users = await sql`
+    WITH RankedUsers AS (
+      SELECT
+        id,
+        RANK() OVER (ORDER BY rating DESC) AS global_rank
+      FROM users
+      WHERE is_bot = false
+        AND is_guest = false
+        AND is_rated = true
+    ),
+    UserProfile AS (
+      SELECT
+        u.id,
+        u.username,
+        u.email,
+        u.phone,
+        u.country_code,
+        u.is_guest,
+        u.is_rated,
+        u.peak_rating,
+        u.max_winning_streak,
+        u.podium_finishes,
+        u.current_winning_streak,
+        u.gold_medals,
+        u.silver_medals,
+        u.bronze_medals,
+        u.tournaments_played,
+        u.tournaments_won,
+        u.notification_enabled,
+        u.image_url,
+        u.games_played,
+        u .games_won,
+        u.rating,
+        u.location,
+        u.created_at,
+        u.updated_at,
+        r.global_rank
+      FROM users u
+      LEFT JOIN RankedUsers r ON u.id = r.id
+      WHERE u.is_bot = false
+    )
+    SELECT id, username, email, phone, country_code, is_guest, is_rated, peak_rating, max_winning_streak, notification_enabled, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank
+    FROM UserProfile
+    WHERE username = ${username}
+  `;
+
+  // get player rating history
+  const ratingHistory = await sql`
+    SELECT tournament_id, rating_before, rating_change, rating_after
+    FROM ratings_history
+    WHERE user_id = ${users[0].id}
+    ORDER BY created_at ASC
+  `;
+
+  if (users.length === 0) {
+    res.status(404);
+    throw new Error("User not found");
+  }
+
+  const user = users[0];
+
+  res.status(200).json({
+    ...user,
+    ...getDivisionInfo(user.rating),
+    rating_history: ratingHistory,
+  });
+});
 
 const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.user?.userId;
@@ -73,6 +143,7 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
         u.username,
         u.email,
         u.phone,
+        u.country_code,
         u.is_guest,
         u.is_rated,
         u.peak_rating,
@@ -97,7 +168,7 @@ const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
       LEFT JOIN RankedUsers r ON u.id = r.id
       WHERE u.is_bot = false
     )
-    SELECT id, username, email, phone, is_guest, is_rated, peak_rating, max_winning_streak, notification_enabled, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank
+    SELECT id, username, email, phone, country_code, is_guest, is_rated, peak_rating, max_winning_streak, notification_enabled, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank
     FROM UserProfile
     WHERE id = ${userId}
   `;
@@ -124,7 +195,7 @@ const updateUserProfile = asyncHandler(
       throw new Error("Not authorized");
     }
 
-    const { phone, location, country } = req.body;
+    const { phone, country } = req.body;
 
     if (!phone && !country) {
       res.status(400);
@@ -140,7 +211,7 @@ const updateUserProfile = asyncHandler(
         country_code = COALESCE(${country}, country_code),
         updated_at = NOW()
       WHERE id = ${userId}
-      RETURNING id, username, email, phone, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at
+      RETURNING id, username, email, phone, country_code, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at
     `;
 
     if (user.length === 0) {
@@ -148,6 +219,7 @@ const updateUserProfile = asyncHandler(
       throw new Error("User not found");
     }
 
+    console.log('profile updated successfully for user ID:', userId);
 
     res.status(200).json(user[0]);
   },
@@ -187,4 +259,4 @@ const getUsers = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-export { getUserProfile, updateUserProfile, getUsers };
+export { getUserProfile, getUserProfileByUsername, updateUserProfile, getUsers };

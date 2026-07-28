@@ -1,4 +1,4 @@
-import { matchForfeiter, serverSocket } from "..";
+import { matchForfeiter, sendPushNotification, serverSocket } from "..";
 import sql from "../config/db";
 import { getGamesByCodes } from "../utils";
 import { fisherYatesShuffle, saveGame } from "../utils/gameFunctions";
@@ -144,6 +144,19 @@ export const closeTournamentRegistration = async (tournamentId: number) => {
       console.log(
         `created match for ${player1.username} an ${player2.username}`,
       );
+
+      // send push notification to players
+      if(player1.push_token){
+        const title = `${player1.username}! Your Match is Ready`
+        const body = `You vs ${player2.username}`;
+        sendPushNotification(player1.push_token, title, body)
+      } 
+
+      if(player2.push_token){
+        const title = `${player2.username}! Your Match is Ready`
+        const body = `You vs ${player1.username}`;
+        sendPushNotification(player2.push_token, title, body)
+      }
 
       const newGame = {
         ...game,

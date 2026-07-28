@@ -308,6 +308,7 @@ CREATE TABLE rating_changes (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    --match_id INTEGER NOT NULL REFERENCES tournament_matches(id) ON DELETE CASCADE,
     rating_change INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -317,9 +318,11 @@ CREATE TABLE ratings_history (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   tournament_id INTEGER REFERENCES tournaments(id) ON DELETE SET NULL,
+  rating_before INTEGER NOT NULL,
   rating_change INTEGER NOT NULL,
-  new_rating INTEGER NOT NULL,
+  rating_after INTEGER NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
+  UNIQUE(user_id, tournament_id) -- Prevent duplicate entries for the same user and tournament
 );
 
 CREATE TABLE notification_devices (

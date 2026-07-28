@@ -87,7 +87,7 @@ const testPushNotification = async () => {
   });
 }
 
-const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com') => {
+export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com') => {
   try {
     const message = {
       token: token,
@@ -109,6 +109,89 @@ const sendPushNotification = async(token: string, title: string, body: string, l
   }
 }
 
+
+
+export async function rebuildRatingHistory(sql:any) {
+  // 1. fetch all users
+  const users = await sql`
+    SELECT id FROM users
+    ORDER BY id
+  `;
+
+  // 2. fetch all tournaments in chronological order
+  const tournaments = await sql`
+    SELECT id, end_date
+    FROM tournaments
+    WHERE status = 'completed'
+    ORDER BY end_date ASC
+  `;
+
+  for (const user of users) {
+    let prevRating = 1000;
+
+    for (const tournament of tournaments) {
+      const tournamentId = tournament.id;
+
+      // 3. check if user participated
+      const participation = await sql`
+        SELECT 1
+        FROM tournament_participants
+        WHERE user_id = ${user.id}
+          AND tournament_id = ${tournamentId}
+        LIMIT 1
+      `;
+
+      if (participation.length === 0) continue;
+
+      // 4. check if tournament has rating changes for this user
+      const ratingChanges = await sql`
+        SELECT COALESCE(SUM(rating_change), 0) AS total_change
+        FROM rating_changes
+        WHERE user_id = ${user.id}
+          AND tournament_id = ${tournamentId}
+      `;
+
+      const ratingChange = Number(ratingChanges[0].total_change || 0);
+
+      // skip empty tournaments
+      if (ratingChange === 0) continue;
+
+      const ratingBefore = prevRating;
+      const ratingAfter = prevRating + ratingChange;
+
+      // 5. insert history (idempotent)
+      await sql`
+        INSERT INTO ratings_history (
+          user_id,
+          tournament_id,
+          rating_before,
+          rating_after,
+          rating_change,
+          created_at
+        )
+        VALUES (
+          ${user.id},
+          ${tournamentId},
+          ${ratingBefore},
+          ${ratingAfter},
+          ${ratingChange},
+          ${tournament.end_date}
+        )
+        ON CONFLICT (user_id, tournament_id)
+        DO UPDATE SET
+          rating_before = EXCLUDED.rating_before,
+          rating_after = EXCLUDED.rating_after,
+          rating_change = EXCLUDED.rating_change,
+          created_at = EXCLUDED.created_at
+      `;
+
+      // 6. update running rating
+      prevRating = ratingAfter;
+    }
+  }
+
+  console.log('Rating history rebuilded successfully for all users and tournaments.');
+}
 
 // cron.schedule("* * * * *", async () => {
 //   console.log('Checking tournaments...');
@@ -360,6 +443,12 @@ app.post(
 
     res.json({ success: true });
   })
+);
+
+app.get('/api/rebuild-rating-history', expressAsyncHandler(async (req, res) => {
+    await rebuildRatingHistory(sql)
+    res.json({success:true})
+})
 );
 
 //test a push notification route

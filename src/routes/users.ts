@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUserProfile, getUsers, updateUserProfile } from "../controllers/users";
+import { getUserProfileByUsername, getUserProfile, getUsers, updateUserProfile } from "../controllers/users";
 import authMiddleware from "../middlewares/authMiddleware";
 
 const router = Router();
@@ -9,7 +9,7 @@ router.get("/me", authMiddleware, getUserProfile);
 router.get('/', getUsers);
 
 // Generic routes for any user ID - should come after specific routes
-router.get("/:id", getUserProfile);
+router.get("/:username", getUserProfileByUsername);
 router.patch("/:id", authMiddleware, updateUserProfile);
 
 export default router;

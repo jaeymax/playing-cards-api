@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import sql from "../config/db";
+import { getDivisionInfo } from "./users";
 
 const getTopPlayers = asyncHandler(async (req: Request, res: Response) => {
   //res.json({message:"get Leaderboard controller"});
@@ -8,7 +9,7 @@ const getTopPlayers = asyncHandler(async (req: Request, res: Response) => {
   // select * from users where is_guest = false AND is_bot = false ORDER by rating DESC;
   const topPlayers = await sql`
           SELECT username, image_url, rating,
-          RANK() OVER (ORDER BY rating DESC) as rank
+          RANK() OVER (ORDER BY rating DESC) as global_rank
           FROM users 
           WHERE is_guest = false 
           AND is_bot = false 
@@ -17,7 +18,14 @@ const getTopPlayers = asyncHandler(async (req: Request, res: Response) => {
           LIMIT 5
       `;
 
-  res.json(topPlayers);
+  const enrichedTopPlayers = topPlayers.map((player) => {
+    return {
+      ...player,
+      ...getDivisionInfo(player.rating),
+    };
+  });
+
+  res.json(enrichedTopPlayers);
 });
 
 const getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
@@ -30,7 +38,7 @@ const getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
                 WHEN games_played = 0 THEN 0
                 ELSE ROUND((games_won::decimal / games_played) * 100, 2)
             END as win_rate,
-            RANK() OVER (ORDER BY rating DESC) as rank
+            RANK() OVER (ORDER BY rating DESC) as global_rank
         FROM users 
         WHERE is_guest = false 
         AND is_bot = false 
@@ -38,7 +46,17 @@ const getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
         ORDER BY rating DESC
     `;
 
-  res.json(leaderboard);
+  // enrich the leaderboard data with player_rank and rank_color data
+  const enrichedLeaderboard = leaderboard.map((player) => {
+    return {
+      ...player,
+      ...getDivisionInfo(player.rating),
+    };
+  });
+
+  res.json(enrichedLeaderboard);
 });
+
+
 
 export { getLeaderboard, getTopPlayers };

@@ -289,13 +289,12 @@ export const createTournament = async (req: Request, res: Response) => {
       !name ||
       !start_date ||
       !registration_closing_date ||
-      !end_date ||
       !format
     ) {
       return res.status(400).json({
         success: false,
         message:
-          "Name, start date, registration closing date, and end date are required",
+          "Name, start date, registration closing date, and format are required",
       });
     }
 
@@ -304,7 +303,6 @@ export const createTournament = async (req: Request, res: Response) => {
         name, 
         description, 
         start_date, 
-        end_date,
         registration_closing_date,
         registration_fee,
         prize,
@@ -315,7 +313,6 @@ export const createTournament = async (req: Request, res: Response) => {
         ${name}, 
         ${description}, 
         ${new Date(start_date)},
-        ${new Date(end_date)},
         ${new Date(registration_closing_date)},
         ${registration_fee || 0},
         ${prize || 0},

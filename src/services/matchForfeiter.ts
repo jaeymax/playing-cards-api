@@ -24,7 +24,7 @@ export default class MatchForfeiter {
     this.serverSocket = serverSocket;
 
     this.queue = new Queue("forfeitQueue");
-
+    console.log('Creating MatchForfeiter worker...', process.pid, Date.now());
     this.worker = new Worker(
       "forfeitQueue",
       async (job: Job) => {
