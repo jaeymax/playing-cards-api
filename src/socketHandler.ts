@@ -38,6 +38,15 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     console.log(`User connected: ${userId} (socket ${socket.id})`);
     userSocketMap.set(userId, socket.id);
 
+    // mark the user as online in the database
+    sql`UPDATE users SET online_status = true WHERE id = ${userId}`
+      .then(() => {
+        console.log(`Marked user ${userId} as online`);
+      })
+      .catch((err) => {
+        console.error(`Error marking user ${userId} as online:`, err);
+      });
+
 
     // emit status change of online users to all clients
     //serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
@@ -402,7 +411,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       console.log(`User ${userId} disconnected`)
 
       const index = onlineUsers.findIndex((user) => user.user_id === userId);
@@ -412,6 +421,24 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
       serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
       userSocketMap.delete(userId);
+
+      // mark the last_active timestamp for the user in the database
+      await sql`UPDATE users SET last_active = NOW() WHERE id = ${userId}`
+        .then(() => {
+          console.log(`Updated last_active for user ${userId}`);
+        })
+        .catch((err) => {
+          console.error(`Error updating last_active for user ${userId}:`, err);
+        });
+
+      // mark the user as offline in the database
+      await sql`UPDATE users SET online_status = false WHERE id = ${userId}`
+        .then(() => {
+          console.log(`Marked user ${userId} as offline`);
+        })
+        .catch((err) => {
+          console.error(`Error marking user ${userId} as offline:`, err);
+        });
     });
   });
   

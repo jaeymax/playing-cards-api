@@ -7,6 +7,7 @@ CREATE TABLE users (
   password_hash TEXT NOT NULL, 
   image_url TEXT DEFAULT NULL,
   rating INTEGER DEFAULT 1000, 
+  online_status BOOLEAN DEFAULT false,
   push_token VARCHAR(255) DEFAULT NULL,
   notification_enabled BOOLEAN DEFAULT false,
   peak_rating INTEGER DEFAULT 1000,
@@ -26,6 +27,7 @@ CREATE TABLE users (
   phone VARCHAR(20) DEFAULT NULL,
   games_played INTEGER DEFAULT 0,
   games_won INTEGER DEFAULT 0,
+  last_active TIMESTAMP DEFAULT NOW(),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
