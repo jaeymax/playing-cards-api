@@ -100,10 +100,11 @@ const getUserProfileByUsername = asyncHandler(async (req: Request, res: Response
 
   // get player rating history
   const ratingHistory = await sql`
-    SELECT tournament_id, rating_before, rating_change, rating_after
+    SELECT tournament_id, rating_before, rating_change, rating_after, tournaments.start_date, tournaments.name, (tournaments.winner_id = ${users[0].id}) AS won
     FROM ratings_history
+    JOIN tournaments ON ratings_history.tournament_id = tournaments.id
     WHERE user_id = ${users[0].id}
-    ORDER BY created_at ASC
+    ORDER BY ratings_history.created_at ASC
   `;
 
   if (users.length === 0) {
