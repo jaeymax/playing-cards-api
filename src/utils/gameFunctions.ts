@@ -23,6 +23,7 @@ import {
   updateLoserWinningStreak,
   updateWinnerWonCount,
 } from "../utils";
+import { settleCashChallenge } from "../services/cashChallengeSettlerService";
 
 export const getDealingSequence = (game: any) => {
   const dealingSequence: any[] = [];
@@ -90,7 +91,7 @@ export const dealCards = async (game: any) => {
   game.current_turn_user_id = game.players.find(
     (player: any) => player.position == game.current_player_position,
   )?.user?.id;
-  if (game.is_rated) {
+  if (game.is_rated || game.challenge) {
     await matchForfeiter.scheduleForfeit(
       game.code,
       game.turn_timeout_seconds * 1000,
@@ -199,7 +200,7 @@ export const playCard = async (
   const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
   game.turn_ends_at = turn_ends_at;
 
-  if (game.is_rated) {
+  if (game.is_rated || game.challenge) {
     await matchForfeiter.scheduleForfeit(
       game.code,
       game.turn_timeout_seconds * 1000,
@@ -302,12 +303,24 @@ const endGame = async (game: any) => {
   const tournament = await isTournamentMatch(game.id);
   await updateGamePlayersScores(game);
 
-  if (winner.score >= game.win_points) {
+  if (winner.score >= 1) {
     game.status = "completed";
     game.ended_at = Date.now();
-    if (game.is_rated) await matchForfeiter.cancelForfeit(game.code);
+    if (game.is_rated || game.challenge) await matchForfeiter.cancelForfeit(game.code);
 
     winner.games_won += 1;
+    console.log('game challenge', game.challenge)
+    //console.log('game challenge_id', game.challenge.id)
+    if(game.challenge) {
+      // await sql`UPDATE challenges SET status = 'completed', winner_id = ${winner.user.id} WHERE id = ${game.challenge_id}`;
+      // game.challenge.status = 'completed';
+      // game.challenge.winner_id = winner.user.id;
+
+      // we now credit the winner and debit the loser the challenge stake amount
+     await settleCashChallenge(game.challenge.id, winner.user.id);
+    }
+
+
     setTimeout(() => {
       serverSocket.to(game.code).emit("gameOver", {
         winner: { ...winner, points, hand_number: game.current_hand_number },
@@ -318,6 +331,8 @@ const endGame = async (game: any) => {
     await updateGamesPlayedForGamePlayers(game.id);
     await updateWinnerWonCount(winner.user.id);
     await updateLoserWinningStreak(loser.user.id);
+
+    game.status = "completed";
     await saveGame(game.code, game);
 
     console.log("tournamentData", tournament);

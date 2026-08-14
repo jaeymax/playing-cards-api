@@ -60,8 +60,10 @@ CREATE TABLE games (
     code VARCHAR(10) UNIQUE NOT NULL, -- Unique game identifier for invites
     created_by INTEGER NOT NULL REFERENCES users(id),
     is_rated BOOLEAN DEFAULT false,
-    status VARCHAR(20) NOT NULL CHECK (status IN ('waiting', 'in_progress', 'completed', 'abandoned', 'cancelled')) DEFAULT 'waiting',
+    status VARCHAR(20) NOT NULL CHECK (status IN ('waiting', 'in_progress', 'completed', 'expired', 'abandoned', 'cancelled')) DEFAULT 'waiting',
     current_player_position INTEGER NOT NULL DEFAULT 0,
+    -- create a challange_id column to link to the challenges table but make it nullable since not all games will be challenges
+    challenge_id INTEGER REFERENCES challenges(id) ON DELETE SET NULL,
     player_count SMALLINT NOT NULL CHECK (player_count BETWEEN 2 AND 4) DEFAULT 2,
     current_lead_suit VARCHAR(10) CHECK (current_lead_suit IN ('Clubs', 'Diamonds', 'Hearts', 'Spades', NULL)) DEFAULT NULL,
     round_number INTEGER NOT NULL DEFAULT 1,
@@ -78,6 +80,30 @@ CREATE TABLE games (
     UNIQUE (code)
 );
 
+-- CREATE TABLE challenges (
+--     id SERIAL PRIMARY KEY,
+--     challenger_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+--     challengee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+--     status VARCHAR(20) CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'completed')) DEFAULT 'pending',
+--     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+--     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+--     UNIQUE(challenger_id, challengee_id) -- Prevent duplicate challenges between the same users
+-- );  
+
+CREATE TABLE challenges (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER NOT NULL REFERENCES users(id),
+    opponent_id INTEGER REFERENCES users(id),
+    game_id INTEGER REFERENCES games(id),
+    stake NUMERIC(12,2) NOT NULL,
+    platform_fee NUMERIC(12,2) DEFAULT 0,
+    winner_payout NUMERIC(12,2),
+    winner_id INTEGER REFERENCES users(id),
+    status VARCHAR(30) CHECK (status IN ('waiting', 'accepted','in_progress','completed','cancelled','expired')) DEFAULT 'waiting',
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
 
 CREATE TABLE friends (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -265,6 +291,7 @@ CREATE TABLE wallets (
      id SERIAL PRIMARY KEY,
      user_id INTEGER UNIQUE references users(id) ON DELETE CASCADE,
      balance NUMERIC(12, 2) DEFAULT 0.00,
+     locked_balance NUMERIC(12, 2) DEFAULT 0.00,
      currency VARCHAR(3) DEFAULT 'GHS',
      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );  
@@ -279,6 +306,50 @@ CREATE TABLE wallet_transactions(
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE wallet_transactions (
+    id SERIAL PRIMARY KEY,
+
+    user_id INTEGER NOT NULL
+        REFERENCES users(id) ON DELETE CASCADE,
+
+    type VARCHAR(30) NOT NULL CHECK (
+        type IN (
+            'deposit',
+            'withdrawal',
+            'challenge_lock',--
+            'challenge_unlock',--
+            'challenge_win',--
+            'challenge_refund',--
+            'tournament_entry',
+            'tournament_prize'
+        )
+    ),---
+
+    amount NUMERIC(12,2) NOT NULL CHECK(amount > 0),--
+
+    challenge_id INTEGER, --
+    tournament_id INTEGER,  --
+    game_id INTEGER,   --
+
+    reference VARCHAR(100),
+
+    status VARCHAR(20) DEFAULT 'completed',
+
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE challenge_settlements(
+
+    challenge_id INTEGER PRIMARY KEY,
+
+    settled_at TIMESTAMPTZ,
+
+    worker_id TEXT,
+
+    transaction_reference TEXT
+);
+
 
 CREATE TABLE payout_methods (
     id SERIAL PRIMARY KEY,

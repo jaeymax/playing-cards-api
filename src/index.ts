@@ -25,6 +25,7 @@ import profileRoutes from "./routes/profile";
 import walletRoutes from "./routes/wallet";
 import payoutRoutes from "./routes/payout";
 import webhookRoutes from "./routes/webhook";
+import challengeRoutes from "./routes/challenges";
 import Matchmaker from "./services/matchmaking";
 import { initializeSocketHandler } from "./socketHandler";
 import type { Game } from "../types";
@@ -39,6 +40,7 @@ import { monitorEventLoopDelay } from "perf_hooks";
 import { sendSMS } from "./services/smsService";
 import expressAsyncHandler from "express-async-handler";
 import { closeTournamentRegistration, getAllUpcomingTournaments, startTournament } from "./services/tournament";
+import ExpiredChallenges from "./services/matchExpired";
 //import admin from "firebase-admin"
 
 const cron = require("node-cron");
@@ -432,6 +434,7 @@ app.use("/api/tournaments", tournamentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/payout-method", payoutRoutes);
+app.use("/api/challenges", challengeRoutes);
 //app.use(notFoundMiddleware);
 
 app.post(
@@ -621,6 +624,7 @@ server.listen(port, () => {
 
 export const matchmaker = new Matchmaker();
 export const matchForfeiter = new MatchForfeiter(serverSocket);
+export const expiredChallenges = new ExpiredChallenges(serverSocket);
 
 initializeSocketHandler(serverSocket);
 

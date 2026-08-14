@@ -7,13 +7,14 @@ import {
 } from "../utils/gameFunctions";
 import Redis from "ioredis";
 import sql from "../config/db";
-import { isTournamentMatch, updateGamePlayersScores } from "../utils";
+import { isTournamentMatch, markGameAsEndedAndForfeited, updateGamePlayersScores } from "../utils";
 import {
   advanceSingleEliminationTournamentToNextRound,
   advanceSwissTournamentToNextRound,
   getSwissTournamentLobbyData,
 } from "../utils/tournament";
 import { updateRatings } from "../utils/rating";
+import { settleCashChallenge } from "./cashChallengeSettlerService";
 
 export default class MatchForfeiter {
   private queue: Queue;
@@ -86,7 +87,7 @@ export default class MatchForfeiter {
 
     const match = await getGameByCode(gameCode);
     console.log(`Match ${gameCode} status: ${match.status}`);
-    if (!match || !match.is_rated) return;
+    if (!match) return;
     // if the match is already completed or forfeited, do nothing
     if (match.status === "completed" || match.status === "forfeited") {
       console.log(
@@ -105,6 +106,16 @@ export default class MatchForfeiter {
     console.log(
       `Forfeit processed for match ${gameCode}. Winner: ${winnerId}, Loser: ${loserId}`,
     );
+
+    if(match.challenge) {
+      // update the challenge status to forfeited and update the challenge table with the winner
+      await sql`UPDATE challenges SET status = 'forfeited', winner_id = ${winnerId} WHERE id = ${match.challenge_id}`;
+
+      // credit the winner with the stake amount and update the challenge table with the winner and deduct the stake from the locked balance of the winner
+      await settleCashChallenge(match.challenge.id, winnerId);
+
+    }
+    ;
 
     // Notify Game Room
 
@@ -232,6 +243,10 @@ export default class MatchForfeiter {
     match.winner_id = winnerId;
     match.status = "forfeited";
     match.forfeited_by = loserId;
+    match.ended_at = Date.now();
+    await markGameAsEndedAndForfeited(match.id);
+
+    this.serverSocket.to(gameCode).emit('updatedGameData', match)
 
     if (match.is_rated) {
       const players = updateRatings(match.players, winnerId);
@@ -250,5 +265,6 @@ export default class MatchForfeiter {
     }
 
     await saveGame(gameCode, match);
+
   }
 }

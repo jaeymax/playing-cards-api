@@ -34,6 +34,15 @@ const markGameAsEndedAndCompleted = async (gameId: number) => {
    `;
 };
 
+const markGameAsEndedAndForfeited = async (gameId: number) =>{
+  await sql`
+      UPDATE games
+      SET status = 'forfeited', ended_at = NOW()
+      WHERE id = ${gameId}
+   `;
+   console.log('updated game with game_id', gameId, 'as forfeited')
+}
+
 const markTournamentAsEndedAndCompleted = async (tournamentId: number) => {
   await sql`
       UPDATE tournaments
@@ -147,6 +156,7 @@ export {
   updateWinnerWonCount,
   updateLoserWinningStreak,
   markGameAsEndedAndCompleted,
+  markGameAsEndedAndForfeited,
   updateGamesPlayedForGamePlayers,
   getMatchWinner,
   updateGamePlayersScores,
