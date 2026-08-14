@@ -303,7 +303,7 @@ const endGame = async (game: any) => {
   const tournament = await isTournamentMatch(game.id);
   await updateGamePlayersScores(game);
 
-  if (winner.score >= 1) {
+  if (winner.score >= game.win_points) {
     game.status = "completed";
     game.ended_at = Date.now();
     if (game.is_rated || game.challenge) await matchForfeiter.cancelForfeit(game.code);
