@@ -316,7 +316,7 @@ cron.schedule("30 18 * * *", async () => {
           console.log(`Sending notifications for tournament ${tournament.name} starting today`);
           // send notifications to users about the tournament starting today
           // you can implement a function to send notifications here, e.g. sendTournamentStartNotifications(tournament);
-          sendTournamentStartNotifications(tournament);
+         // sendTournamentStartNotifications(tournament);
 
         }
     }

@@ -63,7 +63,7 @@ CREATE TABLE games (
     status VARCHAR(20) NOT NULL CHECK (status IN ('waiting', 'in_progress', 'completed', 'expired', 'abandoned', 'cancelled')) DEFAULT 'waiting',
     current_player_position INTEGER NOT NULL DEFAULT 0,
     -- create a challange_id column to link to the challenges table but make it nullable since not all games will be challenges
-    challenge_id INTEGER REFERENCES challenges(id) ON DELETE SET NULL,
+    
     player_count SMALLINT NOT NULL CHECK (player_count BETWEEN 2 AND 4) DEFAULT 2,
     current_lead_suit VARCHAR(10) CHECK (current_lead_suit IN ('Clubs', 'Diamonds', 'Hearts', 'Spades', NULL)) DEFAULT NULL,
     round_number INTEGER NOT NULL DEFAULT 1,
