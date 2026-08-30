@@ -9,20 +9,697 @@ import { expiredChallenges, mixpanel, serverSocket } from "..";
 import asyncHandler from "express-async-handler";
 
 const createChallenge = asyncHandler(async (req: Request, res: Response) => {
-  const { user_id, opponent_id, game_code } = req.body;
+  const {
+    opponent_id,
+    match_type,
+    challenge_mode,
+
+    // Game configuration
+    winPoints,
+    numPlayers,
+    includeSixes,
+    includeAces,
+
+    // Only required for stake games
+    stake,
+  } = req.body;
+
+  // =====================================================
+  // 1. AUTHENTICATED USER
+  // =====================================================
+
+  console.log(
+    "opponent_id: ",
+    opponent_id,
+    "match_type: ",
+    match_type,
+    "challenge_mode: ",
+    challenge_mode,
+  );
+  console.log(
+    "win points: ",
+    winPoints,
+    "numplayers: ",
+    numPlayers,
+    "include Sixes: ",
+    includeSixes,
+    "include Aces: ",
+    includeAces,
+  );
+  console.log("stake: ", stake);
+
+  const creator_id = req.user?.userId;
+
+  if (!creator_id) {
+    res.status(401).json({
+      success: false,
+      message: "Unauthorized",
+    });
+    return;
+  }
+
+  // =====================================================
+  // 2. BASIC VALIDATION
+  // =====================================================
+
+  if (!winPoints || !numPlayers) {
+    res.status(400).json({
+      success: false,
+      message: "Win points and number of players are required",
+    });
+    return;
+  }
+
+  if (!match_type) {
+    res.status(400).json({
+      success: false,
+      message: "Match type is required",
+    });
+    return;
+  }
+
+  if (!["friendly", "stake"].includes(match_type)) {
+    res.status(400).json({
+      success: false,
+      message: "Match type must be either friendly or stake",
+    });
+    return;
+  }
+
+  if (!challenge_mode) {
+    res.status(400).json({
+      success: false,
+      message: "Challenge mode is required",
+    });
+    return;
+  }
+
+  if (!["private", "direct", "open"].includes(challenge_mode)) {
+    res.status(400).json({
+      success: false,
+      message: "Challenge mode must be private, direct or open",
+    });
+    return;
+  }
+
+  // =====================================================
+  // 3. CASH GAMES ARE CURRENTLY 2 PLAYERS ONLY
+  // =====================================================
+
+  if (match_type === "stake" && Number(numPlayers) !== 2) {
+    res.status(400).json({
+      success: false,
+      message: "Cash challenges are currently limited to 2 players",
+    });
+    return;
+  }
+
+  // =====================================================
+  // 4. VALIDATE OPPONENT
+  // =====================================================
+
+  // Direct challenges MUST specify an opponent
+  if (challenge_mode === "direct" && !opponent_id) {
+    res.status(400).json({
+      success: false,
+      message: "An opponent is required for a direct challenge",
+    });
+    return;
+  }
+
+  // Open challenges don't have an opponent yet
+  if (challenge_mode === "open" && opponent_id) {
+    res.status(400).json({
+      success: false,
+      message: "Open challenges cannot specify an opponent",
+    });
+    return;
+  }
+
+  // Creator cannot challenge themselves
+  if (opponent_id && Number(opponent_id) === Number(creator_id)) {
+    res.status(400).json({
+      success: false,
+      message: "You cannot challenge yourself",
+    });
+    return;
+  }
+
+  // =====================================================
+  // 5. VALIDATE STAKE
+  // =====================================================
+
+  const numericStake = Number(stake || 0);
+
+  let platformFee = 0;
+  let winnerPayout = 0;
+
+  if (match_type === "stake") {
+    if (!Number.isFinite(numericStake) || numericStake <= 0) {
+      res.status(400).json({
+        success: false,
+        message: "Stake amount must be greater than 0",
+      });
+      return;
+    }
+
+    // Two-player cash game
+    const totalPot = numericStake * 2;
+
+    // 5% platform fee
+    platformFee = Number((totalPot * 0.05).toFixed(2));
+
+    winnerPayout = Number((totalPot - platformFee).toFixed(2));
+  }
 
   try {
-    const newChallenge = await sql`
-      INSERT INTO challenges (user_id, opponent_id, game_code) 
-      VALUES (${user_id}, ${opponent_id}, ${game_code})
-      RETURNING *
-    `;
+    // ===================================================
+    // 6. VERIFY OPPONENT EXISTS
+    // ===================================================
 
-    res.json({ success: true, challenge: newChallenge[0] });
+    if (opponent_id) {
+      const opponent = await sql`
+          SELECT id
+          FROM users
+          WHERE id = ${opponent_id}
+          LIMIT 1
+        `;
+
+      if (opponent.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: "Opponent not found",
+        });
+        return;
+      }
+    }
+
+    // ===================================================
+    // 7. PREVENT DUPLICATE DIRECT CHALLENGES
+    // ===================================================
+
+    if (challenge_mode === "direct" && opponent_id) {
+      const existingChallenge = await sql`
+          SELECT id
+          FROM challenges
+          WHERE creator_id = ${creator_id}
+            AND opponent_id = ${opponent_id}
+            AND status = 'waiting'
+          LIMIT 1
+        `;
+
+      if (existingChallenge.length > 0) {
+        res.status(409).json({
+          success: false,
+          message: "You already have a pending challenge with this player",
+          challenge_id: existingChallenge[0].id,
+        });
+        return;
+      }
+    }
+
+    // ===================================================
+    // 8. GET RANDOMIZED CARDS
+    // ===================================================
+
+    const cards = await sql`
+        SELECT card_id
+        FROM cards
+        ORDER BY RANDOM()
+      `;
+
+    // ===================================================
+    // 9. GENERATE GAME CODE
+    // ===================================================
+
+    const gameCode = Math.random().toString(36).substring(2, 12);
+
+    // ===================================================
+    // 10. EXPIRATION
+    // ===================================================
+
+    // You can change this to whatever duration you want.
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000);
+
+    // ===================================================
+    // 11. CREATE EVERYTHING ATOMICALLY
+    // ===================================================
+
+    const transactionQueries = [
+      sql`
+          WITH wallet_lock AS (
+
+            -- ===========================================
+            -- LOCK CREATOR STAKE
+            -- ===========================================
+
+            UPDATE wallets
+            SET
+              locked_balance =
+                locked_balance + ${numericStake},
+
+              updated_at =
+                CURRENT_TIMESTAMP
+
+            WHERE
+              user_id = ${creator_id}
+
+              AND ${match_type === "stake"}
+
+              AND (
+                balance - locked_balance
+              ) >= ${numericStake}
+
+            RETURNING
+              id,
+              user_id
+          ),
+
+          new_game AS (
+
+            -- ===========================================
+            -- CREATE GAME
+            -- ===========================================
+
+            INSERT INTO games (
+              code,
+              created_by,
+              player_count,
+              include_sixes,
+              include_aces,
+              win_points,
+              status
+            )
+
+            SELECT
+              ${gameCode},
+              ${creator_id},
+              ${numPlayers},
+              ${includeSixes ?? false},
+              ${includeAces ?? false},
+              ${winPoints},
+              'waiting'
+
+            WHERE
+              ${match_type === "friendly"}
+
+              OR EXISTS (
+                SELECT 1
+                FROM wallet_lock
+              )
+
+            RETURNING *
+          ),
+
+          new_game_player AS (
+
+            -- ===========================================
+            -- ADD CREATOR TO GAME
+            -- ===========================================
+
+            INSERT INTO game_players (
+              game_id,
+              user_id,
+              position,
+              is_dealer,
+              status
+            )
+
+            SELECT
+              id,
+              ${creator_id},
+              0,
+              true,
+              'active'
+
+            FROM new_game
+
+            RETURNING *
+          ),
+
+          new_challenge AS (
+
+            -- ===========================================
+            -- CREATE CHALLENGE
+            -- ===========================================
+
+            INSERT INTO challenges (
+              creator_id,
+              opponent_id,
+              game_id,
+
+              type,
+              challenge_mode,
+
+              stake,
+              platform_fee,
+              winner_payout,
+
+              status,
+              expires_at
+            )
+
+            SELECT
+              ${creator_id},
+              ${opponent_id || null},
+              id,
+
+              ${match_type},
+              ${challenge_mode},
+
+              ${match_type === "stake" ? numericStake : null},
+
+              ${platformFee},
+              ${winnerPayout},
+
+              'waiting',
+              ${expiresAt}
+
+            FROM new_game
+
+            RETURNING *
+          ),
+
+          wallet_transaction AS (
+
+            -- ===========================================
+            -- RECORD STAKE LOCK
+            -- ===========================================
+
+            INSERT INTO wallet_transactions (
+              user_id,
+              type,
+              amount,
+              challenge_id,
+              reference,
+              status
+            )
+
+            SELECT
+              ${creator_id},
+              'challenge_lock',
+              ${numericStake},
+              id,
+              ${gameCode},
+              'completed'
+
+            FROM new_challenge
+
+            WHERE
+              ${match_type === "stake"}
+
+            RETURNING *
+          ),
+
+          update_game AS (
+
+            -- ===========================================
+            -- LINK CHALLENGE TO GAME
+            -- ===========================================
+
+            UPDATE games
+
+            SET
+              challenge_id =
+                new_challenge.id
+
+            FROM new_challenge
+
+            WHERE
+              games.id =
+                new_challenge.game_id
+
+            RETURNING games.*
+          )
+
+          -- =============================================
+          -- RETURN GAME + PLAYER + CHALLENGE
+          -- =============================================
+
+          SELECT
+            g.*,
+
+            (
+              SELECT json_build_object(
+                'id', gp.id,
+                'game_id', gp.game_id,
+                'user_id', gp.user_id,
+                'score', gp.score,
+                'games_won', gp.games_won,
+                'position', gp.position,
+                'is_dealer', gp.is_dealer,
+                'status', gp.status,
+
+                'user',
+                (
+                  SELECT json_build_object(
+                    'id', u.id,
+                    'username', u.username,
+                    'image_url', u.image_url
+                  )
+
+                  FROM users u
+
+                  WHERE
+                    u.id = gp.user_id
+                )
+              )
+
+              FROM new_game_player gp
+
+              LIMIT 1
+
+            ) AS player,
+
+            (
+              SELECT json_build_object(
+                'id', c.id,
+                'creator_id', c.creator_id,
+                'opponent_id', c.opponent_id,
+                'game_id', c.game_id,
+
+                'match_type', c.type,
+                'challenge_mode',
+                  c.challenge_mode,
+
+                'stake', c.stake,
+                'platform_fee',
+                  c.platform_fee,
+                'winner_payout',
+                  c.winner_payout,
+
+                'status', c.status,
+                'expires_at',
+                  c.expires_at
+              )
+
+              FROM new_challenge c
+
+              LIMIT 1
+
+            ) AS challenge
+
+          FROM new_game g;
+        `,
+    ];
+
+    const [transactionResult] = await sql.transaction(transactionQueries);
+
+    // ===================================================
+    // 12. MAKE SURE CREATION SUCCEEDED
+    // ===================================================
+
+    if (!transactionResult || transactionResult.length === 0) {
+      if (match_type === "stake") {
+        res.status(400).json({
+          success: false,
+          message: "Insufficient available balance to cover the stake",
+        });
+        return;
+      }
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to create challenge",
+      });
+
+      return;
+    }
+
+    const row = transactionResult[0];
+
+    // ===================================================
+    // 13. SCHEDULE EXPIRATION
+    // ===================================================
+
+    const challenge = row.challenge;
+
+    if (challenge && challenge.id) {
+      const expirationTime = new Date(challenge.expires_at).getTime();
+
+      const delayMs = expirationTime - Date.now();
+
+      await expiredChallenges.scheduleExpiredChallenge(
+        challenge.id,
+        Math.max(delayMs, 0),
+      );
+    }
+
+    // ===================================================
+    // 14. CREATE GAME CARDS
+    // ===================================================
+
+    const gameCards = await sql`
+        INSERT INTO game_cards (
+          game_id,
+          card_id,
+          player_id,
+          hand_position,
+          status
+        )
+
+        SELECT
+          ${row.id},
+
+          unnest(
+            ${cards.map((c) => c.card_id)}::integer[]
+          ),
+
+          ${row.player?.id},
+
+          -1,
+
+          'in_deck'
+
+        RETURNING
+          id,
+          game_id,
+          player_id,
+          status,
+          hand_position,
+          trick_number,
+          pos_x,
+          pos_y,
+          rotation,
+          z_index,
+          animation_state,
+
+          (
+            SELECT json_build_object(
+              'card_id', card_id,
+              'suit', suit,
+              'value', value,
+              'rank', rank,
+              'image_url', image_url
+            )
+
+            FROM cards
+
+            WHERE
+              card_id =
+                game_cards.card_id
+
+          ) AS card
+      `;
+
+    // ===================================================
+    // 15. BUILD GAME OBJECT
+    // ===================================================
+
+    const game: any = {
+      ...row,
+
+      players: row.player ? [row.player] : [],
+
+      cards: gameCards,
+
+      challenge: row.challenge || null,
+
+      isStakeGame: match_type === "stake",
+    };
+
+    delete game.player;
+
+    // ===================================================
+    // 16. MIXPANEL
+    // ===================================================
+
+    mixpanel.track("Challenge Created", {
+      distinct_id: creator_id,
+
+      challenge_id: challenge?.id,
+
+      game_code: gameCode,
+
+      match_type,
+
+      challenge_mode,
+
+      num_players: numPlayers,
+
+      win_points: winPoints,
+
+      ...(match_type === "stake" && {
+        stake: numericStake,
+
+        platform_fee: platformFee,
+
+        winner_payout: winnerPayout,
+      }),
+    });
+
+    // ===================================================
+    // 17. SAVE GAME TO REDIS
+    // ===================================================
+
+    await saveGame(gameCode, game);
+
+    console.log("Challenge created successfully:", game);
+
+    // ===================================================
+    // 18. RESPONSE
+    // ===================================================
+
+    res.status(201).json({
+      success: true,
+      game,
+      challenge: challenge || null,
+    });
+  } catch (error: any) {
+    console.error("Failed to create challenge:", error);
+
+    if (
+      error?.message === "INSUFFICIENT_BALANCE" ||
+      error?.code === "INSUFFICIENT_BALANCE"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Insufficient available balance to cover the stake",
+      });
+
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create challenge",
+      error: error.message,
+    });
+  }
+});
+
+const getOpenChallenges = asyncHandler(async (req: Request, res: Response) => {
+  const { user_id } = req.body;
+
+  try {
+    const challenges = await sql`SELECT c.id, c.creator_id, u.image_url as creator_avatar, u.username as creator_username, c.game_id, c.stake, c.platform_fee, c.winner_payout, c.win_points, c.include_sixes, c.include_aces, c.status, c.expires_at, c.created_at, c.type, c.is_rated, c.player_count FROM challenges c JOIN users u ON c.creator_id = u.id
+      WHERE status = 'waiting' and challenge_mode = 'open'`;
+
+    res.json({ success: true, challenges });
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: "Error creating challenge",
+      message: "Error fetching challenges",
       error: error.message,
     });
   }
@@ -33,9 +710,8 @@ const getChallenges = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     const challenges = await sql`
-      SELECT * FROM challenges 
-      WHERE opponent_id = ${user_id} AND status = 'pending'
-    `;
+      SELECT c.id, c.creator_id, u.image_url, c.game_id, c.stake, c.platform_fee, c.winner_payout, c.win_points, c.include_sixed, c.include_aces, c.status, c.expires_at, c.created_at, c.type, c.is_rated, c.player_count FROM challenges c JOIN users u ON c.creator.id = u.id
+      WHERE status = 'waiting' and challenge_mode = 'open'`;
 
     res.json({ success: true, challenges });
   } catch (error: any) {
@@ -63,13 +739,11 @@ const acceptChallenge = asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  if (!user_id) {
-    res.status(401).json({
-      success: false,
-      message: "Authentication required",
-    });
-    return;
-  }
+
+
+  let transactionResult = null;
+
+  const challengeStake = await sql`select stake from challenges where id = ${challenge_id}`
 
   try {
     /*
@@ -90,230 +764,399 @@ const acceptChallenge = asyncHandler(async (req: Request, res: Response) => {
      * If anything fails, everything rolls back.
      */
 
-    const [transactionResult] = await sql.transaction([
-      sql`
-          WITH target_challenge AS (
+    if(challengeStake[0].stake){
+      
+          [transactionResult] = await sql.transaction([
+            sql`
+                WITH target_challenge AS (
+      
+                  -- ------------------------------------------
+                  -- Find the challenge and lock its row
+                  -- ------------------------------------------
+      
+                  SELECT
+                    id,
+                    creator_id,
+                    game_id,
+                    stake,
+                    platform_fee,
+                    winner_payout,
+                    status,
+                    expires_at
+                  FROM challenges
+                  WHERE
+                    id = ${challenge_id}
+                    AND status = 'waiting'
+                    AND expires_at > CURRENT_TIMESTAMP
+                    AND creator_id <> ${user_id}
+                  FOR UPDATE
+      
+                ),
+      
+                wallet_lock AS (
+      
+                  -- ------------------------------------------
+                  -- Lock opponent's stake
+                  -- ------------------------------------------
+      
+                  UPDATE wallets w
+                  SET
+                    locked_balance =
+                      w.locked_balance + tc.stake,
+                    updated_at = CURRENT_TIMESTAMP
+      
+                  FROM target_challenge tc
+      
+                  WHERE
+                    w.user_id = ${user_id}
+                    AND (
+                      w.balance - w.locked_balance
+                    ) >= tc.stake
+      
+                  RETURNING
+                    w.id,
+                    w.user_id,
+                    tc.id AS challenge_id,
+                    tc.game_id,
+                    tc.stake
+      
+                ),
+      
+                accepted_challenge AS (
+      
+                  -- ------------------------------------------
+                  -- Accept challenge
+                  -- ------------------------------------------
+      
+                  UPDATE challenges c
+      
+                  SET
+                    status = 'accepted',
+                    opponent_id = ${user_id}
+      
+                  FROM wallet_lock wl
+      
+                  WHERE
+                    c.id = wl.challenge_id
+                    AND c.status = 'waiting'
+      
+                  RETURNING
+                    c.id,
+                    c.creator_id,
+                    c.opponent_id,
+                    c.game_id,
+                    c.stake,
+                    c.platform_fee,
+                    c.winner_payout,
+                    c.status,
+                    c.expires_at
+      
+                ),
+      
+                new_game_player AS (
+      
+                  -- ------------------------------------------
+                  -- Add opponent to game
+                  -- ------------------------------------------
+      
+                  INSERT INTO game_players (
+                    game_id,
+                    user_id,
+                    position,
+                    is_dealer,
+                    status
+                  )
+      
+                  SELECT
+                    ac.game_id,
+                    ${user_id},
+      
+                    -- Host is position 0,
+                    -- opponent is position 1
+                    1,
+      
+                    false,
+                    'active'
+      
+                  FROM accepted_challenge ac
+      
+                  RETURNING
+                    id,
+                    game_id,
+                    user_id,
+                    score,
+                    games_won,
+                    position,
+                    is_dealer,
+                    status
+      
+                ),
+      
+                wallet_transaction AS (
+      
+                  -- ------------------------------------------
+                  -- Record opponent's locked stake
+                  -- ------------------------------------------
+      
+                  INSERT INTO wallet_transactions (
+                    user_id,
+                    type,
+                    amount,
+                    challenge_id,
+                    reference,
+                    status
+                  )
+      
+                  SELECT
+                    ${user_id},
+                    'challenge_lock',
+                    ac.stake,
+                    ac.id,
+      
+                    CONCAT(
+                      'CHALLENGE-',
+                      ac.id
+                    ),
+      
+                    'completed'
+      
+                  FROM accepted_challenge ac
+      
+                  RETURNING id
+      
+                ),
+      
+                updated_game AS (
+      
+                  -- ------------------------------------------
+                  -- Start the game
+                  -- ------------------------------------------
+      
+                  UPDATE games g
+      
+                  SET
+                    status = 'in_progress', current_turn_user_id = ${user_id}
+      
+                  FROM accepted_challenge ac
+      
+                  WHERE
+                    g.id = ac.game_id
+      
+                  RETURNING
+                    g.*
+      
+                )
+      
+                -- --------------------------------------------
+                -- Return everything needed by Node
+                -- --------------------------------------------
+      
+                SELECT
+                  ug.id AS game_id,
+                  ug.code AS game_code,
+                  ug.status AS game_status,
+      
+                  (
+                    SELECT json_build_object(
+                      'id', ac.id,
+                      'creator_id', ac.creator_id,
+                      'opponent_id', ac.opponent_id,
+                      'game_id', ac.game_id,
+                      'stake', ac.stake,
+                      'platform_fee', ac.platform_fee,
+                      'winner_payout', ac.winner_payout,
+                      'status', ac.status,
+                      'expires_at', ac.expires_at
+                    )
+                    FROM accepted_challenge ac
+                    LIMIT 1
+                  ) AS challenge,
+      
+                  (
+                    SELECT json_build_object(
+                      'id', gp.id,
+                      'game_id', gp.game_id,
+                      'user_id', gp.user_id,
+                      'score', gp.score,
+                      'games_won', gp.games_won,
+                      'position', gp.position,
+                      'is_dealer', gp.is_dealer,
+                      'status', gp.status
+                    )
+                    FROM new_game_player gp
+                    LIMIT 1
+                  ) AS player
+      
+                FROM updated_game ug;
+              `,
+          ]);
 
-            -- ------------------------------------------
-            -- Find the challenge and lock its row
-            -- ------------------------------------------
+    }
+    else{
 
-            SELECT
-              id,
-              creator_id,
-              game_id,
-              stake,
-              platform_fee,
-              winner_payout,
-              status,
-              expires_at
-            FROM challenges
-            WHERE
-              id = ${challenge_id}
-              AND status = 'waiting'
-              AND expires_at > CURRENT_TIMESTAMP
-              AND creator_id <> ${user_id}
-            FOR UPDATE
+      [transactionResult] = await sql.transaction([
+            sql`
+                WITH target_challenge AS (
+      
+                  -- ------------------------------------------
+                  -- Find the challenge and lock its row
+                  -- ------------------------------------------
+      
+                  SELECT
+                    id,
+                    creator_id,
+                    game_id,
+                    stake,
+                    platform_fee,
+                    winner_payout,
+                    status,
+                    expires_at
+                  FROM challenges
+                  WHERE
+                    id = ${challenge_id}
+                    AND status = 'waiting'
+                    AND expires_at > CURRENT_TIMESTAMP
+                    AND creator_id <> ${user_id}
+                  FOR UPDATE
+      
+                ),
+      
+                accepted_challenge AS (
+      
+                  -- ------------------------------------------
+                  -- Accept challenge
+                  -- ------------------------------------------
+      
+                  UPDATE challenges c
+      
+                  SET
+                    status = 'accepted',
+                    opponent_id = ${user_id}
+      
+                  FROM target_challenge tc
+      
+                  WHERE
+                    c.id = tc.id
+                    AND c.status = 'waiting'
+      
+                  RETURNING
+                    c.id,
+                    c.creator_id,
+                    c.opponent_id,
+                    c.game_id,
+                    c.stake,
+                    c.platform_fee,
+                    c.winner_payout,
+                    c.status,
+                    c.expires_at
+      
+                ),
+      
+                new_game_player AS (
+      
+                  -- ------------------------------------------
+                  -- Add opponent to game
+                  -- ------------------------------------------
+      
+                  INSERT INTO game_players (
+                    game_id,
+                    user_id,
+                    position,
+                    is_dealer,
+                    status
+                  )
+      
+                  SELECT
+                    ac.game_id,
+                    ${user_id},
+      
+                    -- Host is position 0,
+                    -- opponent is position 1
+                    1,
+      
+                    false,
+                    'active'
+      
+                  FROM accepted_challenge ac
+      
+                  RETURNING
+                    id,
+                    game_id,
+                    user_id,
+                    score,
+                    games_won,
+                    position,
+                    is_dealer,
+                    status
+      
+                ),
+      
+                updated_game AS (
+      
+                  -- ------------------------------------------
+                  -- Start the game
+                  -- ------------------------------------------
+      
+                  UPDATE games g
+      
+                  SET
+                    status = 'in_progress', current_turn_user_id = ${user_id}
+      
+                  FROM accepted_challenge ac
+      
+                  WHERE
+                    g.id = ac.game_id
+      
+                  RETURNING
+                    g.*
+      
+                )
+      
+                -- --------------------------------------------
+                -- Return everything needed by Node
+                -- --------------------------------------------
+      
+                SELECT
+                  ug.id AS game_id,
+                  ug.code AS game_code,
+                  ug.status AS game_status,
+      
+                  (
+                    SELECT json_build_object(
+                      'id', ac.id,
+                      'creator_id', ac.creator_id,
+                      'opponent_id', ac.opponent_id,
+                      'game_id', ac.game_id,
+                      'stake', ac.stake,
+                      'platform_fee', ac.platform_fee,
+                      'winner_payout', ac.winner_payout,
+                      'status', ac.status,
+                      'expires_at', ac.expires_at
+                    )
+                    FROM accepted_challenge ac
+                    LIMIT 1
+                  ) AS challenge,
+      
+                  (
+                    SELECT json_build_object(
+                      'id', gp.id,
+                      'game_id', gp.game_id,
+                      'user_id', gp.user_id,
+                      'score', gp.score,
+                      'games_won', gp.games_won,
+                      'position', gp.position,
+                      'is_dealer', gp.is_dealer,
+                      'status', gp.status
+                    )
+                    FROM new_game_player gp
+                    LIMIT 1
+                  ) AS player
+      
+                FROM updated_game ug;
+              `,
+          ]);
+    }
 
-          ),
-
-          wallet_lock AS (
-
-            -- ------------------------------------------
-            -- Lock opponent's stake
-            -- ------------------------------------------
-
-            UPDATE wallets w
-            SET
-              locked_balance =
-                w.locked_balance + tc.stake,
-              updated_at = CURRENT_TIMESTAMP
-
-            FROM target_challenge tc
-
-            WHERE
-              w.user_id = ${user_id}
-              AND (
-                w.balance - w.locked_balance
-              ) >= tc.stake
-
-            RETURNING
-              w.id,
-              w.user_id,
-              tc.id AS challenge_id,
-              tc.game_id,
-              tc.stake
-
-          ),
-
-          accepted_challenge AS (
-
-            -- ------------------------------------------
-            -- Accept challenge
-            -- ------------------------------------------
-
-            UPDATE challenges c
-
-            SET
-              status = 'accepted',
-              opponent_id = ${user_id}
-
-            FROM wallet_lock wl
-
-            WHERE
-              c.id = wl.challenge_id
-              AND c.status = 'waiting'
-
-            RETURNING
-              c.id,
-              c.creator_id,
-              c.opponent_id,
-              c.game_id,
-              c.stake,
-              c.platform_fee,
-              c.winner_payout,
-              c.status,
-              c.expires_at
-
-          ),
-
-          new_game_player AS (
-
-            -- ------------------------------------------
-            -- Add opponent to game
-            -- ------------------------------------------
-
-            INSERT INTO game_players (
-              game_id,
-              user_id,
-              position,
-              is_dealer,
-              status
-            )
-
-            SELECT
-              ac.game_id,
-              ${user_id},
-
-              -- Host is position 0,
-              -- opponent is position 1
-              1,
-
-              false,
-              'active'
-
-            FROM accepted_challenge ac
-
-            RETURNING
-              id,
-              game_id,
-              user_id,
-              score,
-              games_won,
-              position,
-              is_dealer,
-              status
-
-          ),
-
-          wallet_transaction AS (
-
-            -- ------------------------------------------
-            -- Record opponent's locked stake
-            -- ------------------------------------------
-
-            INSERT INTO wallet_transactions (
-              user_id,
-              type,
-              amount,
-              challenge_id,
-              reference,
-              status
-            )
-
-            SELECT
-              ${user_id},
-              'challenge_lock',
-              ac.stake,
-              ac.id,
-
-              CONCAT(
-                'CHALLENGE-',
-                ac.id
-              ),
-
-              'completed'
-
-            FROM accepted_challenge ac
-
-            RETURNING id
-
-          ),
-
-          updated_game AS (
-
-            -- ------------------------------------------
-            -- Start the game
-            -- ------------------------------------------
-
-            UPDATE games g
-
-            SET
-              status = 'in_progress', current_turn_user_id = ${user_id}
-
-            FROM accepted_challenge ac
-
-            WHERE
-              g.id = ac.game_id
-
-            RETURNING
-              g.*
-
-          )
-
-          -- --------------------------------------------
-          -- Return everything needed by Node
-          -- --------------------------------------------
-
-          SELECT
-            ug.id AS game_id,
-            ug.code AS game_code,
-            ug.status AS game_status,
-
-            (
-              SELECT json_build_object(
-                'id', ac.id,
-                'creator_id', ac.creator_id,
-                'opponent_id', ac.opponent_id,
-                'game_id', ac.game_id,
-                'stake', ac.stake,
-                'platform_fee', ac.platform_fee,
-                'winner_payout', ac.winner_payout,
-                'status', ac.status,
-                'expires_at', ac.expires_at
-              )
-              FROM accepted_challenge ac
-              LIMIT 1
-            ) AS challenge,
-
-            (
-              SELECT json_build_object(
-                'id', gp.id,
-                'game_id', gp.game_id,
-                'user_id', gp.user_id,
-                'score', gp.score,
-                'games_won', gp.games_won,
-                'position', gp.position,
-                'is_dealer', gp.is_dealer,
-                'status', gp.status
-              )
-              FROM new_game_player gp
-              LIMIT 1
-            ) AS player
-
-          FROM updated_game ug;
-        `,
-    ]);
 
     // --------------------------------------------------
     // 3. TRANSACTION FAILED / CHALLENGE UNAVAILABLE
@@ -438,9 +1281,10 @@ const acceptChallenge = asyncHandler(async (req: Request, res: Response) => {
     game.challenge = challenge;
 
     game.status = "in_progress";
-    
+
     game.turn_started_at = Date.now();
-    const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
+    const turn_ends_at =
+      game.turn_started_at + game.turn_timeout_seconds * 1000;
     game.turn_ends_at = turn_ends_at;
 
     game.isStakeGame = true;
@@ -922,7 +1766,7 @@ const cancelChallenge = asyncHandler(async (req: Request, res: Response) => {
         //     message:
         //       "The challenge was cancelled and your stake has been refunded.",
         //   });
-       // serverSocket.to(result.game_code).emit("gameData", game);
+        // serverSocket.to(result.game_code).emit("gameData", game);
       }
     }
 
@@ -1448,4 +2292,5 @@ export {
   acceptChallenge,
   settleCashChallenge,
   cancelChallenge,
+  getOpenChallenges,
 };

@@ -298,7 +298,10 @@ const endGame = async (game: any) => {
   }
 
   const winner = getMatchWinner(game) as GamePlayer;
-  const loser = getMatchLoser(game) as GamePlayer;
+  let loser = null;
+  if (game.player_count == 2) {
+    loser = getMatchLoser(game) as GamePlayer;
+  }
   winner.score += points;
   const tournament = await isTournamentMatch(game.id);
   await updateGamePlayersScores(game);
@@ -306,20 +309,20 @@ const endGame = async (game: any) => {
   if (winner.score >= game.win_points) {
     game.status = "completed";
     game.ended_at = Date.now();
-    if (game.is_rated || game.challenge) await matchForfeiter.cancelForfeit(game.code);
+    if (game.is_rated || game.challenge)
+      await matchForfeiter.cancelForfeit(game.code);
 
     winner.games_won += 1;
-    console.log('game challenge', game.challenge)
+    console.log("game challenge", game.challenge);
     //console.log('game challenge_id', game.challenge.id)
-    if(game.challenge) {
+    if (game.challenge && game.challenge.type == "stake") {
       // await sql`UPDATE challenges SET status = 'completed', winner_id = ${winner.user.id} WHERE id = ${game.challenge_id}`;
       // game.challenge.status = 'completed';
       // game.challenge.winner_id = winner.user.id;
 
       // we now credit the winner and debit the loser the challenge stake amount
-     await settleCashChallenge(game.challenge.id, winner.user.id);
+      await settleCashChallenge(game.challenge.id, winner.user.id);
     }
-
 
     setTimeout(() => {
       serverSocket.to(game.code).emit("gameOver", {
@@ -330,7 +333,9 @@ const endGame = async (game: any) => {
     await markGameAsEndedAndCompleted(game.id);
     await updateGamesPlayedForGamePlayers(game.id);
     await updateWinnerWonCount(winner.user.id);
-    await updateLoserWinningStreak(loser.user.id);
+    if (loser) {
+      await updateLoserWinningStreak(loser.user.id);
+    }
 
     game.status = "completed";
     await saveGame(game.code, game);
@@ -352,7 +357,7 @@ const endGame = async (game: any) => {
         console.log(
           `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`,
         );
-        await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+        //await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
         const ratingChange = newRating - oldRating[0].rating;
         // character suit there question //
         await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`;

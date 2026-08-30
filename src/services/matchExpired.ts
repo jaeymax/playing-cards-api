@@ -100,176 +100,293 @@ export default class ExpiredChallenges {
      * - the user manually triggers expiration
      * - another server processes the same job
      */
+    const challenge = await sql`select type from challenges where id = ${challengeId}`
 
-    const [transactionResult] = await sql.transaction([
-      sql`
-        WITH expired_challenge AS (
+    console.log('challenge', challenge)
 
-          -- ------------------------------------------
-          -- Find expired waiting challenge
-          -- ------------------------------------------
+    let transactionResult = null;
 
-          SELECT
-            id,
-            creator_id,
-            game_id,
-            stake,
-            status,
-            expires_at
+    if(challenge[0].type == 'stake'){
 
-          FROM challenges
+      [transactionResult] = await sql.transaction([
+       sql`
+         WITH expired_challenge AS (
+  
+           -- ------------------------------------------
+           -- Find expired waiting challenge
+           -- ------------------------------------------
+  
+           SELECT
+             id,
+             creator_id,
+             game_id,
+             stake,
+             status,
+             expires_at
+  
+           FROM challenges
+  
+           WHERE
+             id = ${challengeId}
+             AND status = 'waiting'
+             AND expires_at <= CURRENT_TIMESTAMP
+  
+           FOR UPDATE
+  
+         ),
+  
+         release_wallet AS (
+  
+           -- ------------------------------------------
+           -- Release creator's locked stake
+           -- ------------------------------------------
+  
+           UPDATE wallets w
+  
+           SET
+             locked_balance =
+               w.locked_balance - ec.stake,
+  
+             updated_at = CURRENT_TIMESTAMP
+  
+           FROM expired_challenge ec
+  
+           WHERE
+             w.user_id = ec.creator_id
+             AND w.locked_balance >= ec.stake
+  
+           RETURNING
+             w.id,
+             w.user_id,
+             ec.id AS challenge_id,
+             ec.stake
+  
+         ),
+  
+         refund_transaction AS (
+  
+           -- ------------------------------------------
+           -- Create refund transaction
+           -- ------------------------------------------
+  
+           INSERT INTO wallet_transactions (
+             user_id,
+             type,
+             amount,
+             challenge_id,
+             reference,
+             status
+           )
+  
+           SELECT
+             ec.creator_id,
+             'refund',
+             ec.stake,
+             ec.id,
+             CONCAT(
+               'CHALLENGE-REFUND-',
+               ec.id
+             ),
+             'completed'
+  
+           FROM expired_challenge ec
+  
+           INNER JOIN release_wallet rw
+             ON rw.challenge_id = ec.id
+  
+           RETURNING id
+  
+         ),
+  
+         expired_challenge_update AS (
+  
+           -- ------------------------------------------
+           -- Mark challenge as expired
+           -- ------------------------------------------
+  
+           UPDATE challenges c
+  
+           SET
+             status = 'expired'
+  
+           FROM expired_challenge ec
+  
+           INNER JOIN release_wallet rw
+             ON rw.challenge_id = ec.id
+  
+           WHERE
+             c.id = ec.id
+             AND c.status = 'waiting'
+  
+           RETURNING
+             c.id,
+             c.creator_id,
+             c.game_id,
+             c.stake,
+             c.platform_fee,
+             c.winner_payout,
+             c.status,
+             c.expires_at
+  
+         ),
+  
+         updated_game AS (
+  
+           -- ------------------------------------------
+           -- Cancel associated game
+           -- ------------------------------------------
+  
+           UPDATE games g
+  
+           SET
+             status = 'expired'
+  
+           FROM expired_challenge_update ec
+  
+           WHERE
+             g.id = ec.game_id
+             AND g.status = 'waiting'
+  
+           RETURNING
+             g.id,
+             g.code,
+             g.status
+  
+         )
+  
+         -- --------------------------------------------
+         -- Return useful information
+         -- --------------------------------------------
+  
+         SELECT
+           ec.id AS challenge_id,
+           ec.creator_id,
+           ec.game_id,
+           ec.stake,
+           ec.platform_fee,
+           ec.winner_payout,
+           ec.status,
+           ec.expires_at,
+  
+           ug.code AS game_code,
+           ug.status AS game_status
+  
+         FROM expired_challenge_update ec
+  
+         LEFT JOIN updated_game ug
+           ON ug.id = ec.game_id;
+       `,
+     ]);
+    }
+    else if(challenge[0].type == 'friendly'){
 
-          WHERE
-            id = ${challengeId}
-            AND status = 'waiting'
-            AND expires_at <= CURRENT_TIMESTAMP
+        [transactionResult] = await sql.transaction([
+       sql`
+         WITH expired_challenge AS (
+  
+           -- ------------------------------------------
+           -- Find expired waiting challenge
+           -- ------------------------------------------
+  
+           SELECT
+             id,
+             creator_id,
+             game_id,
+             stake,
+             status,
+             expires_at
+  
+           FROM challenges
+  
+           WHERE
+             id = ${challengeId}
+             AND status = 'waiting'
+             AND expires_at <= CURRENT_TIMESTAMP
+  
+           FOR UPDATE
+  
+         ),
+  
+  
+         expired_challenge_update AS (
+  
+           -- ------------------------------------------
+           -- Mark challenge as expired
+           -- ------------------------------------------
+  
+           UPDATE challenges c
+  
+           SET
+             status = 'expired'
+  
+           FROM expired_challenge ec
+  
+           WHERE
+             c.id = ec.id
+             AND c.status = 'waiting'
+  
+           RETURNING
+             c.id,
+             c.creator_id,
+             c.game_id,
+             c.stake,
+             c.platform_fee,
+             c.winner_payout,
+             c.status,
+             c.expires_at
+  
+         ),
+  
+         updated_game AS (
+  
+           -- ------------------------------------------
+           -- Cancel associated game
+           -- ------------------------------------------
+  
+           UPDATE games g
+  
+           SET
+             status = 'expired'
+  
+           FROM expired_challenge_update ec
+  
+           WHERE
+             g.id = ec.game_id
+             AND g.status = 'waiting'
+  
+           RETURNING
+             g.id,
+             g.code,
+             g.status
+  
+         )
+  
+         -- --------------------------------------------
+         -- Return useful information
+         -- --------------------------------------------
+  
+         SELECT
+           ec.id AS challenge_id,
+           ec.creator_id,
+           ec.game_id,
+           ec.stake,
+           ec.platform_fee,
+           ec.winner_payout,
+           ec.status,
+           ec.expires_at,
+  
+           ug.code AS game_code,
+           ug.status AS game_status
+  
+         FROM expired_challenge_update ec
+  
+         LEFT JOIN updated_game ug
+           ON ug.id = ec.game_id;
+       `,
+     ]);
+    }
 
-          FOR UPDATE
 
-        ),
-
-        release_wallet AS (
-
-          -- ------------------------------------------
-          -- Release creator's locked stake
-          -- ------------------------------------------
-
-          UPDATE wallets w
-
-          SET
-            locked_balance =
-              w.locked_balance - ec.stake,
-
-            updated_at = CURRENT_TIMESTAMP
-
-          FROM expired_challenge ec
-
-          WHERE
-            w.user_id = ec.creator_id
-            AND w.locked_balance >= ec.stake
-
-          RETURNING
-            w.id,
-            w.user_id,
-            ec.id AS challenge_id,
-            ec.stake
-
-        ),
-
-        refund_transaction AS (
-
-          -- ------------------------------------------
-          -- Create refund transaction
-          -- ------------------------------------------
-
-          INSERT INTO wallet_transactions (
-            user_id,
-            type,
-            amount,
-            challenge_id,
-            reference,
-            status
-          )
-
-          SELECT
-            ec.creator_id,
-            'refund',
-            ec.stake,
-            ec.id,
-            CONCAT(
-              'CHALLENGE-REFUND-',
-              ec.id
-            ),
-            'completed'
-
-          FROM expired_challenge ec
-
-          INNER JOIN release_wallet rw
-            ON rw.challenge_id = ec.id
-
-          RETURNING id
-
-        ),
-
-        expired_challenge_update AS (
-
-          -- ------------------------------------------
-          -- Mark challenge as expired
-          -- ------------------------------------------
-
-          UPDATE challenges c
-
-          SET
-            status = 'expired'
-
-          FROM expired_challenge ec
-
-          INNER JOIN release_wallet rw
-            ON rw.challenge_id = ec.id
-
-          WHERE
-            c.id = ec.id
-            AND c.status = 'waiting'
-
-          RETURNING
-            c.id,
-            c.creator_id,
-            c.game_id,
-            c.stake,
-            c.platform_fee,
-            c.winner_payout,
-            c.status,
-            c.expires_at
-
-        ),
-
-        updated_game AS (
-
-          -- ------------------------------------------
-          -- Cancel associated game
-          -- ------------------------------------------
-
-          UPDATE games g
-
-          SET
-            status = 'expired'
-
-          FROM expired_challenge_update ec
-
-          WHERE
-            g.id = ec.game_id
-            AND g.status = 'waiting'
-
-          RETURNING
-            g.id,
-            g.code,
-            g.status
-
-        )
-
-        -- --------------------------------------------
-        -- Return useful information
-        -- --------------------------------------------
-
-        SELECT
-          ec.id AS challenge_id,
-          ec.creator_id,
-          ec.game_id,
-          ec.stake,
-          ec.platform_fee,
-          ec.winner_payout,
-          ec.status,
-          ec.expires_at,
-
-          ug.code AS game_code,
-          ug.status AS game_status
-
-        FROM expired_challenge_update ec
-
-        LEFT JOIN updated_game ug
-          ON ug.id = ec.game_id;
-      `,
-    ]);
 
     // --------------------------------------------------
     // CHALLENGE IS NO LONGER WAITING / NOT EXPIRED

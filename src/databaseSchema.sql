@@ -96,6 +96,8 @@ CREATE TABLE challenges (
     opponent_id INTEGER REFERENCES users(id),
     game_id INTEGER REFERENCES games(id),
     stake NUMERIC(12,2) NOT NULL,
+    type VARCHAR(10) CHECK (status IN ('friendly','cash')) DEFAULT 'friendly',
+    challenge_mode VARCHAR(20) CHECK (status IN ('direct','private','open')),
     platform_fee NUMERIC(12,2) DEFAULT 0,
     winner_payout NUMERIC(12,2),
     winner_id INTEGER REFERENCES users(id),

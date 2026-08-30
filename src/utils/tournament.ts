@@ -917,20 +917,29 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
 
       // update peak rating also to be max of current rating and peak rating
 
+      const prevRatingResults = await sql`
+        SELECT rating_after FROM ratings_history
+        WHERE user_id = ${participant.id}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
 
-      await sql.transaction((sql) => [
-        sql`
-       UPDATE users
-       SET peak_rating = GREATEST(rating + ${participationReward}, peak_rating)
-       WHERE id = ${participant.id}
-       `,
-       sql`
-       UPDATE users
-       SET rating = rating + ${participationReward}
-       WHERE id = ${participant.id}
-       `
-    ]);
-      
+      const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating;
+      const newRating = prevRating + ratingChange;
+
+
+      const peakRating = Math.max(prevRating, newRating);
+
+        console.log('prev rating', prevRating, 'new rating', newRating);
+
+        await sql.transaction((sql) => [
+          sql`
+            INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after)
+            VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
+          `,
+          sql`UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
+          sql`UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`
+    ]); 
 
       createNotification(
         participant.id,
@@ -1297,11 +1306,11 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         ratingChange >= 0 ? "Rating Increased 📈" : "Rating Decreased 📉";
       const ratingMessage = `Your performance in the tournament has resulted in a rating change of ${ratingChange >= 0 ? "+" : ""}${ratingChange}. Keep competing to climb the leaderboard!. Your leaderboard position have been updated`;
 
-      await sql`
-      UPDATE users
-      SET rating = rating + 2
-      WHERE id = ${participant.id}
-      `;
+      // await sql`
+      // UPDATE users
+      // SET rating = rating + 2
+      // WHERE id = ${participant.id}
+      // `;
 
       // fetch the rating history for the previous rating before the tournament for the participant
       const prevRatingResults = await sql`
@@ -1311,14 +1320,27 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         LIMIT 1
       `;
 
-      const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating - 2;
+      const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating;
       const newRating = prevRating + ratingChange;
 
+
+
+
       try{
-        await sql`
-          INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after)
-          VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
-        `;
+        const peakRating = Math.max(prevRating, newRating);
+
+        console.log('prev rating', prevRating, 'new rating', newRating);
+
+        await sql.transaction((sql) => [
+          sql`
+            INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after)
+            VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
+          `,
+          sql`UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
+          sql`UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`
+    ]);
+        
+
       }catch(err){
         console.error('Error inserting into ratings_history:', err);
       }
@@ -1463,7 +1485,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
 
     // create next tournament for the next week with the same date and time (7days later) and same game, and same tournament type, and same max participants, and same entry fee, and same prize pool, and same is_rated, and same is_private, and same is_invite_only, and same is_team_tournament, and same team_size, and same team_score_type, and same team_score_limit, and same team_score_increment, and same team_score_decrement, and same team_score_reset_on_win, and same team_score_reset_on_loss, and same team_score_reset_on_draw, and same team_score_reset_on_forfeit, and same team_score_reset_on_disconnect, and same team_score_reset_on_timeout, and same team_score_reset_on_abandonment
 
-    await createNextTournamentForNextWeek(tournamentId);
+    //await createNextTournamentForNextWeek(tournamentId);
 
   } else {
     // if not last round and all matches are not yet completed

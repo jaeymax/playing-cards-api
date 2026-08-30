@@ -4,8 +4,6 @@ import sql from "../config/db";
 import { saveGame } from "../utils/gameFunctions";
 import { expiredChallenges, mixpanel } from "..";
 
-
-
 const createGame = asyncHandler(async (req: Request, res: Response) => {
   const {
     userId,
@@ -60,9 +58,7 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
     // 3. GAME CODE
     // --------------------------------------------------
 
-    const gameCode = Math.random()
-      .toString(36)
-      .substring(2, 12)
+    const gameCode = Math.random().toString(36).substring(2, 12);
 
     // --------------------------------------------------
     // 4. CALCULATE CASH VALUES ON SERVER
@@ -77,9 +73,7 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
       // 5% platform fee
       platformFee = Number((totalPot * 0.05).toFixed(2));
 
-      winnerPayout = Number(
-        (totalPot - platformFee).toFixed(2)
-      );
+      winnerPayout = Number((totalPot - platformFee).toFixed(2));
     }
 
     // --------------------------------------------------
@@ -283,9 +277,7 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
       `,
     ];
 
-    const [transactionResult] = await sql.transaction(
-      transactionQueries
-    );
+    const [transactionResult] = await sql.transaction(transactionQueries);
 
     // --------------------------------------------------
     // 6. CHECK WHETHER GAME WAS CREATED
@@ -305,7 +297,6 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
       return;
     }
 
-
     // schedule expired challenge job if it's a stake game
     if (isStakeGame) {
       const challenge = transactionResult[0].challenge;
@@ -314,7 +305,7 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
         const delayMs = expiresAt.getTime() - Date.now();
         await expiredChallenges.scheduleExpiredChallenge(
           challenge.id,
-          Math.max(delayMs, 0)
+          Math.max(delayMs, 0),
         );
       }
     }
@@ -399,9 +390,7 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
       game_code: gameCode,
       num_players: numPlayers,
       win_points: winPoints,
-      game_type: isStakeGame
-        ? "cash challenge"
-        : "invite friend",
+      game_type: isStakeGame ? "cash challenge" : "invite friend",
 
       ...(isStakeGame && {
         stake: numericStake,
@@ -445,8 +434,6 @@ const createGame = asyncHandler(async (req: Request, res: Response) => {
     });
   }
 });
-
-
 
 const createBotGame = asyncHandler(async (req: Request, res: Response) => {
   const {
@@ -751,7 +738,6 @@ const joinGame = async (req: Request, res: Response) => {
 // }
 //   ])
 // });
-
 
 // const getUserGames = async (
 //   req: Request,
@@ -1200,8 +1186,6 @@ const joinGame = async (req: Request, res: Response) => {
 //        */
 //       let status = game.status;
 
-
-
 //       /*
 //        * A challenge can expire or be cancelled while
 //        * the associated game is still waiting.
@@ -1370,10 +1354,7 @@ const joinGame = async (req: Request, res: Response) => {
 //   }
 // };
 
-const getUserGames = async (
-  req: Request,
-  res: Response
-) => {
+const getUserGames = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
 
@@ -1389,27 +1370,15 @@ const getUserGames = async (
      * -----------------------------------------
      */
 
-    const requestedPage =
-      Number(req.query.page) || 1;
+    const requestedPage = Number(req.query.page) || 1;
 
-    const requestedLimit =
-      Number(req.query.limit) || 3;
+    const requestedLimit = Number(req.query.limit) || 3;
 
-    const page = Math.max(
-      1,
-      Math.floor(requestedPage)
-    );
+    const page = Math.max(1, Math.floor(requestedPage));
 
-    const limit = Math.min(
-      50,
-      Math.max(
-        1,
-        Math.floor(requestedLimit)
-      )
-    );
+    const limit = Math.min(50, Math.max(1, Math.floor(requestedLimit)));
 
     const offset = (page - 1) * limit;
-
 
     /*
      * -----------------------------------------
@@ -1433,15 +1402,10 @@ const getUserGames = async (
      */
 
     const statusFilter =
-      typeof req.query.status === "string"
-        ? req.query.status
-        : "all";
+      typeof req.query.status === "string" ? req.query.status : "all";
 
     const typeFilter =
-      typeof req.query.type === "string"
-        ? req.query.type
-        : "all";
-
+      typeof req.query.type === "string" ? req.query.type : "all";
 
     /*
      * Validate status
@@ -1457,44 +1421,30 @@ const getUserGames = async (
       "cancelled",
     ];
 
-    if (
-      !allowedStatuses.includes(
-        statusFilter
-      )
-    ) {
+    if (!allowedStatuses.includes(statusFilter)) {
       return res.status(400).json({
         message: "Invalid status filter",
       });
     }
 
-
     /*
      * Validate type
      */
 
-    const allowedTypes = [
-      "all",
-      "cash",
-      "friendly",
-      "ranked",
-    ];
+    const allowedTypes = ["all", "cash", "friendly", "ranked"];
 
-    if (
-      !allowedTypes.includes(
-        typeFilter
-      )
-    ) {
+    if (!allowedTypes.includes(typeFilter)) {
       return res.status(400).json({
         message: "Invalid game type filter",
       });
     }
-
 
     /*
      * -----------------------------------------
      * BUILD FILTER CONDITIONS
      * -----------------------------------------
      */
+    console.log('status: ', statusFilter, 'type: ', typeFilter)
 
     let statusCondition = sql``;
 
@@ -1509,39 +1459,24 @@ const getUserGames = async (
           )
         )
       `;
-    }
-
-    else if (
-      statusFilter === "in_progress"
-    ) {
+    } else if (statusFilter === "in_progress") {
       statusCondition = sql`
         AND g.status = 'in_progress'
       `;
-    }
-
-    else if (
-      statusFilter === "completed"
-    ) {
+    } else if (statusFilter === "completed") {
       statusCondition = sql`
         AND g.status = 'completed'
       `;
-    }
+    } else if (statusFilter === "forfeited") {
 
     /*
      * Frontend calls it "forfeited",
      * database calls it "abandoned".
      */
-    else if (
-      statusFilter === "forfeited"
-    ) {
       statusCondition = sql`
         AND g.status = 'forfeited'
       `;
-    }
-
-    else if (
-      statusFilter === "expired"
-    ) {
+    } else if (statusFilter === "expired") {
       statusCondition = sql`
         AND (
           g.status = 'expired'
@@ -1551,11 +1486,7 @@ const getUserGames = async (
           )
         )
       `;
-    }
-
-    else if (
-      statusFilter === "cancelled"
-    ) {
+    } else if (statusFilter === "cancelled") {
       statusCondition = sql`
         AND (
           g.status = 'cancelled'
@@ -1566,7 +1497,6 @@ const getUserGames = async (
         )
       `;
     }
-
 
     /*
      * -----------------------------------------
@@ -1581,34 +1511,27 @@ const getUserGames = async (
      */
     if (typeFilter === "cash") {
       typeCondition = sql`
-        AND c.id IS NOT NULL
+        AND c.stake IS NOT NULL
       `;
-    }
+    } else if (typeFilter === "friendly") {
 
     /*
      * Friendly = non-cash, non-rated
      */
-    else if (
-      typeFilter === "friendly"
-    ) {
       typeCondition = sql`
-        AND c.id IS NULL
+        AND c.stake IS NULL
         AND g.is_rated = false
       `;
-    }
+    } else if (typeFilter === "ranked") {
 
     /*
      * Ranked = non-cash, rated
      */
-    else if (
-      typeFilter === "ranked"
-    ) {
       typeCondition = sql`
         AND c.id IS NULL
         AND g.is_rated = true
       `;
     }
-
 
     /*
      * -----------------------------------------
@@ -1617,31 +1540,26 @@ const getUserGames = async (
      */
 
     const countResult = await sql`
-      SELECT COUNT(*)::int AS total
+  SELECT COUNT(g.id)::int AS total
 
-      FROM games g
+  FROM games g
 
-      LEFT JOIN challenges c
-        ON c.id = g.challenge_id
+  INNER JOIN game_players gp
+    ON gp.game_id = g.id
+    AND gp.user_id = ${userId}
 
-      WHERE g.created_by = ${userId}
+  LEFT JOIN challenges c
+    ON c.id = g.challenge_id
+   
+  WHERE 1=1
+  ${statusCondition}
 
-      ${statusCondition}
+  ${typeCondition};
+`;
 
-      ${typeCondition};
-    `;
+    const total = Number(countResult[0]?.total ?? 0);
 
-    const total = Number(
-      countResult[0]?.total ?? 0
-    );
-
-    const totalPages =
-      total === 0
-        ? 0
-        : Math.ceil(
-            total / limit
-          );
-
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
     /*
      * -----------------------------------------
@@ -1758,7 +1676,7 @@ const getUserGames = async (
            */
           WHEN g.status IN (
             'completed',
-            'abandoned'
+            'forfeited'
           )
             THEN (
               SELECT gp_winner.user_id
@@ -1781,10 +1699,13 @@ const getUserGames = async (
 
       FROM games g
 
-      LEFT JOIN challenges c
-        ON c.id = g.challenge_id
+      INNER JOIN game_players current_user_player
+  ON current_user_player.game_id = g.id
+  AND current_user_player.user_id = ${userId}
+  LEFT JOIN challenges c
+  ON c.id = g.challenge_id
 
-      WHERE g.created_by = ${userId}
+  WHERE 1=1
 
       ${statusCondition}
 
@@ -1798,287 +1719,171 @@ const getUserGames = async (
       OFFSET ${offset};
     `;
 
-
     /*
      * -----------------------------------------
      * FORMAT RESULTS
      * -----------------------------------------
      */
 
-    const formattedGames =
-      games.map((game: any) => {
+    const formattedGames = games.map((game: any) => {
+      /*
+       * -------------------------------------
+       * UI STATUS
+       * -------------------------------------
+       */
+
+      let status = game.status;
+
+      /*
+       * Database:
+       * abandoned
+       *
+       * Frontend:
+       * forfeited
+       */
+      // if (
+      //   status === "abandoned"
+      // ) {
+      //   status = "forfeited";
+      // }
+
+      /*
+       * Challenge expired while
+       * game was still waiting.
+       */
+      if (status === "waiting" && game.challenge_status === "expired") {
+        status = "expired";
+      }
+
+      /*
+       * Challenge cancelled while
+       * game was still waiting.
+       */
+      if (status === "waiting" && game.challenge_status === "cancelled") {
+        status = "cancelled";
+      }
+
+      /*
+       * -------------------------------------
+       * WINNER
+       * -------------------------------------
+       */
+
+      let winner: boolean | null = null;
+
+      if (game.winner_id !== null) {
+        winner = Number(game.winner_id) === Number(userId);
+      }
+
+      /*
+       * -------------------------------------
+       * PLAYERS
+       * -------------------------------------
+       */
+
+      const players = Array.isArray(game.players)
+        ? game.players.map((player: any) => ({
+            id: Number(player.id),
+
+            username: player.username,
+
+            score: Number(player.score ?? 0),
+
+            position: Number(player.position),
+
+            is_dealer: Boolean(player.is_dealer),
+
+            player_status: player.player_status,
+
+            is_you: Boolean(player.is_you),
+          }))
+        : [];
+
+      /*
+       * -------------------------------------
+       * RETURN GAME
+       * -------------------------------------
+       */
+
+      return {
+        id: Number(game.id),
+
+        code: game.code,
+
+        status,
+
+        is_stake_game: Boolean(game.is_stake_game),
+
+        is_rated: Boolean(game.is_rated),
+
+        players,
+
+        winner,
+
+        winner_id: game.winner_id !== null ? Number(game.winner_id) : null,
 
         /*
-         * -------------------------------------
-         * UI STATUS
-         * -------------------------------------
+         * Challenge
          */
+        challenge_id:
+          game.challenge_id !== null ? Number(game.challenge_id) : null,
 
-        let status = game.status;
+        challenge_status: game.challenge_status || null,
+
+        stake: game.stake !== null ? Number(game.stake) : null,
+
+        platform_fee:
+          game.platform_fee !== null ? Number(game.platform_fee) : null,
+
+        prize: game.prize !== null ? Number(game.prize) : null,
+
+        challenge_expires_at: game.challenge_expires_at || null,
+
+        challenge_completed_at: game.challenge_completed_at || null,
 
         /*
-         * Database:
-         * abandoned
-         *
-         * Frontend:
-         * forfeited
+         * Game settings
          */
-        // if (
-        //   status === "abandoned"
-        // ) {
-        //   status = "forfeited";
-        // }
+        win_points: game.win_points !== null ? Number(game.win_points) : null,
+
+        include_sixes: Boolean(game.include_sixes),
+
+        include_aces: Boolean(game.include_aces),
+
+        player_count: Number(game.player_count),
 
         /*
-         * Challenge expired while
-         * game was still waiting.
+         * Timing
          */
-        if (
-          status === "waiting" &&
-          game.challenge_status ===
-            "expired"
-        ) {
-          status = "expired";
-        }
+        created_at: game.created_at,
+
+        started_at: game.started_at,
+
+        ended_at: game.ended_at,
 
         /*
-         * Challenge cancelled while
-         * game was still waiting.
+         * Turn
          */
-        if (
-          status === "waiting" &&
-          game.challenge_status ===
-            "cancelled"
-        ) {
-          status = "cancelled";
-        }
+        current_player_position: Number(game.current_player_position),
 
+        current_turn_user_id:
+          game.current_turn_user_id !== null
+            ? Number(game.current_turn_user_id)
+            : null,
 
-        /*
-         * -------------------------------------
-         * WINNER
-         * -------------------------------------
-         */
+        turn_started_at: game.turn_started_at || null,
 
-        let winner:
-          | boolean
-          | null = null;
+        turn_timeout_seconds:
+          game.turn_timeout_seconds !== null
+            ? Number(game.turn_timeout_seconds)
+            : null,
 
-        if (
-          game.winner_id !== null
-        ) {
-          winner =
-            Number(
-              game.winner_id
-            ) ===
-            Number(userId);
-        }
+        forfeit_at: game.forfeit_at || null,
 
-
-        /*
-         * -------------------------------------
-         * PLAYERS
-         * -------------------------------------
-         */
-
-        const players =
-          Array.isArray(
-            game.players
-          )
-            ? game.players.map(
-                (player: any) => ({
-                  id: Number(
-                    player.id
-                  ),
-
-                  username:
-                    player.username,
-
-                  score: Number(
-                    player.score ?? 0
-                  ),
-
-                  position:
-                    Number(
-                      player.position
-                    ),
-
-                  is_dealer:
-                    Boolean(
-                      player.is_dealer
-                    ),
-
-                  player_status:
-                    player.player_status,
-
-                  is_you:
-                    Boolean(
-                      player.is_you
-                    ),
-                })
-              )
-            : [];
-
-
-        /*
-         * -------------------------------------
-         * RETURN GAME
-         * -------------------------------------
-         */
-
-        return {
-
-          id: Number(
-            game.id
-          ),
-
-          code:
-            game.code,
-
-          status,
-
-          is_stake_game:
-            Boolean(
-              game.is_stake_game
-            ),
-
-          is_rated:
-            Boolean(
-              game.is_rated
-            ),
-
-          players,
-
-          winner,
-
-          winner_id:
-            game.winner_id !== null
-              ? Number(
-                  game.winner_id
-                )
-              : null,
-
-          /*
-           * Challenge
-           */
-          challenge_id:
-            game.challenge_id !== null
-              ? Number(
-                  game.challenge_id
-                )
-              : null,
-
-          challenge_status:
-            game.challenge_status ||
-            null,
-
-          stake:
-            game.stake !== null
-              ? Number(
-                  game.stake
-                )
-              : null,
-
-          platform_fee:
-            game.platform_fee !== null
-              ? Number(
-                  game.platform_fee
-                )
-              : null,
-
-          prize:
-            game.prize !== null
-              ? Number(
-                  game.prize
-                )
-              : null,
-
-          challenge_expires_at:
-            game.challenge_expires_at ||
-            null,
-
-          challenge_completed_at:
-            game.challenge_completed_at ||
-            null,
-
-          /*
-           * Game settings
-           */
-          win_points:
-            game.win_points !== null
-              ? Number(
-                  game.win_points
-                )
-              : null,
-
-          include_sixes:
-            Boolean(
-              game.include_sixes
-            ),
-
-          include_aces:
-            Boolean(
-              game.include_aces
-            ),
-
-          player_count:
-            Number(
-              game.player_count
-            ),
-
-          /*
-           * Timing
-           */
-          created_at:
-            game.created_at,
-
-          started_at:
-            game.started_at,
-
-          ended_at:
-            game.ended_at,
-
-          /*
-           * Turn
-           */
-          current_player_position:
-            Number(
-              game.current_player_position
-            ),
-
-          current_turn_user_id:
-            game.current_turn_user_id !==
-            null
-              ? Number(
-                  game.current_turn_user_id
-                )
-              : null,
-
-          turn_started_at:
-            game.turn_started_at ||
-            null,
-
-          turn_timeout_seconds:
-            game.turn_timeout_seconds !==
-            null
-              ? Number(
-                  game.turn_timeout_seconds
-                )
-              : null,
-
-          forfeit_at:
-            game.forfeit_at ||
-            null,
-
-          forfeited_by:
-            game.forfeited_by !== null
-              ? Number(
-                  game.forfeited_by
-                )
-              : null,
-        };
-      });
-
+        forfeited_by:
+          game.forfeited_by !== null ? Number(game.forfeited_by) : null,
+      };
+    });
 
     /*
      * -----------------------------------------
@@ -2087,7 +1892,6 @@ const getUserGames = async (
      */
 
     return res.status(200).json({
-
       games: formattedGames,
 
       pagination: {
@@ -2096,33 +1900,23 @@ const getUserGames = async (
         total,
         totalPages,
 
-        hasNextPage:
-          page <
-          totalPages,
+        hasNextPage: page < totalPages,
 
-        hasPreviousPage:
-          page > 1,
+        hasPreviousPage: page > 1,
       },
 
       filters: {
         status: statusFilter,
         type: typeFilter,
       },
-
     });
-
   } catch (error) {
-
-    console.error(
-      "Error fetching all created games:",
-      error
-    );
+    console.error("Error fetching all created games:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to fetch created games",
+      message: "Failed to fetch created games",
     });
   }
 };
 
-export { createGame, createBotGame, joinGame, getUserGames};
+export { createGame, createBotGame, joinGame, getUserGames };

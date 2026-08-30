@@ -256,7 +256,22 @@ const loginUser = asyncHandler(
     }
 
     // Fetch user from the database
-    const users = await sql`select * from users where email = ${email}`;
+    const users = await sql`select u.id, u.username,
+     u.password_hash,
+      u.email, 
+      w.balance,
+      u.image_url,
+      u.is_bot,
+      u.is_guest,
+      u.is_rated,
+      u.rating,
+      u.push_token,
+      u.created_at,
+      u.updated_at
+       from users u JOIN wallets w ON u.id = w.user_id where u.email = ${email}`;
+    //const users = await sql`select * from users where email = ${email}`;
+
+  
 
     if (users.length === 0) {
       res.status(401);
@@ -294,6 +309,9 @@ const loginUser = asyncHandler(
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
+
+     delete user.password_hash;
+    
 
     res.json({ ...user, token: accessToken });
     return;
@@ -707,7 +725,21 @@ const googleLogin = asyncHandler(
 
     const email = payload.email;
 
-    const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+    
+     const users = await sql`select u.id, u.username,
+     u.password_hash,
+      u.email, 
+      w.balance,
+      u.image_url,
+      u.is_bot,
+      u.is_guest,
+      u.is_rated,
+      u.rating,
+      u.push_token,
+      u.created_at,
+      u.updated_at
+       from users u JOIN wallets w ON u.id = w.user_id where u.email = ${email}`;
+
     if (users.length === 0) {
       res.status(404);
       throw new Error("No account found. Please sign up.");
@@ -715,11 +747,15 @@ const googleLogin = asyncHandler(
 
     const { accessToken, refreshToken } = generateTokens(users[0].id);
 
+    const user = users[0];
+
     // Store refresh token
     await sql`
     INSERT INTO refresh_tokens (user_id, token, expires_at)
     VALUES (${users[0].id}, ${refreshToken}, NOW() + INTERVAL '7 days')
   `;
+
+   delete user.password_hash;
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,

@@ -205,7 +205,7 @@ export const getAllTournaments = async (req: Request, res: Response) => {
       LEFT JOIN tournament_participants tp
         ON t.id = tp.tournament_id
         AND tp.user_id = ${userId}
-      ORDER BY t.created_at DESC
+      ORDER BY t.start_date
     `;
 
     // Log request query for debugging

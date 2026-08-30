@@ -538,7 +538,7 @@ app.post(
 
       for (const user of users) {
         const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/42 and don't miss out on the action! See you there!`;
+Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/70 and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
@@ -566,7 +566,7 @@ app.post(
 
       for (const user of users) {
           const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/42 and don't miss out on the action! See you there!`;
+Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/70 and don't miss out on the action! See you there!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);

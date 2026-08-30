@@ -107,7 +107,7 @@ export default class MatchForfeiter {
       `Forfeit processed for match ${gameCode}. Winner: ${winnerId}, Loser: ${loserId}`,
     );
 
-    if(match.challenge) {
+    if(match.challenge && match.challenge.type == 'stake') {
       // update the challenge status to forfeited and update the challenge table with the winner
       await sql`UPDATE challenges SET status = 'forfeited', winner_id = ${winnerId} WHERE id = ${match.challenge_id}`;
 
@@ -257,7 +257,7 @@ export default class MatchForfeiter {
         console.log(
           `player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`,
         );
-        await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+        //await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
         const ratingChange = newRating - oldRating[0].rating;
         // character suit there question //
         await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament?.id}, ${ratingChange})`;
