@@ -22,6 +22,7 @@ const index_2 = require("../index");
 const rating_1 = require("./rating");
 const tournament_1 = require("./tournament");
 const utils_1 = require("../utils");
+const cashChallengeSettlerService_1 = require("../services/cashChallengeSettlerService");
 const getDealingSequence = (game) => {
     var _a;
     const dealingSequence = [];
@@ -78,7 +79,7 @@ const dealCards = (game) => __awaiter(void 0, void 0, void 0, function* () {
     game.current_player_position =
         (game.current_player_position + 1) % game.player_count;
     game.current_turn_user_id = (_b = (_a = game.players.find((player) => player.position == game.current_player_position)) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.id;
-    if (game.is_rated) {
+    if (game.is_rated || game.challenge) {
         yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
     }
 });
@@ -159,7 +160,7 @@ const playCard = (game, card_id, player_id, socket) => __awaiter(void 0, void 0,
     game.turn_started_at = Date.now();
     const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
     game.turn_ends_at = turn_ends_at;
-    if (game.is_rated) {
+    if (game.is_rated || game.challenge) {
         yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
     }
     if (game.current_trick.cards.length === game.players.length) {
@@ -220,16 +221,28 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
         points = calculateSpecialPoints(game.completed_tricks, game.completed_tricks.length - 1, "", game.completed_tricks.length - 1);
     }
     const winner = (0, utils_1.getMatchWinner)(game);
-    const loser = (0, utils_1.getMatchLoser)(game);
+    let loser = null;
+    if (game.player_count == 2) {
+        loser = (0, utils_1.getMatchLoser)(game);
+    }
     winner.score += points;
     const tournament = yield (0, utils_1.isTournamentMatch)(game.id);
     yield (0, utils_1.updateGamePlayersScores)(game);
     if (winner.score >= game.win_points) {
         game.status = "completed";
         game.ended_at = Date.now();
-        if (game.is_rated)
+        if (game.is_rated || game.challenge)
             yield index_1.matchForfeiter.cancelForfeit(game.code);
         winner.games_won += 1;
+        console.log("game challenge", game.challenge);
+        //console.log('game challenge_id', game.challenge.id)
+        if (game.challenge && game.challenge.type == "stake") {
+            // await sql`UPDATE challenges SET status = 'completed', winner_id = ${winner.user.id} WHERE id = ${game.challenge_id}`;
+            // game.challenge.status = 'completed';
+            // game.challenge.winner_id = winner.user.id;
+            // we now credit the winner and debit the loser the challenge stake amount
+            yield (0, cashChallengeSettlerService_1.settleCashChallenge)(game.challenge.id, winner.user.id);
+        }
         setTimeout(() => {
             index_2.serverSocket.to(game.code).emit("gameOver", {
                 winner: Object.assign(Object.assign({}, winner), { points, hand_number: game.current_hand_number }),
@@ -238,7 +251,10 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
         yield (0, utils_1.markGameAsEndedAndCompleted)(game.id);
         yield (0, utils_1.updateGamesPlayedForGamePlayers)(game.id);
         yield (0, utils_1.updateWinnerWonCount)(winner.user.id);
-        yield (0, utils_1.updateLoserWinningStreak)(loser.user.id);
+        if (loser) {
+            yield (0, utils_1.updateLoserWinningStreak)(loser.user.id);
+        }
+        game.status = "completed";
         yield saveGame(game.code, game);
         console.log("tournamentData", tournament);
         if (game.is_rated) {
@@ -253,7 +269,7 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
                 const oldRating = yield (0, db_1.default) `SELECT rating from users WHERE id = ${player.user.id}`;
                 const newRating = player.user.rating;
                 console.log(`player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`);
-                yield (0, db_1.default) `UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+                //await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
                 const ratingChange = newRating - oldRating[0].rating;
                 // character suit there question //
                 yield (0, db_1.default) `INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament_id[0].tournament_id}, ${ratingChange})`;

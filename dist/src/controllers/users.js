@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUsers = exports.updateUserProfile = exports.getUserProfile = exports.getDivisionInfo = exports.divisions = void 0;
+exports.getUsers = exports.updateUserProfile = exports.getUserProfileByUsername = exports.getUserProfile = exports.getDivisionInfo = exports.divisions = void 0;
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const db_1 = __importDefault(require("../config/db"));
 exports.divisions = [
@@ -42,6 +42,71 @@ const getDivisionInfo = (rating) => {
     };
 };
 exports.getDivisionInfo = getDivisionInfo;
+const getUserProfileByUsername = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { username } = req.params;
+    const users = yield (0, db_1.default) `
+    WITH RankedUsers AS (
+      SELECT
+        id,
+        RANK() OVER (ORDER BY rating DESC) AS global_rank
+      FROM users
+      WHERE is_bot = false
+        AND is_guest = false
+        AND is_rated = true
+    ),
+    UserProfile AS (
+      SELECT
+        u.id,
+        u.username,
+        u.email,
+        u.phone,
+        u.country_code,
+        u.is_guest,
+        u.is_rated,
+        u.peak_rating,
+        u.max_winning_streak,
+        u.podium_finishes,
+        u.current_winning_streak,
+        u.gold_medals,
+        u.silver_medals,
+        u.online_status,
+        u.last_active,
+        u.bronze_medals,
+        u.tournaments_played,
+        u.tournaments_won,
+        u.notification_enabled,
+        u.image_url,
+        u.games_played,
+        u .games_won,
+        u.rating,
+        u.location,
+        u.created_at,
+        u.updated_at,
+        r.global_rank
+      FROM users u
+      LEFT JOIN RankedUsers r ON u.id = r.id
+      WHERE u.is_bot = false
+    )
+    SELECT id, username, email, phone, country_code, is_guest, is_rated, peak_rating, max_winning_streak, notification_enabled, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank, last_active, online_status
+    FROM UserProfile
+    WHERE username = ${username}
+  `;
+    // get player rating history
+    const ratingHistory = yield (0, db_1.default) `
+    SELECT tournament_id, rating_before, rating_change, rating_after, tournaments.start_date, tournaments.name, (tournaments.winner_id = ${users[0].id}) AS won
+    FROM ratings_history
+    JOIN tournaments ON ratings_history.tournament_id = tournaments.id
+    WHERE user_id = ${users[0].id}
+    ORDER BY ratings_history.created_at ASC
+  `;
+    if (users.length === 0) {
+        res.status(404);
+        throw new Error("User not found");
+    }
+    const user = users[0];
+    res.status(200).json(Object.assign(Object.assign(Object.assign({}, user), (0, exports.getDivisionInfo)(user.rating)), { rating_history: ratingHistory }));
+}));
+exports.getUserProfileByUsername = getUserProfileByUsername;
 const getUserProfile = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
@@ -66,9 +131,11 @@ const getUserProfile = (0, express_async_handler_1.default)((req, res) => __awai
         u.username,
         u.email,
         u.phone,
+        u.country_code,
         u.is_guest,
         u.is_rated,
         u.peak_rating,
+        w.balance,
         u.max_winning_streak,
         u.podium_finishes,
         u.current_winning_streak,
@@ -77,9 +144,12 @@ const getUserProfile = (0, express_async_handler_1.default)((req, res) => __awai
         u.bronze_medals,
         u.tournaments_played,
         u.tournaments_won,
+        u.notification_enabled,
         u.image_url,
         u.games_played,
         u.games_won,
+        u.last_active,
+        u.online_status,
         u.rating,
         u.location,
         u.created_at,
@@ -87,9 +157,10 @@ const getUserProfile = (0, express_async_handler_1.default)((req, res) => __awai
         r.global_rank
       FROM users u
       LEFT JOIN RankedUsers r ON u.id = r.id
+      LEFT JOIN wallets w ON u.id = w.user_id
       WHERE u.is_bot = false
     )
-    SELECT id, username, email, phone, is_guest, is_rated, peak_rating, max_winning_streak, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank
+    SELECT id, balance, username, email, phone, country_code, is_guest, is_rated, peak_rating, max_winning_streak, notification_enabled, podium_finishes, current_winning_streak, gold_medals, silver_medals, bronze_medals, tournaments_played, tournaments_won, image_url, games_played, games_won, rating, location, created_at, updated_at, global_rank, last_active, online_status
     FROM UserProfile
     WHERE id = ${userId}
   `;
@@ -108,7 +179,7 @@ const updateUserProfile = (0, express_async_handler_1.default)((req, res) => __a
         res.status(401);
         throw new Error("Not authorized");
     }
-    const { phone, location, country } = req.body;
+    const { phone, country } = req.body;
     if (!phone && !country) {
         res.status(400);
         throw new Error("At least one field (phone or country) must be provided");
@@ -120,12 +191,13 @@ const updateUserProfile = (0, express_async_handler_1.default)((req, res) => __a
         country_code = COALESCE(${country}, country_code),
         updated_at = NOW()
       WHERE id = ${userId}
-      RETURNING id, username, email, phone, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at
+      RETURNING id, username, email, phone, country_code, is_guest, image_url, games_played, games_won, rating, location, created_at, updated_at
     `;
     if (user.length === 0) {
         res.status(404);
         throw new Error("User not found");
     }
+    console.log('profile updated successfully for user ID:', userId);
     res.status(200).json(user[0]);
 }));
 exports.updateUserProfile = updateUserProfile;

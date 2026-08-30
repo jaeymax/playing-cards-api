@@ -45,6 +45,14 @@ const initializeSocketHandler = (serverSocket) => {
         //onlineUsers.push({ user_id: userId, username, socketId: socket.id, status:"Active" });
         console.log(`User connected: ${userId} (socket ${socket.id})`);
         exports.userSocketMap.set(userId, socket.id);
+        // mark the user as online in the database
+        (0, db_1.default) `UPDATE users SET online_status = true WHERE id = ${userId}`
+            .then(() => {
+            console.log(`Marked user ${userId} as online`);
+        })
+            .catch((err) => {
+            console.error(`Error marking user ${userId} as online:`, err);
+        });
         // emit status change of online users to all clients
         //serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
         // socket.on('getOnlineUsers', ()=>{
@@ -354,7 +362,7 @@ const initializeSocketHandler = (serverSocket) => {
         socket.on('typingSpectatorChat', ({ game_code, user_id, username }) => {
             socket.to(game_code).emit('typingSpectatorChat', { user_id, username, game_code });
         });
-        socket.on("disconnect", () => {
+        socket.on("disconnect", () => __awaiter(void 0, void 0, void 0, function* () {
             console.log(`User ${userId} disconnected`);
             const index = exports.onlineUsers.findIndex((user) => user.user_id === userId);
             if (index !== -1) {
@@ -362,7 +370,23 @@ const initializeSocketHandler = (serverSocket) => {
             }
             serverSocket.emit("onlineUsersStatusChanged", exports.onlineUsers);
             exports.userSocketMap.delete(userId);
-        });
+            // mark the last_active timestamp for the user in the database
+            yield (0, db_1.default) `UPDATE users SET last_active = NOW() WHERE id = ${userId}`
+                .then(() => {
+                console.log(`Updated last_active for user ${userId}`);
+            })
+                .catch((err) => {
+                console.error(`Error updating last_active for user ${userId}:`, err);
+            });
+            // mark the user as offline in the database
+            yield (0, db_1.default) `UPDATE users SET online_status = false WHERE id = ${userId}`
+                .then(() => {
+                console.log(`Marked user ${userId} as offline`);
+            })
+                .catch((err) => {
+                console.error(`Error marking user ${userId} as offline:`, err);
+            });
+        }));
     });
     // Handle match found events
     index_1.matchmaker.on("matchFound", ({ gameCode, gameId, players }) => {

@@ -223,7 +223,20 @@ const loginUser = asyncHandler((req, res, next) => __awaiter(void 0, void 0, voi
         throw new Error("Please enter all fields");
     }
     // Fetch user from the database
-    const users = yield (0, db_1.default) `select * from users where email = ${email}`;
+    const users = yield (0, db_1.default) `select u.id, u.username,
+     u.password_hash,
+      u.email, 
+      w.balance,
+      u.image_url,
+      u.is_bot,
+      u.is_guest,
+      u.is_rated,
+      u.rating,
+      u.push_token,
+      u.created_at,
+      u.updated_at
+       from users u JOIN wallets w ON u.id = w.user_id where u.email = ${email}`;
+    //const users = await sql`select * from users where email = ${email}`;
     if (users.length === 0) {
         res.status(401);
         throw new Error("Invalid credentials");
@@ -254,6 +267,7 @@ const loginUser = asyncHandler((req, res, next) => __awaiter(void 0, void 0, voi
         sameSite: "strict",
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
+    delete user.password_hash;
     res.json(Object.assign(Object.assign({}, user), { token: accessToken }));
     return;
 }));
@@ -588,17 +602,31 @@ const googleLogin = asyncHandler((req, res) => __awaiter(void 0, void 0, void 0,
     const ticket = yield client.verifyIdToken({ idToken: tokens.id_token, audience: process.env.GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     const email = payload.email;
-    const users = yield (0, db_1.default) `SELECT * FROM users WHERE email = ${email}`;
+    const users = yield (0, db_1.default) `select u.id, u.username,
+     u.password_hash,
+      u.email, 
+      w.balance,
+      u.image_url,
+      u.is_bot,
+      u.is_guest,
+      u.is_rated,
+      u.rating,
+      u.push_token,
+      u.created_at,
+      u.updated_at
+       from users u JOIN wallets w ON u.id = w.user_id where u.email = ${email}`;
     if (users.length === 0) {
         res.status(404);
         throw new Error("No account found. Please sign up.");
     }
     const { accessToken, refreshToken } = (0, generateToken_1.generateTokens)(users[0].id);
+    const user = users[0];
     // Store refresh token
     yield (0, db_1.default) `
     INSERT INTO refresh_tokens (user_id, token, expires_at)
     VALUES (${users[0].id}, ${refreshToken}, NOW() + INTERVAL '7 days')
   `;
+    delete user.password_hash;
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",

@@ -19,10 +19,12 @@ const db_1 = __importDefault(require("../config/db"));
 const utils_1 = require("../utils");
 const tournament_1 = require("../utils/tournament");
 const rating_1 = require("../utils/rating");
+const cashChallengeSettlerService_1 = require("./cashChallengeSettlerService");
 class MatchForfeiter {
     constructor(serverSocket) {
         this.serverSocket = serverSocket;
         this.queue = new bullmq_1.Queue("forfeitQueue");
+        console.log('Creating MatchForfeiter worker...', process.pid, Date.now());
         this.worker = new bullmq_1.Worker("forfeitQueue", (job) => __awaiter(this, void 0, void 0, function* () {
             const start = Date.now();
             yield this.processForfeitJob(job);
@@ -74,7 +76,7 @@ class MatchForfeiter {
             // Add your forfeit logic here
             const match = yield (0, gameFunctions_1.getGameByCode)(gameCode);
             console.log(`Match ${gameCode} status: ${match.status}`);
-            if (!match || !match.is_rated)
+            if (!match)
                 return;
             // if the match is already completed or forfeited, do nothing
             if (match.status === "completed" || match.status === "forfeited") {
@@ -86,6 +88,13 @@ class MatchForfeiter {
             const winner = match.players.find((p) => p.user.id === winnerId);
             const loser = match.players.find((p) => p.user.id === loserId);
             console.log(`Forfeit processed for match ${gameCode}. Winner: ${winnerId}, Loser: ${loserId}`);
+            if (match.challenge && match.challenge.type == 'stake') {
+                // update the challenge status to forfeited and update the challenge table with the winner
+                yield (0, db_1.default) `UPDATE challenges SET status = 'forfeited', winner_id = ${winnerId} WHERE id = ${match.challenge_id}`;
+                // credit the winner with the stake amount and update the challenge table with the winner and deduct the stake from the locked balance of the winner
+                yield (0, cashChallengeSettlerService_1.settleCashChallenge)(match.challenge.id, winnerId);
+            }
+            ;
             // Notify Game Room
             const tournament = yield (0, utils_1.isTournamentMatch)(match.id);
             if (tournament) {
@@ -182,13 +191,16 @@ class MatchForfeiter {
             match.winner_id = winnerId;
             match.status = "forfeited";
             match.forfeited_by = loserId;
+            match.ended_at = Date.now();
+            yield (0, utils_1.markGameAsEndedAndForfeited)(match.id);
+            this.serverSocket.to(gameCode).emit('updatedGameData', match);
             if (match.is_rated) {
                 const players = (0, rating_1.updateRatings)(match.players, winnerId);
                 for (let player of players) {
                     const oldRating = yield (0, db_1.default) `SELECT rating from users WHERE id = ${player.user.id}`;
                     const newRating = player.user.rating;
                     console.log(`player ${player.user.username} old rating ${oldRating[0].rating} new rating ${newRating}`);
-                    yield (0, db_1.default) `UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
+                    //await sql`UPDATE users SET rating = ${newRating} WHERE id = ${player.user.id}`;
                     const ratingChange = newRating - oldRating[0].rating;
                     // character suit there question //
                     yield (0, db_1.default) `INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament === null || tournament === void 0 ? void 0 : tournament.id}, ${ratingChange})`;

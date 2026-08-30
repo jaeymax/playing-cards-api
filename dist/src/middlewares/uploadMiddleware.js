@@ -18,6 +18,16 @@ function uploadMiddleware(folderName) {
                 folder: folderPath,
                 public_id: publicId,
                 format: fileExtension,
+                transformation: [
+                    {
+                        width: 512,
+                        height: 512,
+                        crop: "fill",
+                        gravity: "auto",
+                        quality: "auto",
+                        fetch_format: "auto"
+                    },
+                ]
             };
         },
     });

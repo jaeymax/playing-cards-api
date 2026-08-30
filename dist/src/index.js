@@ -12,7 +12,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.matchForfeiter = exports.matchmaker = exports.FRONTEND_URL = exports.serverSocket = exports.redis = exports.resend = exports.app = exports.mixpanel = void 0;
+exports.expiredChallenges = exports.matchForfeiter = exports.matchmaker = exports.FRONTEND_URL = exports.serverSocket = exports.redis = exports.resend = exports.sendPushNotification = exports.app = exports.mixpanel = void 0;
+exports.rebuildRatingHistory = rebuildRatingHistory;
 const express_1 = __importDefault(require("express"));
 const resend_1 = require("resend");
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -39,6 +40,7 @@ const profile_1 = __importDefault(require("./routes/profile"));
 const wallet_1 = __importDefault(require("./routes/wallet"));
 const payout_1 = __importDefault(require("./routes/payout"));
 const webhook_1 = __importDefault(require("./routes/webhook"));
+const challenges_1 = __importDefault(require("./routes/challenges"));
 const matchmaking_2 = __importDefault(require("./services/matchmaking"));
 const socketHandler_1 = require("./socketHandler");
 const ioredis_1 = __importDefault(require("ioredis"));
@@ -50,9 +52,11 @@ const perf_hooks_1 = require("perf_hooks");
 const smsService_1 = require("./services/smsService");
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const tournament_1 = require("./services/tournament");
+const matchExpired_1 = __importDefault(require("./services/matchExpired"));
 //import admin from "firebase-admin"
 const cron = require("node-cron");
 const admin = require("firebase-admin");
+const { getMessaging } = require("firebase-admin/messaging");
 //console.log('admin', admin);
 const h = (0, perf_hooks_1.monitorEventLoopDelay)();
 h.enable();
@@ -74,7 +78,7 @@ admin.initializeApp({
     credential: admin.cert(serviceAccount)
 });
 const testPushNotification = () => __awaiter(void 0, void 0, void 0, function* () {
-    yield admin.messaging().send({
+    yield getMessaging().send({
         token: "",
         notification: {
             title: "Spar Tournament",
@@ -82,22 +86,101 @@ const testPushNotification = () => __awaiter(void 0, void 0, void 0, function* (
         }
     });
 });
-const sendPushNotification = (token, title, body) => __awaiter(void 0, void 0, void 0, function* () {
+const sendPushNotification = (token_1, title_1, body_1, ...args_1) => __awaiter(void 0, [token_1, title_1, body_1, ...args_1], void 0, function* (token, title, body, link = 'https://www.sparplay.com') {
     try {
         const message = {
             token: token,
             notification: {
                 title: title,
-                body: body,
+                body: body
             },
+            webpush: {
+                fcmOptions: {
+                    link: link // Opens or focuses this URL on click
+                }
+            }
         };
-        const response = yield admin.messaging().send(message);
+        const response = yield getMessaging().send(message);
         console.log("Successfully sent push notification:", response);
     }
     catch (error) {
         console.error("Error sending push notification:", error);
     }
 });
+exports.sendPushNotification = sendPushNotification;
+function rebuildRatingHistory(sql) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // 1. fetch all users
+        const users = yield sql `
+    SELECT id FROM users
+    ORDER BY id
+  `;
+        // 2. fetch all tournaments in chronological order
+        const tournaments = yield sql `
+    SELECT id, end_date
+    FROM tournaments
+    WHERE status = 'completed'
+    ORDER BY end_date ASC
+  `;
+        for (const user of users) {
+            let prevRating = 1000;
+            for (const tournament of tournaments) {
+                const tournamentId = tournament.id;
+                // 3. check if user participated
+                const participation = yield sql `
+        SELECT 1
+        FROM tournament_participants
+        WHERE user_id = ${user.id}
+          AND tournament_id = ${tournamentId}
+        LIMIT 1
+      `;
+                if (participation.length === 0)
+                    continue;
+                // 4. check if tournament has rating changes for this user
+                const ratingChanges = yield sql `
+        SELECT COALESCE(SUM(rating_change), 0) AS total_change
+        FROM rating_changes
+        WHERE user_id = ${user.id}
+          AND tournament_id = ${tournamentId}
+      `;
+                const ratingChange = Number(ratingChanges[0].total_change || 0);
+                // skip empty tournaments
+                if (ratingChange === 0)
+                    continue;
+                const ratingBefore = prevRating;
+                const ratingAfter = prevRating + ratingChange;
+                // 5. insert history (idempotent)
+                yield sql `
+        INSERT INTO ratings_history (
+          user_id,
+          tournament_id,
+          rating_before,
+          rating_after,
+          rating_change,
+          created_at
+        )
+        VALUES (
+          ${user.id},
+          ${tournamentId},
+          ${ratingBefore},
+          ${ratingAfter},
+          ${ratingChange},
+          ${tournament.end_date}
+        )
+        ON CONFLICT (user_id, tournament_id)
+        DO UPDATE SET
+          rating_before = EXCLUDED.rating_before,
+          rating_after = EXCLUDED.rating_after,
+          rating_change = EXCLUDED.rating_change,
+          created_at = EXCLUDED.created_at
+      `;
+                // 6. update running rating
+                prevRating = ratingAfter;
+            }
+        }
+        console.log('Rating history rebuilded successfully for all users and tournaments.');
+    });
+}
 // cron.schedule("* * * * *", async () => {
 //   console.log('Checking tournaments...');
 //   const now = new Date();
@@ -184,7 +267,7 @@ cron.schedule("30 18 * * *", () => __awaiter(void 0, void 0, void 0, function* (
                 console.log(`Sending notifications for tournament ${tournament.name} starting today`);
                 // send notifications to users about the tournament starting today
                 // you can implement a function to send notifications here, e.g. sendTournamentStartNotifications(tournament);
-                sendTournamentStartNotifications(tournament);
+                // sendTournamentStartNotifications(tournament);
             }
         }
     }
@@ -196,7 +279,7 @@ const sendTournamentStartNotifications = (tournament) => __awaiter(void 0, void 
     try {
         // const testId = 48;
         const users = yield (0, db_1.default) `
-        SELECT username, phone FROM users WHERE phone IS NOT NULL
+        SELECT username, phone, push_token FROM users WHERE phone IS NOT NULL
     `;
         // if its friday then the cash prize is 30ghc, if its saturday then the cash prize is 90ghc with first position getting 60ghc and second position getting 30ghc, if its sunday then there is no cash prize you can customize the message based on the tournament details
         const tournamentDate = new Date(tournament.start_date);
@@ -241,6 +324,9 @@ Register now: sparplay.com/tournaments/${tournament.id} if you want to participa
             const phone = "233" + user.phone.substr(1);
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
+            if (user.push_token) {
+                (0, exports.sendPushNotification)(user.push_token, tournament.name, messageTemplate);
+            }
         }
     }
     catch (error) {
@@ -279,16 +365,21 @@ exports.app.use("/api/tournaments", tournaments_1.default);
 exports.app.use("/api/notifications", notifications_1.default);
 exports.app.use("/api/wallet", wallet_1.default);
 exports.app.use("/api/payout-method", payout_1.default);
+exports.app.use("/api/challenges", challenges_1.default);
 //app.use(notFoundMiddleware);
 exports.app.post("/api/test-sms", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { phone } = req.body;
     yield (0, smsService_1.sendSMS)(phone, "Test SMS from SparPlay 🔥");
     res.json({ success: true });
 })));
+exports.app.get('/api/rebuild-rating-history', (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    yield rebuildRatingHistory(db_1.default);
+    res.json({ success: true });
+})));
 //test a push notification route
 exports.app.post("/api/test-push-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { token } = req.body;
-    yield sendPushNotification(token, "Test Push Notification", "This is a test push notification from SparPlay 🔥");
+    yield (0, exports.sendPushNotification)(token, "Test Push Notification", "This is a test push notification from SparPlay 🔥");
     res.json({ success: true });
 })));
 exports.app.post("/api/send-tournament-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -346,7 +437,7 @@ exports.app.post("/api/tournament-notification-reminder", (0, express_async_hand
       `;
         for (const user of users) {
             const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/42 and don't miss out on the action! See you there!`;
+Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/70 and don't miss out on the action! See you there!`;
             const phone = "233" + user.phone.substr(1);
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
@@ -368,7 +459,7 @@ exports.app.post("/api/tournament-notification-reminder-final", (0, express_asyn
       `;
         for (const user of users) {
             const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/42 and don't miss out on the action! See you there!`;
+Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/70 and don't miss out on the action! See you there!`;
             const phone = "233" + user.phone.substr(1);
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
@@ -414,6 +505,7 @@ server.listen(port, () => {
 });
 exports.matchmaker = new matchmaking_2.default();
 exports.matchForfeiter = new matchForfeiter_1.default(exports.serverSocket);
+exports.expiredChallenges = new matchExpired_1.default(exports.serverSocket);
 (0, socketHandler_1.initializeSocketHandler)(exports.serverSocket);
 const getTotalMemoryUsage = () => {
     return (process.memoryUsage().rss / 1000000 +

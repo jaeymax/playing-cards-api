@@ -140,7 +140,7 @@ const getAllTournaments = (req, res) => __awaiter(void 0, void 0, void 0, functi
       LEFT JOIN tournament_participants tp
         ON t.id = tp.tournament_id
         AND tp.user_id = ${userId}
-      ORDER BY t.created_at DESC
+      ORDER BY t.start_date
     `;
         // Log request query for debugging
         console.log('user', req.user);
@@ -199,11 +199,10 @@ const createTournament = (req, res) => __awaiter(void 0, void 0, void 0, functio
         if (!name ||
             !start_date ||
             !registration_closing_date ||
-            !end_date ||
             !format) {
             return res.status(400).json({
                 success: false,
-                message: "Name, start date, registration closing date, and end date are required",
+                message: "Name, start date, registration closing date, and format are required",
             });
         }
         const result = yield (0, db_1.default) `
@@ -211,7 +210,6 @@ const createTournament = (req, res) => __awaiter(void 0, void 0, void 0, functio
         name, 
         description, 
         start_date, 
-        end_date,
         registration_closing_date,
         registration_fee,
         prize,
@@ -222,7 +220,6 @@ const createTournament = (req, res) => __awaiter(void 0, void 0, void 0, functio
         ${name}, 
         ${description}, 
         ${new Date(start_date)},
-        ${new Date(end_date)},
         ${new Date(registration_closing_date)},
         ${registration_fee || 0},
         ${prize || 0},
