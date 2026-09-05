@@ -115,14 +115,99 @@ CREATE TABLE friends (
   PRIMARY KEY (user_id, friend_id)
 );
 
+CREATE TABLE friendships (
+    id BIGSERIAL PRIMARY KEY,
+
+    requester_id BIGINT NOT NULL,
+    addressee_id BIGINT NOT NULL,
+
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    responded_at TIMESTAMPTZ,
+
+    CONSTRAINT friendships_requester_fk
+        FOREIGN KEY (requester_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT friendships_addressee_fk
+        FOREIGN KEY (addressee_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT friendships_status_check
+        CHECK (
+            status IN (
+                'pending',
+                'accepted',
+                'declined',
+                'cancelled'
+            )
+        ),
+
+    CONSTRAINT friendships_different_users
+        CHECK (requester_id <> addressee_id)
+);
+
+
+CREATE UNIQUE INDEX friendships_unique_pair
+ON friendships (
+    LEAST(requester_id, addressee_id),
+    GREATEST(requester_id, addressee_id)
+);
+
+
+CREATE INDEX friendships_addressee_status_idx
+ON friendships (addressee_id, status);
+
+
+CREATE INDEX friendships_requester_status_idx
+ON friendships (requester_id, status);
+
+
+CREATE INDEX friendships_requester_idx
+ON friendships (requester_id);
+
+
+CREATE INDEX friendships_addressee_idx
+ON friendships (addressee_id);
+
+
+CREATE OR REPLACE FUNCTION update_friendships_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE TRIGGER friendships_updated_at
+BEFORE UPDATE ON friendships
+FOR EACH ROW
+EXECUTE FUNCTION update_friendships_updated_at();
 
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- User receiving the notification
-  type VARCHAR(50) CHECK (type IN ('friend', 'challenge', 'reward', 'tournament', 'system')) NOT NULL,
+  type VARCHAR(50) CHECK (type IN ('friend', 'challenge', 'reward', 'tournament', 'system', 'game')) NOT NULL,
   message TEXT NOT NULL, -- The notification content
   title VARCHAR(100) NOT NULL,
   is_read BOOLEAN DEFAULT FALSE, -- Whether the user has seen it
+    -- The user who caused the notification
+    -- e.g. Kwame when Kwame sends you a friend request
+  actor_id INTEGER DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+
+    -- ID of the related object
+    -- e.g. friendship.id, challenge.id, tournament.id, game.id
+  reference_id INTEGER DEFAULT NULL,
+  
+      -- Exact time it was read
+  read_at TIMESTAMP DEFAULT NULL,
+
+
   action TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );

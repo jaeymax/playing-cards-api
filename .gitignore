@@ -2,5 +2,3 @@ node_modules/
 .env
 /node_modules
 /private_keys
-dist/
-/dist

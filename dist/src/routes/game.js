@@ -9,6 +9,7 @@ const authMiddleware_1 = __importDefault(require("../middlewares/authMiddleware"
 const router = (0, express_1.Router)();
 router.post("/create", game_1.createGame);
 router.post("/create-bot", game_1.createBotGame);
-router.get("/join", game_1.joinGame);
+router.get("/join/:code", authMiddleware_1.default, game_1.joinGame);
+router.get("/leave/:code", authMiddleware_1.default, game_1.leaveGame);
 router.get("/", authMiddleware_1.default, game_1.getUserGames);
 exports.default = router;

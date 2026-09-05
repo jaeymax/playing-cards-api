@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserGames = exports.joinGame = exports.createBotGame = exports.createGame = void 0;
+exports.leaveGame = exports.getUserGames = exports.joinGame = exports.createBotGame = exports.createGame = void 0;
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const db_1 = __importDefault(require("../config/db"));
 const gameFunctions_1 = require("../utils/gameFunctions");
@@ -531,9 +531,67 @@ const createBotGame = (0, express_async_handler_1.default)((req, res) => __await
 }));
 exports.createBotGame = createBotGame;
 const joinGame = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const gameCode = req.params.code;
+    const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
+    const game = yield (0, db_1.default) `SELECT id, player_count from games where code = ${gameCode}`;
+    const gameInMemory = yield (0, gameFunctions_1.getGameByCode)(gameCode);
+    if (!game) {
+        res.status(400).json({ message: "Game not found" });
+    }
+    const gamePlayers = yield (0, db_1.default) `SELECT id from game_players where game_id = ${game[0].id} AND status = 'active'`;
+    console.log('gamePlayers', gamePlayers);
+    // check if this player has left the game before, if yes, update their status to active
+    let playerInGame = yield (0, db_1.default) `SELECT id, game_id, score, games_won, position, is_dealer, status,  (SELECT json_build_object(
+             'id', id,
+             'username', username,
+             'image_url', image_url
+           ) FROM users WHERE id = ${userId}) as user FROM game_players WHERE game_id = ${game[0].id} AND user_id = ${userId} AND status = 'left'`;
+    console.log('playerInGame', playerInGame);
+    if (playerInGame.length > 0) {
+        yield (0, db_1.default) `UPDATE game_players SET status = 'active' WHERE id = ${playerInGame[0].id}`;
+        playerInGame = yield (0, db_1.default) `UPDATE game_players SET position = ${gamePlayers.length} WHERE id = ${playerInGame[0].id} RETURNING id, game_id, score, games_won, position, is_dealer, status,  (SELECT json_build_object(
+             'id', id,
+             'username', username,
+             'image_url', image_url
+           ) FROM users WHERE id = ${userId}) as user`;
+        gameInMemory.players.push(playerInGame[0]);
+    }
+    if (!playerInGame && gamePlayers.length >= game[0].player_count) {
+        res.status(400).json({ message: "Game is full" });
+        return;
+    }
+    if (playerInGame.length == 0) {
+        const player = yield (0, gameFunctions_1.createGamePlayer)(game[0].id, userId, gamePlayers.length);
+        gameInMemory.players.push(player);
+    }
+    if (gamePlayers.length + 1 == game[0].player_count) {
+        yield (0, db_1.default) `UPDATE games SET status = 'in_progress' where id = ${game[0].id}`;
+        gameInMemory.status = 'in_progress';
+    }
+    __1.serverSocket.to(gameCode).emit('gameData', gameInMemory);
+    yield (0, gameFunctions_1.saveGame)(gameCode, gameInMemory);
     res.json({ message: "join Game controller" });
 });
 exports.joinGame = joinGame;
+const leaveGame = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const gameCode = req.params.code;
+    const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
+    const game = yield (0, db_1.default) `SELECT id, player_count from games where code = ${gameCode}`;
+    if (!game) {
+        res.status(400).json({ message: "Game not found" });
+    }
+    const gameInMemory = yield (0, gameFunctions_1.getGameByCode)(gameCode);
+    const gamePlayers = yield (0, db_1.default) `UPDATE game_players SET status = 'left' where game_id = ${game[0].id} AND user_id = ${userId}`;
+    //console.log('gamePlayers', gamePlayers)
+    gameInMemory.players = gameInMemory.players.filter((p) => p.user.id != userId);
+    console.log('gamePlayers in memory', gameInMemory.players);
+    __1.serverSocket.to(gameCode).emit('gameData', gameInMemory);
+    yield (0, gameFunctions_1.saveGame)(gameCode, gameInMemory);
+    res.json({ message: "leave Game controller" });
+});
+exports.leaveGame = leaveGame;
 // const getUserGames = asyncHandler(async (req: Request, res: Response) => {
 //   res.json([
 //     {

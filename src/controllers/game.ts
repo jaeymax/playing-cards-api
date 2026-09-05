@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import sql from "../config/db";
-import { saveGame } from "../utils/gameFunctions";
-import { expiredChallenges, mixpanel } from "..";
+import { createGamePlayer, getGameByCode, saveGame } from "../utils/gameFunctions";
+import { expiredChallenges, mixpanel, serverSocket } from "..";
 
 const createGame = asyncHandler(async (req: Request, res: Response) => {
   const {
@@ -604,8 +604,92 @@ const createBotGame = asyncHandler(async (req: Request, res: Response) => {
 });
 
 const joinGame = async (req: Request, res: Response) => {
+
+  const gameCode = req.params.code;
+  const userId = req.user?.userId;
+  const game = await sql`SELECT id, player_count from games where code = ${gameCode}`;
+  const gameInMemory = await getGameByCode(gameCode);
+
+  if(!game){
+    res.status(400).json({message:"Game not found"});
+  }
+
+  const gamePlayers = await sql`SELECT id from game_players where game_id = ${game[0].id} AND status = 'active'`
+
+  console.log('gamePlayers', gamePlayers)
+
+  // check if this player has left the game before, if yes, update their status to active
+  let playerInGame = await sql`SELECT id, game_id, score, games_won, position, is_dealer, status,  (SELECT json_build_object(
+             'id', id,
+             'username', username,
+             'image_url', image_url
+           ) FROM users WHERE id = ${userId}) as user FROM game_players WHERE game_id = ${game[0].id} AND user_id = ${userId} AND status = 'left'`;
+
+  console.log('playerInGame', playerInGame)
+  if (playerInGame.length > 0) {
+    await sql`UPDATE game_players SET status = 'active' WHERE id = ${playerInGame[0].id}`;
+   playerInGame = await sql`UPDATE game_players SET position = ${gamePlayers.length} WHERE id = ${playerInGame[0].id} RETURNING id, game_id, score, games_won, position, is_dealer, status,  (SELECT json_build_object(
+             'id', id,
+             'username', username,
+             'image_url', image_url
+           ) FROM users WHERE id = ${userId}) as user`;
+    gameInMemory.players.push(playerInGame[0]);
+  }
+
+  if(!playerInGame && gamePlayers.length >= game[0].player_count){
+    res.status(400).json({message:"Game is full"});
+    return;
+  }
+
+
+  if(playerInGame.length == 0){
+    
+    const player = await createGamePlayer(game[0].id, userId, gamePlayers.length);
+    gameInMemory.players.push(player);
+  }
+
+
+  
+
+  if(gamePlayers.length + 1 == game[0].player_count){
+     await sql`UPDATE games SET status = 'in_progress' where id = ${game[0].id}`;
+     gameInMemory.status = 'in_progress';
+  }
+
+
+
+  serverSocket.to(gameCode).emit('gameData', gameInMemory);
+
+  await saveGame(gameCode, gameInMemory);
+
   res.json({ message: "join Game controller" });
 };
+
+const leaveGame = async(req: Request, res: Response)=>{
+  const gameCode = req.params.code;
+  const userId = req.user?.userId;
+  const game = await sql`SELECT id, player_count from games where code = ${gameCode}`;
+
+  if(!game){
+    res.status(400).json({message:"Game not found"});
+  }
+
+  const gameInMemory = await getGameByCode(gameCode);
+
+  const gamePlayers = await sql`UPDATE game_players SET status = 'left' where game_id = ${game[0].id} AND user_id = ${userId}`
+
+  //console.log('gamePlayers', gamePlayers)
+
+  gameInMemory.players = gameInMemory.players.filter((p:any) => p.user.id != userId);
+
+  console.log('gamePlayers in memory', gameInMemory.players);
+
+  serverSocket.to(gameCode).emit('gameData', gameInMemory);
+
+  await saveGame(gameCode, gameInMemory);
+
+  res.json({ message: "leave Game controller" });
+}
 
 // const getUserGames = asyncHandler(async (req: Request, res: Response) => {
 //   res.json([
@@ -1919,4 +2003,4 @@ const getUserGames = async (req: Request, res: Response) => {
   }
 };
 
-export { createGame, createBotGame, joinGame, getUserGames };
+export { createGame, createBotGame, joinGame, getUserGames, leaveGame };

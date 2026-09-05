@@ -1485,7 +1485,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
 
     // create next tournament for the next week with the same date and time (7days later) and same game, and same tournament type, and same max participants, and same entry fee, and same prize pool, and same is_rated, and same is_private, and same is_invite_only, and same is_team_tournament, and same team_size, and same team_score_type, and same team_score_limit, and same team_score_increment, and same team_score_decrement, and same team_score_reset_on_win, and same team_score_reset_on_loss, and same team_score_reset_on_draw, and same team_score_reset_on_forfeit, and same team_score_reset_on_disconnect, and same team_score_reset_on_timeout, and same team_score_reset_on_abandonment
 
-    //await createNextTournamentForNextWeek(tournamentId);
+    await createNextTournamentForNextWeek(tournamentId);
 
   } else {
     // if not last round and all matches are not yet completed
