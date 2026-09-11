@@ -565,8 +565,15 @@ app.post(
       `;
 
       for (const user of users) {
-          const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/70 and don't miss out on the action! See you there!`;
+          const messageTemplate = `📢 SPARPLAY UPDATE
+
+Due to Ghana's gaming regulations, we are putting paid tournaments and cash prizes on hold for now.
+
+SparPlay tournaments will continue FREE, with players competing for rankings, titles and bragging rights. 🏆
+
+No money. No stakes. Just Spar!
+
+SparPlay Team`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);

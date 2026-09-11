@@ -1453,13 +1453,13 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       "Claim Prize"
     );
 
-    createNotification(
-      firstPlace.id,
-      "reward",
-      "💰 Cash Prize Won!",
-      cashPrizeMessage,
-      "View Leaderboard"
-    );
+    // createNotification(
+    //   firstPlace.id,
+    //   "reward",
+    //   "💰 Cash Prize Won!",
+    //   cashPrizeMessage,
+    //   "View Leaderboard"
+    // );
 
     // update medals for top 3 winners
     // wrap in sql trasaction to ensure all medal updates are successful, if any of them fail, the transaction will be rolled back and no medals will be updated

@@ -971,7 +971,13 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         (0, utils_1.createNotification)(firstPlace.id, "reward", "🥇 Gold Medal Awarded!", "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.", "Claim Prize");
         (0, utils_1.createNotification)(secondPlace.id, "reward", "🥈 Silver Medal Awarded!", "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.", "Claim Prize");
         (0, utils_1.createNotification)(thirdPlace.id, "reward", "🥉 Bronze Medal Awarded!", "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.", "Claim Prize");
-        (0, utils_1.createNotification)(firstPlace.id, "reward", "💰 Cash Prize Won!", cashPrizeMessage, "View Leaderboard");
+        // createNotification(
+        //   firstPlace.id,
+        //   "reward",
+        //   "💰 Cash Prize Won!",
+        //   cashPrizeMessage,
+        //   "View Leaderboard"
+        // );
         // update medals for top 3 winners
         // wrap in sql trasaction to ensure all medal updates are successful, if any of them fail, the transaction will be rolled back and no medals will be updated
         yield db_1.default.transaction((sql) => [
