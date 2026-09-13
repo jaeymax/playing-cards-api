@@ -15,7 +15,7 @@ import { create } from "axios";
 
 const createNextSwissRoundMatches = async (
   roundNumber: number,
-  tournamentId: number
+  tournamentId: number,
 ) => {
   // Implementation for creating the next round in a swiss tournament
   try {
@@ -24,55 +24,53 @@ const createNextSwissRoundMatches = async (
     let participants =
       await getSwissTournamentParticipantsByScore(tournamentId);
 
-
     let byePlayer = null;
 
-    if(participants.length % 2 != 0){
+    if (participants.length % 2 != 0) {
       // grant the lowest player who hasn't received a bye yet a bye
-      for(let i = participants.length - 1; i >= 0; i--){
-        if(!participants[i].has_received_bye){
+      for (let i = participants.length - 1; i >= 0; i--) {
+        if (!participants[i].has_received_bye) {
           byePlayer = participants[i];
           break;
         }
       }
 
-      if(!byePlayer){
+      if (!byePlayer) {
         byePlayer = participants[participants.length - 1];
       }
     }
 
-    if(byePlayer){
-      participants = participants.filter((p)=>p.id !== byePlayer.id);
-         const game = await createByeMatch(byePlayer.id);
+    if (byePlayer) {
+      participants = participants.filter((p) => p.id !== byePlayer.id);
+      const game = await createByeMatch(byePlayer.id);
 
-        const gameplayer = await createMatchGamePlayer(
-          game.id,
-          byePlayer.id,
-          0,
-          true
-        );
+      const gameplayer = await createMatchGamePlayer(
+        game.id,
+        byePlayer.id,
+        0,
+        true,
+      );
 
-        await createSingleEliminationByeMatch(
-          tournamentId,
-          game.id,
-          round.id,
-          byePlayer.id,
-          Math.floor((participants.length)  / 2) + 1
-        );
-        console.log(`created match for only ${byePlayer.username}`);
+      await createSingleEliminationByeMatch(
+        tournamentId,
+        game.id,
+        round.id,
+        byePlayer.id,
+        Math.floor(participants.length / 2) + 1,
+      );
+      console.log(`created match for only ${byePlayer.username}`);
 
-        const newGame = {
-          ...game,
-          players: [gameplayer],
-          cards: null,
-        };
+      const newGame = {
+        ...game,
+        players: [gameplayer],
+        cards: null,
+      };
 
-        await saveGame(game.code, newGame);
-        console.log("game saved to memory", game.code);
-
+      await saveGame(game.code, newGame);
+      console.log("game saved to memory", game.code);
     }
 
-    console.log('bye player', byePlayer);
+    console.log("bye player", byePlayer);
 
     participants = await pairSwissRoundParticipants(participants, tournamentId);
 
@@ -92,7 +90,7 @@ const createNextSwissRoundMatches = async (
           game.id,
           player1.id,
           0,
-          true
+          true,
         );
 
         await createSingleEliminationByeMatch(
@@ -100,7 +98,7 @@ const createNextSwissRoundMatches = async (
           game.id,
           round.id,
           player1.id,
-          Math.floor(i / 2) + 1
+          Math.floor(i / 2) + 1,
         );
         console.log(`created match for only ${player1.username}`);
 
@@ -124,7 +122,7 @@ const createNextSwissRoundMatches = async (
         player1.id,
         "waiting",
         isLastRound,
-        true
+        true,
       );
 
       const { gameplayer1, gameplayer2 } =
@@ -140,7 +138,7 @@ const createNextSwissRoundMatches = async (
         player1.id,
         player2.id,
         "in_progress",
-        Math.floor(i / 2) + 1
+        Math.floor(i / 2) + 1,
       );
 
       // update tournaments current round number
@@ -156,7 +154,7 @@ const createNextSwissRoundMatches = async (
 
       await matchForfeiter.scheduleForfeit(
         game.code,
-        (game.turn_timeout_seconds + 0) * 1000
+        (game.turn_timeout_seconds + 0) * 1000,
       );
 
       // Prepare and save game to Redis
@@ -168,6 +166,18 @@ const createNextSwissRoundMatches = async (
 
       await saveGame(game.code, newGame);
       console.log("game saved to memory successfully", game.code);
+
+      if (player1.push_token) {
+        const title = `${player1.username}! Your Match is Ready`;
+        const body = `You vs ${player2.username}`;
+        sendPushNotification(player1.push_token, title, body);
+      }
+
+      if (player2.push_token) {
+        const title = `${player2.username}! Your Match is Ready`;
+        const body = `You vs ${player1.username}`;
+        sendPushNotification(player2.push_token, title, body);
+      }
     }
   } catch (error) {
     console.error("Error advancing to next round:", error);
@@ -193,7 +203,7 @@ const createSwissMatch = async (
   player1Id: number,
   player2Id: number,
   status: string,
-  matchOrder: number
+  matchOrder: number,
 ) => {
   const match = await sql`
           INSERT INTO tournament_matches (
@@ -220,69 +230,66 @@ const createSwissMatch = async (
 
 const createNextSingleEliminationRoundMatches = async (
   roundNumber: number,
-  tournamentId: number
+  tournamentId: number,
 ) => {
   // Implementation for creating the next round in a single elimination tournament
 
   try {
     const round = await createSingleEliminationRound(tournamentId, roundNumber);
 
-    let participants =
-      await getSingleEliminationTournamentParticipantsByStatus(
-        tournamentId,
-        "qualified"
-      );
+    let participants = await getSingleEliminationTournamentParticipantsByStatus(
+      tournamentId,
+      "qualified",
+    );
     const is_final_match = participants.length == 2;
-
 
     let byePlayer = null;
 
-    if(participants.length % 2 != 0){
+    if (participants.length % 2 != 0) {
       // grant the lowest player who hasn't received a bye yet a bye
-      for(let i = participants.length - 1; i >= 0; i--){
-        if(!participants[i].has_received_bye){
+      for (let i = participants.length - 1; i >= 0; i--) {
+        if (!participants[i].has_received_bye) {
           byePlayer = participants[i];
           break;
         }
       }
 
-      if(!byePlayer){
+      if (!byePlayer) {
         byePlayer = participants[participants.length - 1];
       }
     }
 
-    if(byePlayer){
-      participants = participants.filter((p)=>p.id !== byePlayer.id);
-         const game = await createByeMatch(byePlayer.id);
+    if (byePlayer) {
+      participants = participants.filter((p) => p.id !== byePlayer.id);
+      const game = await createByeMatch(byePlayer.id);
 
-        const gameplayer = await createMatchGamePlayer(
-          game.id,
-          byePlayer.id,
-          0,
-          true
-        );
+      const gameplayer = await createMatchGamePlayer(
+        game.id,
+        byePlayer.id,
+        0,
+        true,
+      );
 
-        await createSingleEliminationByeMatch(
-          tournamentId,
-          game.id,
-          round.id,
-          byePlayer.id,
-          Math.floor((participants.length)  / 2) + 1
-        );
-        console.log(`created match for only ${byePlayer.username}`);
+      await createSingleEliminationByeMatch(
+        tournamentId,
+        game.id,
+        round.id,
+        byePlayer.id,
+        Math.floor(participants.length / 2) + 1,
+      );
+      console.log(`created match for only ${byePlayer.username}`);
 
-        const newGame = {
-          ...game,
-          players: [gameplayer],
-          cards: null,
-        };
+      const newGame = {
+        ...game,
+        players: [gameplayer],
+        cards: null,
+      };
 
-        await saveGame(game.code, newGame);
-        console.log("game saved to memory", game.code);
-
+      await saveGame(game.code, newGame);
+      console.log("game saved to memory", game.code);
     }
 
-    console.log('bye player', byePlayer);
+    console.log("bye player", byePlayer);
 
     fisherYatesShuffle(participants);
 
@@ -295,7 +302,7 @@ const createNextSingleEliminationRoundMatches = async (
         player1.id,
         "waiting",
         is_final_match,
-        true
+        true,
       );
 
       const { gameplayer1, gameplayer2 } =
@@ -310,7 +317,7 @@ const createNextSingleEliminationRoundMatches = async (
         player1.id,
         player2.id,
         "in_progress",
-        Math.floor(i / 2) + 1
+        Math.floor(i / 2) + 1,
       );
 
       // update tournaments current round number
@@ -326,7 +333,7 @@ const createNextSingleEliminationRoundMatches = async (
 
       await matchForfeiter.scheduleForfeit(
         game.code,
-        (game.turn_timeout_seconds + 0) * 1000
+        (game.turn_timeout_seconds + 0) * 1000,
       );
 
       // Prepare and save game to Redis
@@ -340,18 +347,17 @@ const createNextSingleEliminationRoundMatches = async (
       console.log("game saved to memory successfully", game.code);
 
       // send push notification to players
-            if(player1.push_token){
-              const title = `${player1.username}! Your Match is Ready`
-              const body = `You vs ${player2.username}`;
-              sendPushNotification(player1.push_token, title, body)
-            } 
-      
-            if(player2.push_token){
-              const title = `${player2.username}! Your Match is Ready`
-              const body = `You vs ${player1.username}`;
-              sendPushNotification(player2.push_token, title, body)
-            }
-      
+      if (player1.push_token) {
+        const title = `${player1.username}! Your Match is Ready`;
+        const body = `You vs ${player2.username}`;
+        sendPushNotification(player1.push_token, title, body);
+      }
+
+      if (player2.push_token) {
+        const title = `${player2.username}! Your Match is Ready`;
+        const body = `You vs ${player1.username}`;
+        sendPushNotification(player2.push_token, title, body);
+      }
 
       // const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
 
@@ -377,7 +383,7 @@ const getSwissTournamentParticipantsByScore = async (tournamentId: number) => {
 };
 
 const getSingleEliminationTournamentParticipants = async (
-  tournamentId: number
+  tournamentId: number,
 ) => {
   const participants = await sql`
     SELECT u.id, u.username, u.push_token, u.rating, u.is_rated, u.image_url, tp.status, tp.has_received_bye, tp.score, tp.losses
@@ -391,7 +397,7 @@ const getSingleEliminationTournamentParticipants = async (
 
 const getSingleEliminationTournamentParticipantsByStatus = async (
   tournamentId: number,
-  status: string
+  status: string,
 ) => {
   const participants = await sql`
     SELECT u.id, tp.user_id, tp.has_received_bye, u.username, u.image_url, u.push_token, tp.status, tp.score, tp.losses
@@ -405,7 +411,7 @@ const getSingleEliminationTournamentParticipantsByStatus = async (
 
 const createSingleEliminationRound = async (
   tournamentId: number,
-  roundNumber: number
+  roundNumber: number,
 ) => {
   const round = await sql`
       INSERT INTO tournament_rounds (tournament_id, round_number)
@@ -420,7 +426,7 @@ const createSingleEliminationByeMatch = async (
   matchId: number,
   roundId: number,
   playerId: number,
-  matchOrder: number
+  matchOrder: number,
 ) => {
   const match = await sql`
           INSERT INTO tournament_matches (
@@ -456,7 +462,7 @@ const createSingleEliminationMatch = async (
   player1Id: number,
   player2Id: number,
   status: string,
-  matchOrder: number
+  matchOrder: number,
 ) => {
   const match = await sql`
           INSERT INTO tournament_matches (
@@ -485,7 +491,7 @@ const createTwoPlayerMatch = async (
   player1Id: number,
   status: string,
   isFinalRound: boolean,
-  is_rated: boolean
+  is_rated: boolean,
 ) => {
   const match = await sql`
       INSERT INTO games (
@@ -535,7 +541,7 @@ const createByeMatch = async (playerId: number) => {
 const createTwoPlayerMatchGamePlayers = async (
   matchId: number,
   player1Id: number,
-  player2Id: number
+  player2Id: number,
 ) => {
   const gameplayers = await sql.transaction((sql) => [
     sql`
@@ -596,7 +602,7 @@ const createTwoPlayerMatchGamePlayers = async (
 
 const createGameCardsForMatch = async (
   matchId: number,
-  player1GamePlayerId: number
+  player1GamePlayerId: number,
 ) => {
   const cards = await sql`SELECT card_id FROM cards ORDER BY RANDOM()`;
   const gameCards = await sql`
@@ -635,7 +641,7 @@ const createMatchGamePlayer = async (
   matchId: number,
   playerId: number,
   player_position: number,
-  is_dealer: boolean
+  is_dealer: boolean,
 ) => {
   const gameplayer = await sql`
           INSERT INTO game_players (game_id, user_id, position, is_dealer, status)
@@ -670,7 +676,7 @@ const updateSingleEliminationMatchResults = async (
   matchId: number,
   winnerId: number,
   loserId: number,
-  tournamentId: number
+  tournamentId: number,
 ) => {
   await sql`
   UPDATE tournament_matches
@@ -690,7 +696,7 @@ const updateSwissMatchResults = async (
   matchId: number,
   winnerId: number,
   loserId: number,
-  tournamentId: number
+  tournamentId: number,
 ) => {
   await sql`
   UPDATE tournament_matches
@@ -717,7 +723,7 @@ const updateSwissMatchResults = async (
 
 const calculateBuchholzScoresForSwissRound = async (
   tournamentId: number,
-  participants: any[]
+  participants: any[],
 ) => {
   for (let participant of participants) {
     const buchholzResult = await sql`
@@ -746,10 +752,12 @@ const calculateBuchholzScoresForSwissRound = async (
   }
 };
 
-const calculateSonneBornBergerScoresForSwissRound = async (tournamentId:number, participants:any[]) =>{
-    for(let participant of participants){
-
-      const sonneBornBergerResult = await sql`
+const calculateSonneBornBergerScoresForSwissRound = async (
+  tournamentId: number,
+  participants: any[],
+) => {
+  for (let participant of participants) {
+    const sonneBornBergerResult = await sql`
         SELECT COALESCE(SUM(op_tp.score), 0) AS sonneborn_berger_score
         FROM tournament_matches tm
         JOIN tournament_participants op_tp ON
@@ -758,21 +766,23 @@ const calculateSonneBornBergerScoresForSwissRound = async (tournamentId:number, 
          WHERE tm.tournament_id = ${tournamentId}
          AND tm.winner_id = ${participant.id}
          AND op_tp.user_id != ${participant.id}
-      `
+      `;
 
-      const sonneBornBergerScore = sonneBornBergerResult[0]?.sonneborn_berger_score || 0; 
+    const sonneBornBergerScore =
+      sonneBornBergerResult[0]?.sonneborn_berger_score || 0;
 
-      await sql`UPDATE tournament_participants SET sonneborn_berger_score = ${sonneBornBergerScore}
+    await sql`UPDATE tournament_participants SET sonneborn_berger_score = ${sonneBornBergerScore}
       WHERE tournament_id = ${tournamentId} AND user_id = ${participant.id}
-      `
-    }
-}
+      `;
+  }
+};
 
-const pairSwissRoundParticipants = async (participants: any[], tournamentId:number) => {
+const pairSwissRoundParticipants = async (
+  participants: any[],
+  tournamentId: number,
+) => {
   const pairedParticipants = [];
   const used = new Set();
-
-
 
   for (let i = 0; i < participants.length; i++) {
     if (used.has(participants[i].id)) continue;
@@ -785,59 +795,82 @@ const pairSwissRoundParticipants = async (participants: any[], tournamentId:numb
       if (used.has(participants[j].id)) continue;
       // const test = !(await hasPlayedBefore(player1.id, participants[j].id, tournamentId))
       // console.log('test',player1.username, participants[j].username, test);
-      if(!(await hasPlayedBefore(player1.id, participants[j].id, tournamentId))) {
-          opponent = participants[j];
-          console.log('found valid match for', player1.username, 'and', opponent.username);
-          break;
+      if (
+        !(await hasPlayedBefore(player1.id, participants[j].id, tournamentId))
+      ) {
+        opponent = participants[j];
+        console.log(
+          "found valid match for",
+          player1.username,
+          "and",
+          opponent.username,
+        );
+        break;
       }
-
     }
 
     // If no valid opponent is found, pair with the next available participant (last resort)
     if (!opponent) {
-      console.log('allowing rematch last resort for player', player1.username);
+      console.log("allowing rematch last resort for player", player1.username);
       for (let j = i + 1; j < participants.length; j++) {
         if (used.has(participants[j].id)) continue;
         opponent = participants[j];
-        console.log('repeated match for', player1.username, 'and', opponent.username);
+        console.log(
+          "repeated match for",
+          player1.username,
+          "and",
+          opponent.username,
+        );
         break;
-
       }
-
     }
 
-    pairedParticipants.push(player1)
+    pairedParticipants.push(player1);
     pairedParticipants.push(opponent);
     used.add(player1.id);
     used.add(opponent.id);
   }
 
-  console.log('paired_participants', pairedParticipants);
+  console.log("paired_participants", pairedParticipants);
   return pairedParticipants;
-}
+};
 
-const hasPlayedBefore = async (playerId: number, opponentId: number, tournamentId:number):Promise<boolean> => {
-    // This function should check the database to see if playerId and opponentId have been matched against each other in previous rounds of the tournament
-    const query =  await sql`SELECT id from tournament_matches WHERE tournament_id = ${tournamentId} AND status in ('completed', 'forfeited') AND (
+const hasPlayedBefore = async (
+  playerId: number,
+  opponentId: number,
+  tournamentId: number,
+): Promise<boolean> => {
+  // This function should check the database to see if playerId and opponentId have been matched against each other in previous rounds of the tournament
+  const query =
+    await sql`SELECT id from tournament_matches WHERE tournament_id = ${tournamentId} AND status in ('completed', 'forfeited') AND (
       (player1_id = ${playerId} AND player2_id = ${opponentId}) OR (player1_id = ${opponentId} AND player2_id = ${playerId})
     ) LIMIT 1`;
 
-    console.log('query result for ', playerId, 'and', opponentId, '', query, '', query.length);
+  console.log(
+    "query result for ",
+    playerId,
+    "and",
+    opponentId,
+    "",
+    query,
+    "",
+    query.length,
+  );
 
   return query.length > 0;
-}
+};
 
 const advanceSwissTournamentToNextRound = async (
   tournamentId: number,
   currentRoundNumber: number,
-  serverSocket: any
+  serverSocket: any,
 ) => {
   const matches = await getSwissTournamentMatches(
     tournamentId,
-    currentRoundNumber
+    currentRoundNumber,
   );
   const allMatchesCompleted = matches.every(
-    (match: any) => match.winner_id != null
+    (match: any) => match.winner_id != null,
   );
   const participants =
     await getSwissTournamentParticipantsByScore(tournamentId);
@@ -858,7 +891,10 @@ const advanceSwissTournamentToNextRound = async (
   } else if (allMatchesCompleted && isLastRound) {
     // tournament has ended
     await calculateBuchholzScoresForSwissRound(tournamentId, participants);
-    await calculateSonneBornBergerScoresForSwissRound(tournamentId, participants);
+    await calculateSonneBornBergerScoresForSwissRound(
+      tournamentId,
+      participants,
+    );
     console.log("this is the last round and match for swiss tournament");
     await markTournamentAsEndedAndCompleted(tournamentId);
     const lobbyData = await getSwissTournamentLobbyData(tournamentId);
@@ -884,7 +920,7 @@ const advanceSwissTournamentToNextRound = async (
     console.log("swiss winners", winners);
     assert(
       winners.length >= 3,
-      "There should be at least 3 winners for the tournament"
+      "There should be at least 3 winners for the tournament",
     );
     const firstPlace = winners[0];
     const secondPlace = winners[1];
@@ -905,7 +941,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
     for (const participant of allParticipants) {
       let ratingChange = await getRatingChangeForTournament(
         participant.id,
-        tournamentId
+        tournamentId,
       );
 
       const participationReward = 2;
@@ -924,34 +960,36 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         LIMIT 1
       `;
 
-      const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating;
+      const prevRating =
+        prevRatingResults.length > 0
+          ? prevRatingResults[0].rating_after
+          : participant.rating;
       const newRating = prevRating + ratingChange;
-
 
       const peakRating = Math.max(prevRating, newRating);
 
-        console.log('prev rating', prevRating, 'new rating', newRating);
+      console.log("prev rating", prevRating, "new rating", newRating);
 
-        await sql.transaction((sql) => [
-          sql`
+      await sql.transaction((sql) => [
+        sql`
             INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after)
             VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
           `,
-          sql`UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
-          sql`UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`
-    ]); 
+        sql`UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
+        sql`UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`,
+      ]);
 
-      createNotification(
-        participant.id,
-        "tournament",
-        "⏳ Next Tournament: Saturday 8PM",
-        nextTournamentMessage,
-        "Register"
-      );
+      // createNotification(
+      //   participant.id,
+      //   "tournament",
+      //   "⏳ Next Tournament: Saturday 8PM",
+      //   nextTournamentMessage,
+      //   "Register",
+      // );
 
       console.log(
         `rating change for user ${participant.username} in tournament ${tournamentId}:`,
-        ratingChange
+        ratingChange,
       );
 
       createNotification(
@@ -959,14 +997,14 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         "tournament",
         ratingMesssageTitle,
         ratingMessage,
-        "View Profile"
+        "View Profile",
       );
       createNotification(
         participant.id,
         "tournament",
         "🏆 Tournament Complete!",
         participationMessage,
-        "View Results"
+        "View Results",
       );
 
       if (!participant.is_rated) {
@@ -981,7 +1019,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
           "tournament",
           "Your games are now rated! 🎉",
           "Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!",
-          "View Leaderboard"
+          "View Leaderboard",
         );
       }
 
@@ -1007,21 +1045,21 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       "tournament",
       "Saturday Spar Challenge Champion 🏆",
       winnerMessage,
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       secondPlace.id,
       "tournament",
       "Saturday Spar Challenge Runner-Up 🥈",
       runnerUpMessage,
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       thirdPlace.id,
       "tournament",
       "Saturday Spar Challenge Top 3 Finish 🥉",
       thirdPlaceMessage,
-      "Claim Prize"
+      "Claim Prize",
     );
 
     createNotification(
@@ -1029,30 +1067,30 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       "reward",
       "🥇 Gold Medal Awarded!",
       "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.",
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       secondPlace.id,
       "reward",
       "🥈 Silver Medal Awarded!",
       "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.",
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       thirdPlace.id,
       "reward",
       "🥉 Bronze Medal Awarded!",
       "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.",
-      "Claim Prize"
+      "Claim Prize",
     );
 
-    createNotification(
-      firstPlace.id,
-      "reward",
-      "💰 ₵50 Cash Prize Won!",
-      cashPrizeMessage,
-      "View Leaderboard"
-    );
+    // createNotification(
+    //   firstPlace.id,
+    //   "reward",
+    //   "💰 ₵50 Cash Prize Won!",
+    //   cashPrizeMessage,
+    //   "View Leaderboard"
+    // );
 
     // update medals for top 3 winners
     // wrap in sql trasaction to ensure all medal updates are successful, if any of them fail, the transaction will be rolled back and no medals will be updated
@@ -1075,12 +1113,13 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
     `,
     ]);
 
+    await createNextTournamentForNextWeek(tournamentId);
   }
 };
 
 const getSwissTournamentMatches = async (
   tournamentId: number,
-  currentRoundNumber: number
+  currentRoundNumber: number,
 ) => {
   const matches = await sql`
   SELECT id, winner_id, player1_id, player2_id
@@ -1201,7 +1240,7 @@ const getSwissTournamentLobbyData = async (tournamentId: number) => {
 
 const getSwissTournamentResultsForRound = async (
   tournamentId: number,
-  roundNumber: number
+  roundNumber: number,
 ) => {
   // select all tournament participants for the tournament and order them by score descending, then by rating descending
   const results =
@@ -1220,11 +1259,11 @@ const getSwissTournamentFinalStandings = async (tournamentId: number) => {
 const advanceSingleEliminationTournamentToNextRound = async (
   tournamentId: number,
   currentRoundNumber: number,
-  serverSocket: any
+  serverSocket: any,
 ) => {
   const matches = await getSingleEliminationTournamentMatches(
     tournamentId,
-    currentRoundNumber
+    currentRoundNumber,
   );
 
   const allMatchesCompleted = matches.every((match) => match.winner_id != null);
@@ -1232,7 +1271,7 @@ const advanceSingleEliminationTournamentToNextRound = async (
   const active_participants =
     await getSingleEliminationTournamentParticipantsByStatus(
       tournamentId,
-      "qualified"
+      "qualified",
     );
 
   const isLastRound = active_participants.length == 1;
@@ -1241,7 +1280,7 @@ const advanceSingleEliminationTournamentToNextRound = async (
   if (allMatchesCompleted && !isLastRound) {
     await createNextSingleEliminationRoundMatches(
       currentRoundNumber + 1,
-      tournamentId
+      tournamentId,
     );
 
     const lobbyData =
@@ -1255,7 +1294,7 @@ const advanceSingleEliminationTournamentToNextRound = async (
     console.log("this is the last round and match");
     await markTournamentAsEndedAndCompleted(tournamentId);
     const winnerParticipant = active_participants.find(
-      (p: any) => p.status == "qualified"
+      (p: any) => p.status == "qualified",
     );
     const lobbyData =
       await getSingleEliminationTournamentLobbyData(tournamentId);
@@ -1297,10 +1336,11 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
     for (const participant of allParticipants) {
       let ratingChange = await getRatingChangeForTournament(
         participant.id,
-        tournamentId
+        tournamentId,
       );
 
-      ratingChange += 2; // add 2 rating points for participation
+      const participationReward = 2;
+      ratingChange += participationReward; // add 2 rating points for participation
 
       const ratingMesssageTitle =
         ratingChange >= 0 ? "Rating Increased 📈" : "Rating Decreased 📉";
@@ -1320,16 +1360,16 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         LIMIT 1
       `;
 
-      const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating;
+      const prevRating =
+        prevRatingResults.length > 0
+          ? prevRatingResults[0].rating_after
+          : participant.rating;
       const newRating = prevRating + ratingChange;
 
-
-
-
-      try{
+      try {
         const peakRating = Math.max(prevRating, newRating);
 
-        console.log('prev rating', prevRating, 'new rating', newRating);
+        console.log("prev rating", prevRating, "new rating", newRating);
 
         await sql.transaction((sql) => [
           sql`
@@ -1337,14 +1377,11 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
             VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
           `,
           sql`UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
-          sql`UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`
-    ]);
-        
-
-      }catch(err){
-        console.error('Error inserting into ratings_history:', err);
+          sql`UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`,
+        ]);
+      } catch (err) {
+        console.error("Error inserting into ratings_history:", err);
       }
-
 
       //await sql`INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after) VALUES (${participant.id}, ${tournamentId}, 2, ${ratingChange}, '')`;
 
@@ -1358,7 +1395,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
 
       console.log(
         `rating change for user ${participant.username} in tournament ${tournamentId}:`,
-        ratingChange
+        ratingChange,
       );
 
       createNotification(
@@ -1366,14 +1403,14 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         "tournament",
         ratingMesssageTitle,
         ratingMessage,
-        "View Profile"
+        "View Profile",
       );
       createNotification(
         participant.id,
         "tournament",
         "🏆 Tournament Complete!",
         participationMessage,
-        "View Results"
+        "View Results",
       );
 
       if (!participant.is_rated) {
@@ -1388,7 +1425,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
           "tournament",
           "Your games are now rated! 🎉",
           "Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!",
-          "View Leaderboard"
+          "View Leaderboard",
         );
       }
 
@@ -1414,21 +1451,21 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       "tournament",
       "Spar Weekend Tournament Champion 🏆",
       winnerMessage,
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       secondPlace.id,
       "tournament",
       "Spar Weekend Tournament Runner-Up 🥈",
       runnerUpMessage,
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       thirdPlace.id,
       "tournament",
       "Spar Weekend Tournament Top 3 Finish 🥉",
       thirdPlaceMessage,
-      "Claim Prize"
+      "Claim Prize",
     );
 
     createNotification(
@@ -1436,21 +1473,21 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       "reward",
       "🥇 Gold Medal Awarded!",
       "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.",
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       secondPlace.id,
       "reward",
       "🥈 Silver Medal Awarded!",
       "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.",
-      "Claim Prize"
+      "Claim Prize",
     );
     createNotification(
       thirdPlace.id,
       "reward",
       "🥉 Bronze Medal Awarded!",
       "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.",
-      "Claim Prize"
+      "Claim Prize",
     );
 
     // createNotification(
@@ -1482,28 +1519,30 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
     `,
     ]);
 
-
     // create next tournament for the next week with the same date and time (7days later) and same game, and same tournament type, and same max participants, and same entry fee, and same prize pool, and same is_rated, and same is_private, and same is_invite_only, and same is_team_tournament, and same team_size, and same team_score_type, and same team_score_limit, and same team_score_increment, and same team_score_decrement, and same team_score_reset_on_win, and same team_score_reset_on_loss, and same team_score_reset_on_draw, and same team_score_reset_on_forfeit, and same team_score_reset_on_disconnect, and same team_score_reset_on_timeout, and same team_score_reset_on_abandonment
 
     await createNextTournamentForNextWeek(tournamentId);
-
   } else {
     // if not last round and all matches are not yet completed
   }
 };
 
 const createNextTournamentForNextWeek = async (tournamentId: number) => {
-  const tournament = await sql`SELECT * FROM tournaments WHERE id = ${tournamentId}`;
+  const tournament =
+    await sql`SELECT * FROM tournaments WHERE id = ${tournamentId}`;
   const newTournamentStartDate = new Date(tournament[0].start_date);
-  const newTournamentRegistrationClosingDate = new Date(tournament[0].registration_closing_date);
+  const newTournamentRegistrationClosingDate = new Date(
+    tournament[0].registration_closing_date,
+  );
   newTournamentStartDate.setDate(newTournamentStartDate.getDate() + 7); // add 7 days
-  newTournamentRegistrationClosingDate.setDate(newTournamentRegistrationClosingDate.getDate() + 7); // add 7 days
+  newTournamentRegistrationClosingDate.setDate(
+    newTournamentRegistrationClosingDate.getDate() + 7,
+  ); // add 7 days
 
   await sql`INSERT INTO tournaments (name, description, start_date, format, prize, is_featured, registration_fee, registration_closing_date, difficulty)
     VALUES (${tournament[0].name}, ${tournament[0].description}, ${newTournamentStartDate}, ${tournament[0].format}, ${tournament[0].prize}, ${tournament[0].is_featured}, ${tournament[0].registration_fee}, ${newTournamentRegistrationClosingDate}, ${tournament[0].difficulty})
   `;
 };
-
 
 const getSingleEliminationTournamentWinners = async (tournamentId: number) => {
   const winners = await sql`SELECT
@@ -1524,13 +1563,14 @@ ORDER BY wins DESC LIMIT 3`;
 };
 
 const getSwissTournamentWinners = async (tournamentId: number) => {
-  const winners = await sql`SELECT u.id, u.username as name, u.image_url, tp.score FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, tp.sonneborn_berger_score DESC, u.rating DESC LIMIT 3`;
+  const winners =
+    await sql`SELECT u.id, u.username as name, u.image_url, tp.score FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournamentId} ORDER BY tp.score DESC, tp.buchholz_score DESC, tp.sonneborn_berger_score DESC, u.rating DESC LIMIT 3`;
   return winners;
-}
+};
 
 const getRatingChangeForTournament = async (
   userId: number,
-  tournamentId: number
+  tournamentId: number,
 ) => {
   let ratingChange = 0;
   const ratingChanges = await sql`SELECT
@@ -1561,7 +1601,7 @@ const getSingleEliminationTournamentWinner = async (tournamentId: number) => {
 // get all matches with status inprogress in a single elimination tournament
 const getSingleElimationTournamentOngoingMatches = async (
   tournamentId: number,
-  currentRoundNumber: number
+  currentRoundNumber: number,
 ) => {
   const ongoingMatches = await sql`
   SELECT tm.id
@@ -1576,7 +1616,7 @@ const getSingleElimationTournamentOngoingMatches = async (
 
 const getSingleEliminationTournamentMatches = async (
   tournamentId: number,
-  currentRoundNumber: number
+  currentRoundNumber: number,
 ) => {
   const matches = await sql`
   SELECT id, winner_id, player1_id, player2_id
@@ -1595,7 +1635,7 @@ const getSwissTournamentStandings = async (tournamentId: number) => {
 
 const getSingleEliminationTournamentStandings = async (
   tournamentId: number,
-  tournamentStatus: string
+  tournamentStatus: string,
 ) => {
   let standings: any[] = [];
 

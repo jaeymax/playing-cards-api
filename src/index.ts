@@ -317,7 +317,7 @@ cron.schedule("30 18 * * *", async () => {
           // send notifications to users about the tournament starting today
           // you can implement a function to send notifications here, e.g. sendTournamentStartNotifications(tournament);
          // sendTournamentStartNotifications(tournament);
-
+          sendTournamentStartPushNotifications(tournament);
         }
     }
   }catch(error){
@@ -326,6 +326,22 @@ cron.schedule("30 18 * * *", async () => {
 
 });
 
+
+const sendTournamentStartPushNotifications = async (tournament: any) => {
+  try {
+    const users = await sql`
+        SELECT username, phone, push_token FROM users WHERE phone IS NOT NULL
+    `;
+
+    for (const user of users) {
+      if(user.push_token){
+         sendPushNotification(user.push_token, tournament.name , `Hi ${user.username}! Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`)
+      }
+    }
+  } catch (error) {
+    console.error("Error sending tournament start push notifications:", error);
+  }
+};
 
 const sendTournamentStartNotifications = async (tournament: any) => {
   try {
@@ -565,15 +581,10 @@ app.post(
       `;
 
       for (const user of users) {
-          const messageTemplate = `📢 SPARPLAY UPDATE
-
-Due to Ghana's gaming regulations, we are putting paid tournaments and cash prizes on hold for now.
-
-SparPlay tournaments will continue FREE, with players competing for rankings, titles and bragging rights. 🏆
-
-No money. No stakes. Just Spar!
-
-SparPlay Team`;
+         const messageTemplate = `Hi ${user.username}! The Saturday Spar Championship begins at 8PM. Format: Single Elimination.
+Think you're one of the best Spar players? Prove it! Compete against top players, fight your way through the bracket, and claim the top spot.
+Register now: sparplay.com/tournaments/76
+Don't miss your chance to become Saturday's Spar Champion!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);

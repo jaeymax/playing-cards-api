@@ -40,13 +40,13 @@ const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(voi
             participants = participants.filter((p) => p.id !== byePlayer.id);
             const game = yield createByeMatch(byePlayer.id);
             const gameplayer = yield createMatchGamePlayer(game.id, byePlayer.id, 0, true);
-            yield createSingleEliminationByeMatch(tournamentId, game.id, round.id, byePlayer.id, Math.floor((participants.length) / 2) + 1);
+            yield createSingleEliminationByeMatch(tournamentId, game.id, round.id, byePlayer.id, Math.floor(participants.length / 2) + 1);
             console.log(`created match for only ${byePlayer.username}`);
             const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer], cards: null });
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);
             console.log("game saved to memory", game.code);
         }
-        console.log('bye player', byePlayer);
+        console.log("bye player", byePlayer);
         participants = yield pairSwissRoundParticipants(participants, tournamentId);
         console.log("swiss participants by score", participants);
         const lastRoundNumber = Math.ceil(Math.log2(participants.length));
@@ -90,6 +90,16 @@ const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(voi
             const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);
             console.log("game saved to memory successfully", game.code);
+            if (player1.push_token) {
+                const title = `${player1.username}! Your Match is Ready`;
+                const body = `You vs ${player2.username}`;
+                (0, __1.sendPushNotification)(player1.push_token, title, body);
+            }
+            if (player2.push_token) {
+                const title = `${player2.username}! Your Match is Ready`;
+                const body = `You vs ${player1.username}`;
+                (0, __1.sendPushNotification)(player2.push_token, title, body);
+            }
         }
     }
     catch (error) {
@@ -153,13 +163,13 @@ const createNextSingleEliminationRoundMatches = (roundNumber, tournamentId) => _
             participants = participants.filter((p) => p.id !== byePlayer.id);
             const game = yield createByeMatch(byePlayer.id);
             const gameplayer = yield createMatchGamePlayer(game.id, byePlayer.id, 0, true);
-            yield createSingleEliminationByeMatch(tournamentId, game.id, round.id, byePlayer.id, Math.floor((participants.length) / 2) + 1);
+            yield createSingleEliminationByeMatch(tournamentId, game.id, round.id, byePlayer.id, Math.floor(participants.length / 2) + 1);
             console.log(`created match for only ${byePlayer.username}`);
             const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer], cards: null });
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);
             console.log("game saved to memory", game.code);
         }
-        console.log('bye player', byePlayer);
+        console.log("bye player", byePlayer);
         (0, gameFunctions_1.fisherYatesShuffle)(participants);
         // Pair players and create matches
         for (let i = 0; i < participants.length; i += 2) {
@@ -561,18 +571,18 @@ const pairSwissRoundParticipants = (participants, tournamentId) => __awaiter(voi
             // console.log('test',player1.username, participants[j].username, test);
             if (!(yield hasPlayedBefore(player1.id, participants[j].id, tournamentId))) {
                 opponent = participants[j];
-                console.log('found valid match for', player1.username, 'and', opponent.username);
+                console.log("found valid match for", player1.username, "and", opponent.username);
                 break;
             }
         }
         // If no valid opponent is found, pair with the next available participant (last resort)
         if (!opponent) {
-            console.log('allowing rematch last resort for player', player1.username);
+            console.log("allowing rematch last resort for player", player1.username);
             for (let j = i + 1; j < participants.length; j++) {
                 if (used.has(participants[j].id))
                     continue;
                 opponent = participants[j];
-                console.log('repeated match for', player1.username, 'and', opponent.username);
+                console.log("repeated match for", player1.username, "and", opponent.username);
                 break;
             }
         }
@@ -581,7 +591,7 @@ const pairSwissRoundParticipants = (participants, tournamentId) => __awaiter(voi
         used.add(player1.id);
         used.add(opponent.id);
     }
-    console.log('paired_participants', pairedParticipants);
+    console.log("paired_participants", pairedParticipants);
     return pairedParticipants;
 });
 const hasPlayedBefore = (playerId, opponentId, tournamentId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -589,7 +599,7 @@ const hasPlayedBefore = (playerId, opponentId, tournamentId) => __awaiter(void 0
     const query = yield (0, db_1.default) `SELECT id from tournament_matches WHERE tournament_id = ${tournamentId} AND status in ('completed', 'forfeited') AND (
       (player1_id = ${playerId} AND player2_id = ${opponentId}) OR (player1_id = ${opponentId} AND player2_id = ${playerId})
     ) LIMIT 1`;
-    console.log('query result for ', playerId, 'and', opponentId, '', query, '', query.length);
+    console.log("query result for ", playerId, "and", opponentId, "", query, "", query.length);
     return query.length > 0;
 });
 const advanceSwissTournamentToNextRound = (tournamentId, currentRoundNumber, serverSocket) => __awaiter(void 0, void 0, void 0, function* () {
@@ -658,19 +668,27 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         ORDER BY created_at DESC
         LIMIT 1
       `;
-            const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating;
+            const prevRating = prevRatingResults.length > 0
+                ? prevRatingResults[0].rating_after
+                : participant.rating;
             const newRating = prevRating + ratingChange;
             const peakRating = Math.max(prevRating, newRating);
-            console.log('prev rating', prevRating, 'new rating', newRating);
+            console.log("prev rating", prevRating, "new rating", newRating);
             yield db_1.default.transaction((sql) => [
                 sql `
             INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after)
             VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
           `,
                 sql `UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
-                sql `UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`
+                sql `UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`,
             ]);
-            (0, utils_1.createNotification)(participant.id, "tournament", "⏳ Next Tournament: Saturday 8PM", nextTournamentMessage, "Register");
+            // createNotification(
+            //   participant.id,
+            //   "tournament",
+            //   "⏳ Next Tournament: Saturday 8PM",
+            //   nextTournamentMessage,
+            //   "Register",
+            // );
             console.log(`rating change for user ${participant.username} in tournament ${tournamentId}:`, ratingChange);
             (0, utils_1.createNotification)(participant.id, "tournament", ratingMesssageTitle, ratingMessage, "View Profile");
             (0, utils_1.createNotification)(participant.id, "tournament", "🏆 Tournament Complete!", participationMessage, "View Results");
@@ -703,7 +721,13 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         (0, utils_1.createNotification)(firstPlace.id, "reward", "🥇 Gold Medal Awarded!", "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.", "Claim Prize");
         (0, utils_1.createNotification)(secondPlace.id, "reward", "🥈 Silver Medal Awarded!", "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.", "Claim Prize");
         (0, utils_1.createNotification)(thirdPlace.id, "reward", "🥉 Bronze Medal Awarded!", "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.", "Claim Prize");
-        (0, utils_1.createNotification)(firstPlace.id, "reward", "💰 ₵50 Cash Prize Won!", cashPrizeMessage, "View Leaderboard");
+        // createNotification(
+        //   firstPlace.id,
+        //   "reward",
+        //   "💰 ₵50 Cash Prize Won!",
+        //   cashPrizeMessage,
+        //   "View Leaderboard"
+        // );
         // update medals for top 3 winners
         // wrap in sql trasaction to ensure all medal updates are successful, if any of them fail, the transaction will be rolled back and no medals will be updated
         yield db_1.default.transaction((sql) => [
@@ -723,6 +747,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
       WHERE id = ${thirdPlace.id}
     `,
         ]);
+        yield createNextTournamentForNextWeek(tournamentId);
     }
 });
 exports.advanceSwissTournamentToNextRound = advanceSwissTournamentToNextRound;
@@ -899,7 +924,8 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         // send notification to all participants about participation reward and tournament results, also include the rating change for each participant in the notification
         for (const participant of allParticipants) {
             let ratingChange = yield getRatingChangeForTournament(participant.id, tournamentId);
-            ratingChange += 2; // add 2 rating points for participation
+            const participationReward = 2;
+            ratingChange += participationReward; // add 2 rating points for participation
             const ratingMesssageTitle = ratingChange >= 0 ? "Rating Increased 📈" : "Rating Decreased 📉";
             const ratingMessage = `Your performance in the tournament has resulted in a rating change of ${ratingChange >= 0 ? "+" : ""}${ratingChange}. Keep competing to climb the leaderboard!. Your leaderboard position have been updated`;
             // await sql`
@@ -914,22 +940,24 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         ORDER BY created_at DESC
         LIMIT 1
       `;
-            const prevRating = prevRatingResults.length > 0 ? prevRatingResults[0].rating_after : participant.rating;
+            const prevRating = prevRatingResults.length > 0
+                ? prevRatingResults[0].rating_after
+                : participant.rating;
             const newRating = prevRating + ratingChange;
             try {
                 const peakRating = Math.max(prevRating, newRating);
-                console.log('prev rating', prevRating, 'new rating', newRating);
+                console.log("prev rating", prevRating, "new rating", newRating);
                 yield db_1.default.transaction((sql) => [
                     sql `
             INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after)
             VALUES (${participant.id}, ${tournamentId}, ${prevRating}, ${ratingChange}, ${newRating})
           `,
                     sql `UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
-                    sql `UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`
+                    sql `UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`,
                 ]);
             }
             catch (err) {
-                console.error('Error inserting into ratings_history:', err);
+                console.error("Error inserting into ratings_history:", err);
             }
             //await sql`INSERT INTO ratings_history (user_id, tournament_id, rating_before, rating_change, rating_after) VALUES (${participant.id}, ${tournamentId}, 2, ${ratingChange}, '')`;
             // createNotification(

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import sql from "../config/db";
+import { getDivisionInfo } from "./users";
 
 const getFriends = async (req: Request, res: Response) => {
   try {
@@ -19,14 +20,12 @@ const getFriends = async (req: Request, res: Response) => {
       SELECT
         u.id,
         u.username,
-        u.image_url,
+        u.image_url as avatar,
         u.rating,
         u.online_status,
         u.last_active,
         u.country_code,
         u.location,
-        u.is_guest,
-        u.is_bot,
         f.created_at AS friendship_created_at
 
       FROM friendships f
@@ -50,6 +49,11 @@ const getFriends = async (req: Request, res: Response) => {
         u.last_active DESC,
         u.username ASC
     `;
+
+    // add a division information to each friend object
+    friends.forEach((friend) => {
+       friend.division = getDivisionInfo(friend.rating).rank;
+    });
 
     return res.status(200).json({
       friends,
@@ -89,7 +93,7 @@ const getFriendRequests = async (req: Request, res: Response) => {
 
         u.id AS user_id,
         u.username,
-        u.image_url,
+        u.image_url as avatar,
         u.rating,
         u.online_status,
         u.last_active,
@@ -267,7 +271,7 @@ const getSentFriendRequests = async (req: Request, res: Response) => {
 
         u.id AS user_id,
         u.username,
-        u.image_url,
+        u.image_url as avatar,
         u.rating,
         u.online_status,
         u.last_active,

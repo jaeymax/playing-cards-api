@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchUsers = exports.removeFriend = exports.cancelFriendRequest = exports.sendFriendRequest = exports.declineFriendRequest = exports.acceptFriendRequest = exports.getSentFriendRequests = exports.getFriendshipStatus = exports.getFriendRequests = exports.getFriends = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const users_1 = require("./users");
 const getFriends = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // Authenticated user
@@ -31,14 +32,12 @@ const getFriends = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
       SELECT
         u.id,
         u.username,
-        u.image_url,
+        u.image_url as avatar,
         u.rating,
         u.online_status,
         u.last_active,
         u.country_code,
         u.location,
-        u.is_guest,
-        u.is_bot,
         f.created_at AS friendship_created_at
 
       FROM friendships f
@@ -62,6 +61,10 @@ const getFriends = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         u.last_active DESC,
         u.username ASC
     `;
+        // add a division information to each friend object
+        friends.forEach((friend) => {
+            friend.division = (0, users_1.getDivisionInfo)(friend.rating).rank;
+        });
         return res.status(200).json({
             friends,
             count: friends.length,
@@ -99,7 +102,7 @@ const getFriendRequests = (req, res) => __awaiter(void 0, void 0, void 0, functi
 
         u.id AS user_id,
         u.username,
-        u.image_url,
+        u.image_url as avatar,
         u.rating,
         u.online_status,
         u.last_active,
@@ -262,7 +265,7 @@ const getSentFriendRequests = (req, res) => __awaiter(void 0, void 0, void 0, fu
 
         u.id AS user_id,
         u.username,
-        u.image_url,
+        u.image_url as avatar,
         u.rating,
         u.online_status,
         u.last_active,
