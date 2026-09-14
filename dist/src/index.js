@@ -86,19 +86,15 @@ const testPushNotification = () => __awaiter(void 0, void 0, void 0, function* (
         }
     });
 });
-const sendPushNotification = (token_1, title_1, body_1, ...args_1) => __awaiter(void 0, [token_1, title_1, body_1, ...args_1], void 0, function* (token, title, body, link = 'https://www.sparplay.com/tournaments') {
+const sendPushNotification = (token_1, title_1, body_1, ...args_1) => __awaiter(void 0, [token_1, title_1, body_1, ...args_1], void 0, function* (token, title, body, link = 'https://www.sparplay.com') {
     try {
         const message = {
             token: token,
-            notification: {
-                title: title,
-                body: body
+            data: {
+                title,
+                body,
+                link: link
             },
-            webpush: {
-                fcmOptions: {
-                    link: link // Opens or focuses this URL on click
-                }
-            }
         };
         const response = yield getMessaging().send(message);
         console.log("Successfully sent push notification:", response);

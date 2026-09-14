@@ -89,19 +89,15 @@ const testPushNotification = async () => {
   });
 }
 
-export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com/tournaments') => {
+export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com') => {
   try {
     const message = {
       token: token,
-      notification: {
-        title: title,
-        body: body
+      data: {
+        title,
+        body,
+        link: link
       },
-      webpush: {
-          fcmOptions: {
-            link: link // Opens or focuses this URL on click
-          }
-        }
     };
 
     const response = await getMessaging().send(message);
