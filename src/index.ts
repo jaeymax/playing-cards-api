@@ -89,7 +89,7 @@ const testPushNotification = async () => {
   });
 }
 
-export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com') => {
+export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com/tournaments') => {
   try {
     const message = {
       token: token,
@@ -581,10 +581,10 @@ app.post(
       `;
 
       for (const user of users) {
-         const messageTemplate = `Hi ${user.username}! The Saturday Spar Championship begins at 8PM. Format: Single Elimination.
+         const messageTemplate = `Hi ${user.username}! The Sunday Spar Community Tournament begins at 8PM. Format: Swiss.
 Think you're one of the best Spar players? Prove it! Compete against top players, fight your way through the bracket, and claim the top spot.
-Register now: sparplay.com/tournaments/76
-Don't miss your chance to become Saturday's Spar Champion!`;
+Register now: sparplay.com/tournaments/79
+Don't miss your chance to become Sunday's Spar Champion!`;
         const phone = "233" + user.phone.substr(1);
         console.log("realphone", phone);
         await sendSMS(phone, messageTemplate);
