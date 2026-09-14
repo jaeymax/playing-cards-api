@@ -145,17 +145,19 @@ export const closeTournamentRegistration = async (tournamentId: number) => {
         `created match for ${player1.username} an ${player2.username}`,
       );
 
+      const link = `https://sparplay.com/tournaments/${tournamentId}`;
+
       // send push notification to players
       if(player1.push_token){
         const title = `${player1.username}! Your Match is Ready`
         const body = `You vs ${player2.username}`;
-        sendPushNotification(player1.push_token, title, body)
+        sendPushNotification(player1.push_token, title, body, link);
       } 
 
       if(player2.push_token){
         const title = `${player2.username}! Your Match is Ready`
         const body = `You vs ${player1.username}`;
-        sendPushNotification(player2.push_token, title, body)
+        sendPushNotification(player2.push_token, title, body, link);
       }
 
       const newGame = {

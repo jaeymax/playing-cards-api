@@ -167,16 +167,18 @@ const createNextSwissRoundMatches = async (
       await saveGame(game.code, newGame);
       console.log("game saved to memory successfully", game.code);
 
+      const link = `https://sparplay.com/tournaments/${tournamentId}`;
+
       if (player1.push_token) {
         const title = `${player1.username}! Your Match is Ready`;
         const body = `You vs ${player2.username}`;
-        sendPushNotification(player1.push_token, title, body);
+        sendPushNotification(player1.push_token, title, body, link);
       }
 
       if (player2.push_token) {
         const title = `${player2.username}! Your Match is Ready`;
         const body = `You vs ${player1.username}`;
-        sendPushNotification(player2.push_token, title, body);
+        sendPushNotification(player2.push_token, title, body, link);
       }
     }
   } catch (error) {
@@ -346,17 +348,19 @@ const createNextSingleEliminationRoundMatches = async (
       await saveGame(game.code, newGame);
       console.log("game saved to memory successfully", game.code);
 
+      const link = `https://sparplay.com/tournaments/${tournamentId}`;
+
       // send push notification to players
       if (player1.push_token) {
         const title = `${player1.username}! Your Match is Ready`;
         const body = `You vs ${player2.username}`;
-        sendPushNotification(player1.push_token, title, body);
+        sendPushNotification(player1.push_token, title, body, link);
       }
 
       if (player2.push_token) {
         const title = `${player2.username}! Your Match is Ready`;
         const body = `You vs ${player1.username}`;
-        sendPushNotification(player2.push_token, title, body);
+        sendPushNotification(player2.push_token, title, body, link);
       }
 
       // const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
@@ -882,7 +886,7 @@ const advanceSwissTournamentToNextRound = async (
   console.log("isLastRound", isLastRound);
   if (allMatchesCompleted && !isLastRound) {
     await calculateBuchholzScoresForSwissRound(tournamentId, participants);
-    await calculateBuchholzScoresForSwissRound(tournamentId, participants);
+    await calculateSonneBornBergerScoresForSwissRound(tournamentId, participants);
     await createNextSwissRoundMatches(currentRoundNumber + 1, tournamentId);
     const lobbyData = await getSwissTournamentLobbyData(tournamentId);
     serverSocket
@@ -979,13 +983,7 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         sql`UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`,
       ]);
 
-      // createNotification(
-      //   participant.id,
-      //   "tournament",
-      //   "⏳ Next Tournament: Saturday 8PM",
-      //   nextTournamentMessage,
-      //   "Register",
-      // );
+ 
 
       console.log(
         `rating change for user ${participant.username} in tournament ${tournamentId}:`,

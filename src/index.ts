@@ -89,7 +89,7 @@ const testPushNotification = async () => {
   });
 }
 
-export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com') => {
+export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com/tournaments') => {
   try {
     const message = {
       token: token,
@@ -331,7 +331,8 @@ const sendTournamentStartPushNotifications = async (tournament: any) => {
 
     for (const user of users) {
       if(user.push_token){
-         sendPushNotification(user.push_token, tournament.name , `Hi ${user.username}! Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`)
+         const link = `https://sparplay.com/tournaments/${tournament.id}`;
+         sendPushNotification(user.push_token, tournament.name , `Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, link)
       }
     }
   } catch (error) {
