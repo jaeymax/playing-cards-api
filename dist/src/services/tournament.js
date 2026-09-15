@@ -95,16 +95,17 @@ const closeTournamentRegistration = (tournamentId) => __awaiter(void 0, void 0, 
             const gameCards = yield (0, tournament_1.createGameCardsForMatch)(game.id, gameplayer1.id);
             const match = yield (0, tournament_1.createSingleEliminationMatch)(tournamentId, game.id, roundId, player1.id, player2.id, "pending", Math.floor(i / 2) + 1);
             console.log(`created match for ${player1.username} an ${player2.username}`);
+            const link = `https://sparplay.com/tournaments/${tournamentId}`;
             // send push notification to players
             if (player1.push_token) {
                 const title = `${player1.username}! Your Match is Ready`;
                 const body = `You vs ${player2.username}`;
-                (0, __1.sendPushNotification)(player1.push_token, title, body);
+                (0, __1.sendPushNotification)(player1.push_token, title, body, link);
             }
             if (player2.push_token) {
                 const title = `${player2.username}! Your Match is Ready`;
                 const body = `You vs ${player1.username}`;
-                (0, __1.sendPushNotification)(player2.push_token, title, body);
+                (0, __1.sendPushNotification)(player2.push_token, title, body, link);
             }
             const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);

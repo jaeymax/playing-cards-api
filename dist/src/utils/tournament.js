@@ -42,6 +42,11 @@ const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(voi
             const gameplayer = yield createMatchGamePlayer(game.id, byePlayer.id, 0, true);
             yield createSingleEliminationByeMatch(tournamentId, game.id, round.id, byePlayer.id, Math.floor(participants.length / 2) + 1);
             console.log(`created match for only ${byePlayer.username}`);
+            yield (0, db_1.default) `
+              UPDATE tournament_participants
+              SET score = score + 1
+              WHERE tournament_id = ${tournamentId} AND user_id = ${byePlayer.id}
+            `;
             const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer], cards: null });
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);
             console.log("game saved to memory", game.code);
@@ -90,15 +95,16 @@ const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(voi
             const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);
             console.log("game saved to memory successfully", game.code);
+            const link = `https://sparplay.com/tournaments/${tournamentId}`;
             if (player1.push_token) {
                 const title = `${player1.username}! Your Match is Ready`;
                 const body = `You vs ${player2.username}`;
-                (0, __1.sendPushNotification)(player1.push_token, title, body);
+                (0, __1.sendPushNotification)(player1.push_token, title, body, link);
             }
             if (player2.push_token) {
                 const title = `${player2.username}! Your Match is Ready`;
                 const body = `You vs ${player1.username}`;
-                (0, __1.sendPushNotification)(player2.push_token, title, body);
+                (0, __1.sendPushNotification)(player2.push_token, title, body, link);
             }
         }
     }
@@ -194,16 +200,17 @@ const createNextSingleEliminationRoundMatches = (roundNumber, tournamentId) => _
             const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);
             console.log("game saved to memory successfully", game.code);
+            const link = `https://sparplay.com/tournaments/${tournamentId}`;
             // send push notification to players
             if (player1.push_token) {
                 const title = `${player1.username}! Your Match is Ready`;
                 const body = `You vs ${player2.username}`;
-                (0, __1.sendPushNotification)(player1.push_token, title, body);
+                (0, __1.sendPushNotification)(player1.push_token, title, body, link);
             }
             if (player2.push_token) {
                 const title = `${player2.username}! Your Match is Ready`;
                 const body = `You vs ${player1.username}`;
-                (0, __1.sendPushNotification)(player2.push_token, title, body);
+                (0, __1.sendPushNotification)(player2.push_token, title, body, link);
             }
             // const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
             // serverSocket
@@ -545,7 +552,8 @@ const calculateSonneBornBergerScoresForSwissRound = (tournamentId, participants)
         JOIN tournament_participants op_tp ON
          op_tp.user_id = tm.player2_id
          OR op_tp.user_id = tm.player1_id
-         WHERE tm.tournament_id = ${tournamentId}
+         WHERE tm.tournament_id = ${tournamentId} 
+         AND op_tp.tournament_id = ${tournamentId}
          AND tm.winner_id = ${participant.id}
          AND op_tp.user_id != ${participant.id}
       `;
@@ -611,7 +619,7 @@ const advanceSwissTournamentToNextRound = (tournamentId, currentRoundNumber, ser
     console.log("isLastRound", isLastRound);
     if (allMatchesCompleted && !isLastRound) {
         yield calculateBuchholzScoresForSwissRound(tournamentId, participants);
-        yield calculateBuchholzScoresForSwissRound(tournamentId, participants);
+        yield calculateSonneBornBergerScoresForSwissRound(tournamentId, participants);
         yield createNextSwissRoundMatches(currentRoundNumber + 1, tournamentId);
         const lobbyData = yield getSwissTournamentLobbyData(tournamentId);
         serverSocket
@@ -682,13 +690,6 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
                 sql `UPDATE users SET rating = ${newRating} where id = ${participant.id}`,
                 sql `UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`,
             ]);
-            // createNotification(
-            //   participant.id,
-            //   "tournament",
-            //   "⏳ Next Tournament: Saturday 8PM",
-            //   nextTournamentMessage,
-            //   "Register",
-            // );
             console.log(`rating change for user ${participant.username} in tournament ${tournamentId}:`, ratingChange);
             (0, utils_1.createNotification)(participant.id, "tournament", ratingMesssageTitle, ratingMessage, "View Profile");
             (0, utils_1.createNotification)(participant.id, "tournament", "🏆 Tournament Complete!", participationMessage, "View Results");

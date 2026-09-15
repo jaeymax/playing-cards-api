@@ -60,6 +60,12 @@ const createNextSwissRoundMatches = async (
       );
       console.log(`created match for only ${byePlayer.username}`);
 
+      await sql`
+              UPDATE tournament_participants
+              SET score = score + 1
+              WHERE tournament_id = ${tournamentId} AND user_id = ${byePlayer.id}
+            `;
+
       const newGame = {
         ...game,
         players: [gameplayer],
@@ -767,7 +773,8 @@ const calculateSonneBornBergerScoresForSwissRound = async (
         JOIN tournament_participants op_tp ON
          op_tp.user_id = tm.player2_id
          OR op_tp.user_id = tm.player1_id
-         WHERE tm.tournament_id = ${tournamentId}
+         WHERE tm.tournament_id = ${tournamentId} 
+         AND op_tp.tournament_id = ${tournamentId}
          AND tm.winner_id = ${participant.id}
          AND op_tp.user_id != ${participant.id}
       `;
