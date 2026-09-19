@@ -495,3 +495,25 @@ CREATE TABLE notification_devices (
     last_used_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, device_token) -- Prevent duplicate device entries for the same user
 );
+
+CREATE TABLE user_fcm_tokens (
+    id SERIAL PRIMARY KEY,
+
+    user_id INTEGER NOT NULL
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    installation_id UUID NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+
+    platform VARCHAR(30),
+    browser VARCHAR(50),
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    last_used_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    UNIQUE (user_id, installation_id)
+);

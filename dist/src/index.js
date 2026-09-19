@@ -450,7 +450,7 @@ exports.app.post("/api/tournament-notification-reminder", (0, express_async_hand
       `;
         for (const user of users) {
             const messageTemplate = `Hi ${user.username}! The Friday Spar Championship begins at 8PM. Format: Single Elimination. 
-Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/70 and don't miss out on the action! See you there!`;
+Challenge top players & compete for the ₵30 prize. Register now on sparplay.com/tournaments/78 and don't miss out on the action! See you there!`;
             const phone = "233" + user.phone.substr(1);
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
@@ -471,10 +471,8 @@ exports.app.post("/api/tournament-notification-reminder-final", (0, express_asyn
           SELECT username, phone FROM users WHERE phone IS NOT NULL
       `;
         for (const user of users) {
-            const messageTemplate = `Hi ${user.username}! The Sunday Spar Community Tournament begins at 8PM. Format: Swiss.
-Think you're one of the best Spar players? Prove it! Compete against top players, fight your way through the bracket, and claim the top spot.
-Register now: sparplay.com/tournaments/79
-Don't miss your chance to become Sunday's Spar Champion!`;
+            const messageTemplate = `Hi ${user.username}!The Friday Spar Championship begins at 8PM.
+          Format: Single Elimination. Register now: sparplay.com/tournaments/78 if you wish to participate`;
             const phone = "233" + user.phone.substr(1);
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
