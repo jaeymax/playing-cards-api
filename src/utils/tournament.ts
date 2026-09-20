@@ -1,5 +1,5 @@
 import { assert } from "console";
-import { matchForfeiter, sendPushNotification } from "..";
+import { matchForfeiter} from "..";
 import sql from "../config/db"; // Ensure sql is properly typed in the db configuration file
 import {
   fisherYatesShuffle,
@@ -12,6 +12,7 @@ import {
   markTournamentAsEndedAndCompleted,
 } from "../utils";
 import { create } from "axios";
+import { sendPushNotification } from "../services/notification";
 
 const createNextSwissRoundMatches = async (
   roundNumber: number,
