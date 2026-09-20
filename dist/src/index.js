@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.expiredChallenges = exports.matchForfeiter = exports.matchmaker = exports.FRONTEND_URL = exports.serverSocket = exports.redis = exports.resend = exports.sendPushNotification = exports.app = exports.mixpanel = void 0;
+exports.expiredChallenges = exports.matchForfeiter = exports.matchmaker = exports.FRONTEND_URL = exports.serverSocket = exports.redis = exports.resend = exports.app = exports.mixpanel = void 0;
 exports.rebuildRatingHistory = rebuildRatingHistory;
 const express_1 = __importDefault(require("express"));
 const resend_1 = require("resend");
@@ -53,6 +53,7 @@ const smsService_1 = require("./services/smsService");
 const express_async_handler_1 = __importDefault(require("express-async-handler"));
 const tournament_1 = require("./services/tournament");
 const matchExpired_1 = __importDefault(require("./services/matchExpired"));
+const notification_1 = require("./services/notification");
 //import admin from "firebase-admin"
 const cron = require("node-cron");
 const admin = require("firebase-admin");
@@ -86,24 +87,22 @@ const testPushNotification = () => __awaiter(void 0, void 0, void 0, function* (
         }
     });
 });
-const sendPushNotification = (token_1, title_1, body_1, ...args_1) => __awaiter(void 0, [token_1, title_1, body_1, ...args_1], void 0, function* (token, title, body, link = 'https://www.sparplay.com/tournaments') {
-    try {
-        const message = {
-            token: token,
-            data: {
-                title,
-                body,
-                link: link
-            },
-        };
-        const response = yield getMessaging().send(message);
-        console.log("Successfully sent push notification:", response);
-    }
-    catch (error) {
-        console.error("Error sending push notification:", error);
-    }
-});
-exports.sendPushNotification = sendPushNotification;
+// export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com/tournaments') => {
+//   try {
+//     const message = {
+//       token: token,
+//       data: {
+//         title,
+//         body,
+//         link: link
+//       },
+//     };
+//     const response = await getMessaging().send(message);
+//     console.log("Successfully sent push notification:", response);
+//   } catch (error) {
+//     console.error("Error sending push notification:", error);
+//   }
+// }
 function rebuildRatingHistory(sql) {
     return __awaiter(this, void 0, void 0, function* () {
         // 1. fetch all users
@@ -280,7 +279,7 @@ const sendTournamentStartPushNotifications = (tournament) => __awaiter(void 0, v
         for (const user of users) {
             if (user.push_token) {
                 const link = `https://sparplay.com/tournaments/${tournament.id}`;
-                (0, exports.sendPushNotification)(user.push_token, tournament.name, `Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, link);
+                //sendPushNotification(user.push_token, tournament.name , `Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, link)
             }
         }
     }
@@ -338,7 +337,7 @@ Register now: sparplay.com/tournaments/${tournament.id} if you want to participa
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
             if (user.push_token) {
-                (0, exports.sendPushNotification)(user.push_token, tournament.name, messageTemplate);
+                //  sendPushNotification(user.push_token, tournament.name , messageTemplate)
             }
         }
     }
@@ -391,8 +390,8 @@ exports.app.get('/api/rebuild-rating-history', (0, express_async_handler_1.defau
 })));
 //test a push notification route
 exports.app.post("/api/test-push-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { token } = req.body;
-    yield (0, exports.sendPushNotification)(token, "Test Push Notification", "This is a test push notification from SparPlay 🔥");
+    const { user_id } = req.body;
+    yield (0, notification_1.sendNotificationToUser)(user_id, 'Test Notification from SparPlay 🔥', 'This is a test push notification');
     res.json({ success: true });
 })));
 exports.app.post("/api/send-tournament-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {

@@ -1,4 +1,4 @@
-import { matchForfeiter, sendPushNotification, serverSocket } from "..";
+import { matchForfeiter, serverSocket } from "..";
 import sql from "../config/db";
 import { getGamesByCodes } from "../utils";
 import { fisherYatesShuffle, saveGame } from "../utils/gameFunctions";
@@ -12,6 +12,7 @@ import {
   createTwoPlayerMatchGamePlayers,
   getSingleEliminationTournamentParticipants,
 } from "../utils/tournament";
+import { sendPushNotification } from "./notification";
 
 export const getTournaments = async () => {
   const tournaments = await sql`SELECT * FROM tournaments`;

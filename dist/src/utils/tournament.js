@@ -18,6 +18,7 @@ const __1 = require("..");
 const db_1 = __importDefault(require("../config/db")); // Ensure sql is properly typed in the db configuration file
 const gameFunctions_1 = require("./gameFunctions");
 const utils_1 = require("../utils");
+const notification_1 = require("../services/notification");
 const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(void 0, void 0, void 0, function* () {
     // Implementation for creating the next round in a swiss tournament
     try {
@@ -99,12 +100,12 @@ const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(voi
             if (player1.push_token) {
                 const title = `${player1.username}! Your Match is Ready`;
                 const body = `You vs ${player2.username}`;
-                (0, __1.sendPushNotification)(player1.push_token, title, body, link);
+                (0, notification_1.sendPushNotification)(player1.push_token, title, body, link);
             }
             if (player2.push_token) {
                 const title = `${player2.username}! Your Match is Ready`;
                 const body = `You vs ${player1.username}`;
-                (0, __1.sendPushNotification)(player2.push_token, title, body, link);
+                (0, notification_1.sendPushNotification)(player2.push_token, title, body, link);
             }
         }
     }
@@ -205,12 +206,12 @@ const createNextSingleEliminationRoundMatches = (roundNumber, tournamentId) => _
             if (player1.push_token) {
                 const title = `${player1.username}! Your Match is Ready`;
                 const body = `You vs ${player2.username}`;
-                (0, __1.sendPushNotification)(player1.push_token, title, body, link);
+                (0, notification_1.sendPushNotification)(player1.push_token, title, body, link);
             }
             if (player2.push_token) {
                 const title = `${player2.username}! Your Match is Ready`;
                 const body = `You vs ${player1.username}`;
-                (0, __1.sendPushNotification)(player2.push_token, title, body, link);
+                (0, notification_1.sendPushNotification)(player2.push_token, title, body, link);
             }
             // const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
             // serverSocket
