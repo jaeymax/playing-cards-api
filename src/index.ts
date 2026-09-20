@@ -41,6 +41,7 @@ import { sendSMS } from "./services/smsService";
 import expressAsyncHandler from "express-async-handler";
 import { closeTournamentRegistration, getAllUpcomingTournaments, startTournament } from "./services/tournament";
 import ExpiredChallenges from "./services/matchExpired";
+import { sendNotificationToUser } from "./services/notification";
 //import admin from "firebase-admin"
 
 const cron = require("node-cron");
@@ -104,6 +105,7 @@ export const sendPushNotification = async(token: string, title: string, body: st
     console.error("Error sending push notification:", error);
   }
 }
+
 
 
 
@@ -469,9 +471,10 @@ app.get('/api/rebuild-rating-history', expressAsyncHandler(async (req, res) => {
 app.post(
   "/api/test-push-notification",
   expressAsyncHandler(async (req, res) => {
-    const { token } = req.body;
+    const { user_id } = req.body;
 
-    await sendPushNotification(token, "Test Push Notification", "This is a test push notification from SparPlay 🔥");
+
+    await sendNotificationToUser(user_id, 'Test Notification from SparPlay 🔥', 'This is a test push notification',)
 
     res.json({ success: true });
   })
