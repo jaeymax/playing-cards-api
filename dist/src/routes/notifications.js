@@ -130,6 +130,7 @@ router.get("/register/device", authMiddleware_1.default, (req, res) => __awaiter
           is_active,
           last_used_at,
           created_at,
+          token,
           updated_at
         FROM user_fcm_tokens
         WHERE user_id = ${userId}

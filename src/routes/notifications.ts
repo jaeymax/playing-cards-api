@@ -151,6 +151,7 @@ router.get(
           is_active,
           last_used_at,
           created_at,
+          token,
           updated_at
         FROM user_fcm_tokens
         WHERE user_id = ${userId}
