@@ -100,3 +100,18 @@ export const sendPushNotification = async (
     };
   }
 };
+
+export const createNotification = async (
+  userId: number,
+  type: string,
+  title: string,
+  message: string,
+  action: string,
+  actorId: any = null,
+  referenceId:any=null
+) => {
+  await sql`
+    INSERT INTO notifications (user_id, type, title, message, action, actor_id, reference_id)
+    VALUES (${userId}, ${type}, ${title}, ${message}, ${action}, ${actorId}, ${referenceId})
+  `;
+};

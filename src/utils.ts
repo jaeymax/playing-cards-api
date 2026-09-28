@@ -139,18 +139,7 @@ const getGamesByCodes = async (codes: string[]) => {
   }
 };
 
-const createNotification = async (
-  userId: number,
-  type: string,
-  title: string,
-  message: string,
-  action: string
-) => {
-  await sql`
-    INSERT INTO notifications (user_id, type, title, message, action)
-    VALUES (${userId}, ${type}, ${title}, ${message}, ${action})
-  `;
-};
+
 
 export {
   updateWinnerWonCount,
@@ -164,5 +153,4 @@ export {
   getMatchLoser,
   markTournamentAsEndedAndCompleted,
   getGamesByCodes,
-  createNotification,
 };

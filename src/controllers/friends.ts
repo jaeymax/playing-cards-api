@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import sql from "../config/db";
 import { getDivisionInfo } from "./users";
+import { createNotification, sendNotificationToUser } from "../services/notification";
 
 const getFriends = async (req: Request, res: Response) => {
   try {
@@ -87,7 +88,7 @@ const getFriendRequests = async (req: Request, res: Response) => {
      */
     const requests = await sql`
       SELECT
-        f.id AS friendship_id,
+        f.id,
 
         f.created_at AS requested_at,
 
@@ -265,7 +266,7 @@ const getSentFriendRequests = async (req: Request, res: Response) => {
      */
     const requests = await sql`
       SELECT
-        f.id AS friendship_id,
+        f.id,
 
         f.created_at AS requested_at,
 
@@ -310,7 +311,11 @@ const sendFriendRequest = async (req: Request, res: Response) => {
   try {
     // The authenticated user sending the request
     const requesterId = req.user.userId;
-
+    const requesterName = await sql`
+      SELECT username
+      FROM users
+      WHERE id = ${requesterId}
+    `;
     // Only the person being requested should come from the body
     const { friend_id } = req.body;
 
@@ -337,7 +342,7 @@ const sendFriendRequest = async (req: Request, res: Response) => {
 
     // Check that the target user exists
     const targetUser = await sql`
-      SELECT id, username, is_guest, is_bot
+      SELECT id, username
       FROM users
       WHERE id = ${addresseeId}
       LIMIT 1
@@ -441,6 +446,12 @@ const sendFriendRequest = async (req: Request, res: Response) => {
       RETURNING *
     `;
 
+    console.log('requesterName', requesterName)
+    const notificationTitle = 'New Friend Request'
+    const notificationMessage = `${requesterName[0].username} sent you a friend request`
+    await createNotification(addresseeId, 'friend', notificationTitle, notificationMessage, 'friend_request', requesterId, newFriendship[0].id);
+    await sendNotificationToUser(addresseeId, notificationTitle, notificationMessage, 'www.sparplay.com/notifications')
+
     return res.status(201).json({
       message: "Friend request sent successfully",
       friendship: newFriendship[0],
@@ -508,6 +519,7 @@ const acceptFriendRequest = async (req: Request, res: Response) => {
       RETURNING *
     `;
 
+    console.log('updated friendship', updatedFriendship)
     // No matching pending request
     if (updatedFriendship.length === 0) {
       // Check whether the friendship exists to provide a better response
@@ -531,7 +543,8 @@ const acceptFriendRequest = async (req: Request, res: Response) => {
       const friendship = existingFriendship[0];
 
       // Someone other than the recipient tried to accept it
-      if (friendship.addressee_id !== userId) {
+      if (Number(friendship.addressee_id) !== userId) {
+        console.log('addresee_id: ', friendship.addressee_id, 'user_id: ', userId)
         return res.status(403).json({
           message: "You are not authorized to accept this friend request",
         });
@@ -563,7 +576,14 @@ const acceptFriendRequest = async (req: Request, res: Response) => {
       });
     }
 
+    const addresseeName = await sql`SELECT username from users WHERE id = ${updatedFriendship[0].addressee_id}`
+
     const friendship = updatedFriendship[0];
+
+    const notificationTitle = 'Friend Request Accepted'
+    const notificationMessage = `${addresseeName[0].username} accepted your friend request`
+    await createNotification(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request', updatedFriendship[0].addresee_id, updatedFriendship[0].id);
+    await sendNotificationToUser(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'www.sparplay.com/friends')
 
     return res.status(200).json({
       message: "Friend request accepted successfully",
@@ -648,7 +668,7 @@ const declineFriendRequest = async (req: Request, res: Response) => {
       const friendship = existingFriendship[0];
 
       // Someone other than the recipient tried to decline it
-      if (friendship.addressee_id !== userId) {
+      if (Number(friendship.addressee_id) !== userId) {
         return res.status(403).json({
           message: "You are not authorized to decline this friend request",
         });
@@ -724,10 +744,11 @@ const cancelFriendRequest = async (req: Request, res: Response) => {
      *
      * requester_id = 15
      * addressee_id = 27
-     * status       = pending
+     * status = pending
      *
      * Only user 15 can cancel it.
      */
+
     const updatedFriendship = await sql`
       UPDATE friendships
       SET

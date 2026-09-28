@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchUsers = exports.removeFriend = exports.cancelFriendRequest = exports.sendFriendRequest = exports.declineFriendRequest = exports.acceptFriendRequest = exports.getSentFriendRequests = exports.getFriendshipStatus = exports.getFriendRequests = exports.getFriends = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const users_1 = require("./users");
+const notification_1 = require("../services/notification");
 const getFriends = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // Authenticated user
@@ -96,7 +97,7 @@ const getFriendRequests = (req, res) => __awaiter(void 0, void 0, void 0, functi
          */
         const requests = yield (0, db_1.default) `
       SELECT
-        f.id AS friendship_id,
+        f.id,
 
         f.created_at AS requested_at,
 
@@ -259,7 +260,7 @@ const getSentFriendRequests = (req, res) => __awaiter(void 0, void 0, void 0, fu
          */
         const requests = yield (0, db_1.default) `
       SELECT
-        f.id AS friendship_id,
+        f.id,
 
         f.created_at AS requested_at,
 
@@ -303,6 +304,11 @@ const sendFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, functi
     try {
         // The authenticated user sending the request
         const requesterId = req.user.userId;
+        const requesterName = yield (0, db_1.default) `
+      SELECT username
+      FROM users
+      WHERE id = ${requesterId}
+    `;
         // Only the person being requested should come from the body
         const { friend_id } = req.body;
         if (!friend_id) {
@@ -324,7 +330,7 @@ const sendFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, functi
         }
         // Check that the target user exists
         const targetUser = yield (0, db_1.default) `
-      SELECT id, username, is_guest, is_bot
+      SELECT id, username
       FROM users
       WHERE id = ${addresseeId}
       LIMIT 1
@@ -412,6 +418,11 @@ const sendFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, functi
       )
       RETURNING *
     `;
+        console.log('requesterName', requesterName);
+        const notificationTitle = 'New Friend Request';
+        const notificationMessage = `${requesterName[0].username} sent you a friend request`;
+        yield (0, notification_1.createNotification)(addresseeId, 'friend', notificationTitle, notificationMessage, 'friend_request', requesterId, newFriendship[0].id);
+        yield (0, notification_1.sendNotificationToUser)(addresseeId, notificationTitle, notificationMessage, 'www.sparplay.com/notifications');
         return res.status(201).json({
             message: "Friend request sent successfully",
             friendship: newFriendship[0],
@@ -472,6 +483,7 @@ const acceptFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, func
         AND status = 'pending'
       RETURNING *
     `;
+        console.log('updated friendship', updatedFriendship);
         // No matching pending request
         if (updatedFriendship.length === 0) {
             // Check whether the friendship exists to provide a better response
@@ -492,7 +504,8 @@ const acceptFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, func
             }
             const friendship = existingFriendship[0];
             // Someone other than the recipient tried to accept it
-            if (friendship.addressee_id !== userId) {
+            if (Number(friendship.addressee_id) !== userId) {
+                console.log('addresee_id: ', friendship.addressee_id, 'user_id: ', userId);
                 return res.status(403).json({
                     message: "You are not authorized to accept this friend request",
                 });
@@ -519,7 +532,12 @@ const acceptFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, func
                 message: "Friend request cannot be accepted",
             });
         }
+        const addresseeName = yield (0, db_1.default) `SELECT username from users WHERE id = ${updatedFriendship[0].addressee_id}`;
         const friendship = updatedFriendship[0];
+        const notificationTitle = 'Friend Request Accepted';
+        const notificationMessage = `${addresseeName[0].username} accepted your friend request`;
+        yield (0, notification_1.createNotification)(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request', updatedFriendship[0].addresee_id, updatedFriendship[0].id);
+        yield (0, notification_1.sendNotificationToUser)(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'www.sparplay.com/friends');
         return res.status(200).json({
             message: "Friend request accepted successfully",
             friendship,
@@ -594,7 +612,7 @@ const declineFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, fun
             }
             const friendship = existingFriendship[0];
             // Someone other than the recipient tried to decline it
-            if (friendship.addressee_id !== userId) {
+            if (Number(friendship.addressee_id) !== userId) {
                 return res.status(403).json({
                     message: "You are not authorized to decline this friend request",
                 });
@@ -659,7 +677,7 @@ const cancelFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, func
          *
          * requester_id = 15
          * addressee_id = 27
-         * status       = pending
+         * status = pending
          *
          * Only user 15 can cancel it.
          */

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendPushNotification = void 0;
+exports.createNotification = exports.sendPushNotification = void 0;
 exports.getUserNotificationTokens = getUserNotificationTokens;
 exports.sendNotificationToUser = sendNotificationToUser;
 const messaging_1 = require("firebase-admin/messaging");
@@ -78,3 +78,10 @@ const sendPushNotification = (token_1, title_1, body_1, ...args_1) => __awaiter(
     }
 });
 exports.sendPushNotification = sendPushNotification;
+const createNotification = (userId_1, type_1, title_1, message_1, action_1, ...args_1) => __awaiter(void 0, [userId_1, type_1, title_1, message_1, action_1, ...args_1], void 0, function* (userId, type, title, message, action, actorId = null, referenceId = null) {
+    yield (0, db_1.default) `
+    INSERT INTO notifications (user_id, type, title, message, action, actor_id, reference_id)
+    VALUES (${userId}, ${type}, ${title}, ${message}, ${action}, ${actorId}, ${referenceId})
+  `;
+});
+exports.createNotification = createNotification;

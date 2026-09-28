@@ -3,3 +3,4 @@ node_modules/
 /node_modules
 /private_keys
 /dist/private_keys
+/src/tournament_recipients.json

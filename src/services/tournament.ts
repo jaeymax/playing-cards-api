@@ -12,7 +12,7 @@ import {
   createTwoPlayerMatchGamePlayers,
   getSingleEliminationTournamentParticipants,
 } from "../utils/tournament";
-import { sendPushNotification } from "./notification";
+import { sendNotificationToUser, sendPushNotification } from "./notification";
 
 export const getTournaments = async () => {
   const tournaments = await sql`SELECT * FROM tournaments`;
@@ -149,17 +149,17 @@ export const closeTournamentRegistration = async (tournamentId: number) => {
       const link = `https://sparplay.com/tournaments/${tournamentId}`;
 
       // send push notification to players
-      if(player1.push_token){
-        const title = `${player1.username}! Your Match is Ready`
-        const body = `You vs ${player2.username}`;
-        sendPushNotification(player1.push_token, title, body, link);
-      } 
+      
+      let title = `${player1.username}! Your Match is Ready`
+      let body = `You vs ${player2.username}`;
+      sendNotificationToUser(player1.id, title, body, link);
+      
 
-      if(player2.push_token){
-        const title = `${player2.username}! Your Match is Ready`
-        const body = `You vs ${player1.username}`;
-        sendPushNotification(player2.push_token, title, body, link);
-      }
+  
+      title = `${player2.username}! Your Match is Ready`
+      body = `You vs ${player1.username}`;
+      sendNotificationToUser(player2.id, title, body, link);
+      
 
       const newGame = {
         ...game,

@@ -30,6 +30,8 @@ exports.getUserNotifications = (0, express_async_handler_1.default)((req, res) =
             n.message,
             n.is_read,
             n.action,
+            n.reference_id,
+            n.actor_id,
             n.created_at
         FROM notifications n
         WHERE n.user_id = ${id}

@@ -70,21 +70,21 @@ const serviceAccount = require(path_1.default.join(__dirname, "../private_keys/s
 //   key: fs.readFileSync("certs/192.168.43.218-key.pem"),
 //   cert: fs.readFileSync("certs/192.168.43.218.pem"),
 // }
-console.log('test');
+console.log("test");
 const redisConfig = {
     host: "127.0.0.1",
     port: 6379,
 };
 admin.initializeApp({
-    credential: admin.cert(serviceAccount)
+    credential: admin.cert(serviceAccount),
 });
 const testPushNotification = () => __awaiter(void 0, void 0, void 0, function* () {
     yield getMessaging().send({
         token: "",
         notification: {
             title: "Spar Tournament",
-            body: "Your match starts in 15 minutes"
-        }
+            body: "Your match starts in 15 minutes",
+        },
     });
 });
 // export const sendPushNotification = async(token: string, title: string, body: string, link:string = 'https://www.sparplay.com/tournaments') => {
@@ -173,7 +173,7 @@ function rebuildRatingHistory(sql) {
                 prevRating = ratingAfter;
             }
         }
-        console.log('Rating history rebuilded successfully for all users and tournaments.');
+        console.log("Rating history rebuilded successfully for all users and tournaments.");
     });
 }
 // cron.schedule("* * * * *", async () => {
@@ -203,36 +203,37 @@ function rebuildRatingHistory(sql) {
 //   }
 // });
 cron.schedule("52 19 * * *", () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('Checking tournaments regsitration closure...');
+    console.log("Checking tournaments regsitration closure...");
     const now = new Date();
-    console.log('date', now.toISOString());
+    console.log("date", now.toISOString());
     const bufferTime = 1 * 60 * 1000; // 1 minute buffer time
     try {
         const tournaments = yield (0, tournament_1.getAllUpcomingTournaments)();
-        console.log('upcoming tournaments', tournaments);
+        console.log("upcoming tournaments", tournaments);
         for (const tournament of tournaments) {
             const registrationCloseTime = new Date(tournament.registration_closing_date);
             const startTime = new Date(tournament.start_date);
             console.log(`Tournament ${tournament.name} - Registration Close: ${registrationCloseTime.toISOString()}, Start Time: ${startTime.toISOString()}`);
             // add some buffer time to ensure registration is closed before starting the tournament
-            if (now.getTime() >= registrationCloseTime.getTime() + bufferTime && !tournament.registration_closed) {
+            if (now.getTime() >= registrationCloseTime.getTime() + bufferTime &&
+                !tournament.registration_closed) {
                 console.log(`Closing registration for tournament ${tournament.name}`);
                 yield (0, tournament_1.closeTournamentRegistration)(tournament.id);
             }
         }
     }
     catch (error) {
-        console.error('Error checking tournaments:', error);
+        console.error("Error checking tournaments:", error);
     }
 }));
 cron.schedule("0 20 * * *", () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('Checking tournaments start times...');
+    console.log("Checking tournaments start times...");
     const now = new Date();
-    console.log('date', now.toISOString());
+    console.log("date", now.toISOString());
     const bufferTime = 1 * 60 * 1000; // 1 minute buffer time
     try {
         const tournaments = yield (0, tournament_1.getAllUpcomingTournaments)();
-        console.log('upcoming tournaments', tournaments);
+        console.log("upcoming tournaments", tournaments);
         for (const tournament of tournaments) {
             const registrationCloseTime = new Date(tournament.registration_closing_date);
             const startTime = new Date(tournament.start_date);
@@ -244,21 +245,23 @@ cron.schedule("0 20 * * *", () => __awaiter(void 0, void 0, void 0, function* ()
         }
     }
     catch (error) {
-        console.error('Error checking tournaments:', error);
+        console.error("Error checking tournaments:", error);
     }
 }));
 cron.schedule("30 18 * * *", () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('Checking if any tournaments is starting today and sending notifications...');
+    console.log("Checking if any tournaments is starting today and sending notifications...");
     const now = new Date();
-    console.log('date', now.toISOString());
+    console.log("date", now.toISOString());
     const bufferTime = 1 * 60 * 1000; // 1 minute buffer time
     try {
         const tournaments = yield (0, tournament_1.getAllUpcomingTournaments)();
-        console.log('upcoming tournaments', tournaments);
+        console.log("upcoming tournaments", tournaments);
         for (const tournament of tournaments) {
             const startTime = new Date(tournament.start_date);
             // tournaments usually start at 8PM, so we check around 7:30PM to send notifications to users
-            if (now.getDate() === startTime.getDate() && now.getMonth() === startTime.getMonth() && now.getFullYear() === startTime.getFullYear()) {
+            if (now.getDate() === startTime.getDate() &&
+                now.getMonth() === startTime.getMonth() &&
+                now.getFullYear() === startTime.getFullYear()) {
                 console.log(`Sending notifications for tournament ${tournament.name} starting today`);
                 // send notifications to users about the tournament starting today
                 // you can implement a function to send notifications here, e.g. sendTournamentStartNotifications(tournament);
@@ -268,7 +271,7 @@ cron.schedule("30 18 * * *", () => __awaiter(void 0, void 0, void 0, function* (
         }
     }
     catch (error) {
-        console.error('Error checking tournaments:', error);
+        console.error("Error checking tournaments:", error);
     }
 }));
 const sendTournamentStartPushNotifications = (tournament) => __awaiter(void 0, void 0, void 0, function* () {
@@ -302,8 +305,7 @@ const sendTournamentStartNotifications = (tournament) => __awaiter(void 0, void 
             : `GHS ${Number(tournament.registration_fee)}`;
         switch (dayOfWeek) {
             case 5: // Friday
-                prizeMessage =
-                    "💰 Prize Pool: GHS 30 winner-takes-all!";
+                prizeMessage = "💰 Prize Pool: GHS 30 winner-takes-all!";
                 break;
             case 6: // Saturday
                 prizeMessage =
@@ -384,14 +386,14 @@ exports.app.post("/api/test-sms", (0, express_async_handler_1.default)((req, res
     yield (0, smsService_1.sendSMS)(phone, "Test SMS from SparPlay 🔥");
     res.json({ success: true });
 })));
-exports.app.get('/api/rebuild-rating-history', (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+exports.app.get("/api/rebuild-rating-history", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     yield rebuildRatingHistory(db_1.default);
     res.json({ success: true });
 })));
 //test a push notification route
 exports.app.post("/api/test-push-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { user_id } = req.body;
-    yield (0, notification_1.sendNotificationToUser)(user_id, 'Test Notification from SparPlay 🔥', 'This is a test push notification');
+    yield (0, notification_1.sendNotificationToUser)(user_id, "Test Notification from SparPlay 🔥", "This is a test push notification");
     res.json({ success: true });
 })));
 exports.app.post("/api/send-tournament-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -403,7 +405,7 @@ exports.app.post("/api/send-tournament-notification", (0, express_async_handler_
         for (const user of users) {
             const messageTemplate = `Hi ${user.username}!, Spar Weekend Championship kicks off Friday 7PM. Test your skills, compete with others and win ₵50 cash. Register now at https://sparplay.com`;
             const phone = "233" + user.phone.substr(1);
-            console.log('original no', user.phone);
+            console.log("original no", user.phone);
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
         }
@@ -419,7 +421,45 @@ exports.app.post("/api/send-tournament-notification", (0, express_async_handler_
 exports.app.post("/api/tournament-failed-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { tournamentName } = req.body;
     // list of phone numbers to send the notification to, you can fetch this from your database based on your requirements
-    const phoneNumbers = ["233544136394", "233538599553", "233503145542", "233242825836", "233559187525", "233505954496", "233241586158", "233542169953", "233542901511", "233592409107", "233554839565", "233552262000", "233507726059", "233205479345", "233558384883", "233552700648", "233538159551", "233503408628", "233508793292", "233544296549", "233503860625", "233503020301", "233538776736", "233206870946", "233598064978", "233200397987", "233542697025", "233550350303", "233595329956", "233544159671", "233508742502", "233206508435", "233555503026", "233257772464", "233507252222", "233257509994", "233504063271"]; // replace with actual phone numbers
+    const phoneNumbers = [
+        "233544136394",
+        "233538599553",
+        "233503145542",
+        "233242825836",
+        "233559187525",
+        "233505954496",
+        "233241586158",
+        "233542169953",
+        "233542901511",
+        "233592409107",
+        "233554839565",
+        "233552262000",
+        "233507726059",
+        "233205479345",
+        "233558384883",
+        "233552700648",
+        "233538159551",
+        "233503408628",
+        "233508793292",
+        "233544296549",
+        "233503860625",
+        "233503020301",
+        "233538776736",
+        "233206870946",
+        "233598064978",
+        "233200397987",
+        "233542697025",
+        "233550350303",
+        "233595329956",
+        "233544159671",
+        "233508742502",
+        "233206508435",
+        "233555503026",
+        "233257772464",
+        "233507252222",
+        "233257509994",
+        "233504063271",
+    ]; // replace with actual phone numbers
     try {
         for (const user of phoneNumbers) {
             const messageTemplate = `Hi! Just a reminder that the Sunday Community Tournament starts today at 08:00PM. 
@@ -471,9 +511,9 @@ exports.app.post("/api/tournament-notification-reminder-final", (0, express_asyn
           SELECT username, phone FROM users WHERE phone IS NOT NULL
       `;
         for (const user of users) {
-            const messageTemplate = `Hi ${user.username}!The Sunday Community Tournament begins at 8PM today. Format: Swiss Round. No elimination. Register now: sparplay.com/tournaments/81 if you wish to participate`;
+            const messageTemplate = `Hi ${user.username}!The Friday Spar Tournament begins at 8PM today. Format: Single Elimination. Register now: sparplay.com/tournaments/82 if you wish to participate`;
             const phone = "233" + user.phone.substr(1);
-            console.log('original phone', user.phone);
+            console.log("original phone", user.phone);
             console.log("realphone", phone);
             yield (0, smsService_1.sendSMS)(phone, messageTemplate);
         }
@@ -485,6 +525,56 @@ exports.app.post("/api/tournament-notification-reminder-final", (0, express_asyn
         success: true,
         message: "Tournament reminder notifications sent successfully",
     });
+})));
+exports.app.post("/api/save-phone", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const users = yield (0, db_1.default) `
+        SELECT username, phone
+        FROM users
+        WHERE phone IS NOT NULL
+      `;
+        const recipients = users
+            .map((user) => {
+            const originalPhone = String(user.phone).trim();
+            let phone;
+            if (originalPhone.startsWith("0")) {
+                phone = "233" + originalPhone.substring(1);
+            }
+            else if (originalPhone.startsWith("233")) {
+                phone = originalPhone;
+            }
+            else if (originalPhone.startsWith("+233")) {
+                phone = originalPhone.substring(1);
+            }
+            else {
+                phone = null;
+            }
+            return {
+                username: user.username,
+                phone,
+                originalPhone,
+            };
+        })
+            .filter((user) => user.phone);
+        const fs = require("fs");
+        const path = require("path");
+        const filePath = path.join(__dirname, "tournament_recipients.json");
+        fs.writeFileSync(filePath, JSON.stringify(recipients, null, 2), "utf8");
+        console.log(`Saved ${recipients.length} recipients to ${filePath}`);
+        res.json({
+            success: true,
+            message: "Tournament recipients exported successfully",
+            total: recipients.length,
+            file: "tournament_recipients.json",
+        });
+    }
+    catch (error) {
+        console.error("Error exporting tournament recipients:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to export tournament recipients",
+        });
+    }
 })));
 exports.app.use(errorHandler_1.default);
 const s3Client = new client_s3_1.S3Client({

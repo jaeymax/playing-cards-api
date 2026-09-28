@@ -97,16 +97,13 @@ const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(voi
             yield (0, gameFunctions_1.saveGame)(game.code, newGame);
             console.log("game saved to memory successfully", game.code);
             const link = `https://sparplay.com/tournaments/${tournamentId}`;
-            if (player1.push_token) {
-                const title = `${player1.username}! Your Match is Ready`;
-                const body = `You vs ${player2.username}`;
-                (0, notification_1.sendPushNotification)(player1.push_token, title, body, link);
-            }
-            if (player2.push_token) {
-                const title = `${player2.username}! Your Match is Ready`;
-                const body = `You vs ${player1.username}`;
-                (0, notification_1.sendPushNotification)(player2.push_token, title, body, link);
-            }
+            let title = `${player1.username}! Your Match is Ready`;
+            let body = `You vs ${player2.username}`;
+            yield (0, notification_1.sendNotificationToUser)(player1.id, title, body, link);
+            //sendPushNotification(player1.push_token, title, body, link);
+            title = `${player2.username}! Your Match is Ready`;
+            body = `You vs ${player1.username}`;
+            yield (0, notification_1.sendPushNotification)(player2.id, title, body, link);
         }
     }
     catch (error) {
@@ -203,16 +200,12 @@ const createNextSingleEliminationRoundMatches = (roundNumber, tournamentId) => _
             console.log("game saved to memory successfully", game.code);
             const link = `https://sparplay.com/tournaments/${tournamentId}`;
             // send push notification to players
-            if (player1.push_token) {
-                const title = `${player1.username}! Your Match is Ready`;
-                const body = `You vs ${player2.username}`;
-                (0, notification_1.sendPushNotification)(player1.push_token, title, body, link);
-            }
-            if (player2.push_token) {
-                const title = `${player2.username}! Your Match is Ready`;
-                const body = `You vs ${player1.username}`;
-                (0, notification_1.sendPushNotification)(player2.push_token, title, body, link);
-            }
+            let title = `${player1.username}! Your Match is Ready`;
+            let body = `You vs ${player2.username}`;
+            (0, notification_1.sendNotificationToUser)(player1.id, title, body, link);
+            title = `${player2.username}! Your Match is Ready`;
+            body = `You vs ${player1.username}`;
+            (0, notification_1.sendNotificationToUser)(player2.id, title, body, link);
             // const lobbyData = await getSingleEliminationTournamentLobbyData(tournamentId);
             // serverSocket
             //   .to(`tournament_${tournamentId}`)
@@ -692,15 +685,15 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
                 sql `UPDATE users SET peak_rating = ${peakRating} where id = ${participant.id}`,
             ]);
             console.log(`rating change for user ${participant.username} in tournament ${tournamentId}:`, ratingChange);
-            (0, utils_1.createNotification)(participant.id, "tournament", ratingMesssageTitle, ratingMessage, "View Profile");
-            (0, utils_1.createNotification)(participant.id, "tournament", "🏆 Tournament Complete!", participationMessage, "View Results");
+            (0, notification_1.createNotification)(participant.id, "tournament", ratingMesssageTitle, ratingMessage, "View Profile");
+            (0, notification_1.createNotification)(participant.id, "tournament", "🏆 Tournament Complete!", participationMessage, "View Results");
             if (!participant.is_rated) {
                 yield (0, db_1.default) `
         UPDATE users
         SET is_rated = true
         WHERE id = ${participant.id}
         `;
-                (0, utils_1.createNotification)(participant.id, "tournament", "Your games are now rated! 🎉", "Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!", "View Leaderboard");
+                (0, notification_1.createNotification)(participant.id, "tournament", "Your games are now rated! 🎉", "Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!", "View Leaderboard");
             }
             // update tournaments played for each participant
             yield (0, db_1.default) `
@@ -717,12 +710,12 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         `;
             }
         }
-        (0, utils_1.createNotification)(firstPlace.id, "tournament", "Saturday Spar Challenge Champion 🏆", winnerMessage, "Claim Prize");
-        (0, utils_1.createNotification)(secondPlace.id, "tournament", "Saturday Spar Challenge Runner-Up 🥈", runnerUpMessage, "Claim Prize");
-        (0, utils_1.createNotification)(thirdPlace.id, "tournament", "Saturday Spar Challenge Top 3 Finish 🥉", thirdPlaceMessage, "Claim Prize");
-        (0, utils_1.createNotification)(firstPlace.id, "reward", "🥇 Gold Medal Awarded!", "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.", "Claim Prize");
-        (0, utils_1.createNotification)(secondPlace.id, "reward", "🥈 Silver Medal Awarded!", "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.", "Claim Prize");
-        (0, utils_1.createNotification)(thirdPlace.id, "reward", "🥉 Bronze Medal Awarded!", "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.", "Claim Prize");
+        (0, notification_1.createNotification)(firstPlace.id, "tournament", "Saturday Spar Challenge Champion 🏆", winnerMessage, "Claim Prize");
+        (0, notification_1.createNotification)(secondPlace.id, "tournament", "Saturday Spar Challenge Runner-Up 🥈", runnerUpMessage, "Claim Prize");
+        (0, notification_1.createNotification)(thirdPlace.id, "tournament", "Saturday Spar Challenge Top 3 Finish 🥉", thirdPlaceMessage, "Claim Prize");
+        (0, notification_1.createNotification)(firstPlace.id, "reward", "🥇 Gold Medal Awarded!", "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.", "Claim Prize");
+        (0, notification_1.createNotification)(secondPlace.id, "reward", "🥈 Silver Medal Awarded!", "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.", "Claim Prize");
+        (0, notification_1.createNotification)(thirdPlace.id, "reward", "🥉 Bronze Medal Awarded!", "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.", "Claim Prize");
         // createNotification(
         //   firstPlace.id,
         //   "reward",
@@ -970,15 +963,15 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
             //   "Register"
             // );
             console.log(`rating change for user ${participant.username} in tournament ${tournamentId}:`, ratingChange);
-            (0, utils_1.createNotification)(participant.id, "tournament", ratingMesssageTitle, ratingMessage, "View Profile");
-            (0, utils_1.createNotification)(participant.id, "tournament", "🏆 Tournament Complete!", participationMessage, "View Results");
+            (0, notification_1.createNotification)(participant.id, "tournament", ratingMesssageTitle, ratingMessage, "View Profile");
+            (0, notification_1.createNotification)(participant.id, "tournament", "🏆 Tournament Complete!", participationMessage, "View Results");
             if (!participant.is_rated) {
                 yield (0, db_1.default) `
         UPDATE users
         SET is_rated = true
         WHERE id = ${participant.id}
         `;
-                (0, utils_1.createNotification)(participant.id, "tournament", "Your games are now rated! 🎉", "Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!", "View Leaderboard");
+                (0, notification_1.createNotification)(participant.id, "tournament", "Your games are now rated! 🎉", "Your performance in this tournament has unlocked the ability for your games to be rated. Climb the leaderboard and show off your skills!", "View Leaderboard");
             }
             // update tournaments played for each participant
             yield (0, db_1.default) `
@@ -995,12 +988,12 @@ Our team will contact you and credit your reward within 15 minutes. Congratulati
         `;
             }
         }
-        (0, utils_1.createNotification)(firstPlace.id, "tournament", "Spar Weekend Tournament Champion 🏆", winnerMessage, "Claim Prize");
-        (0, utils_1.createNotification)(secondPlace.id, "tournament", "Spar Weekend Tournament Runner-Up 🥈", runnerUpMessage, "Claim Prize");
-        (0, utils_1.createNotification)(thirdPlace.id, "tournament", "Spar Weekend Tournament Top 3 Finish 🥉", thirdPlaceMessage, "Claim Prize");
-        (0, utils_1.createNotification)(firstPlace.id, "reward", "🥇 Gold Medal Awarded!", "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.", "Claim Prize");
-        (0, utils_1.createNotification)(secondPlace.id, "reward", "🥈 Silver Medal Awarded!", "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.", "Claim Prize");
-        (0, utils_1.createNotification)(thirdPlace.id, "reward", "🥉 Bronze Medal Awarded!", "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.", "Claim Prize");
+        (0, notification_1.createNotification)(firstPlace.id, "tournament", "Spar Weekend Tournament Champion 🏆", winnerMessage, "Claim Prize");
+        (0, notification_1.createNotification)(secondPlace.id, "tournament", "Spar Weekend Tournament Runner-Up 🥈", runnerUpMessage, "Claim Prize");
+        (0, notification_1.createNotification)(thirdPlace.id, "tournament", "Spar Weekend Tournament Top 3 Finish 🥉", thirdPlaceMessage, "Claim Prize");
+        (0, notification_1.createNotification)(firstPlace.id, "reward", "🥇 Gold Medal Awarded!", "You conquered every round and claimed 1st Place. This tournament belongs to you. A true Spar Champion.🥇 Medal added to your profile.", "Claim Prize");
+        (0, notification_1.createNotification)(secondPlace.id, "reward", "🥈 Silver Medal Awarded!", "You fought your way to the Final and secured 2nd Place. An impressive feat among fierce competition. 🥈 Medal added to your profile.", "Claim Prize");
+        (0, notification_1.createNotification)(thirdPlace.id, "reward", "🥉 Bronze Medal Awarded!", "You battled through tough matches and earned 3rd Place. A podium finish to be proud of! 🥉 Medal added to your profile.", "Claim Prize");
         // createNotification(
         //   firstPlace.id,
         //   "reward",

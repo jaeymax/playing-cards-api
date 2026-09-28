@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createNotification = exports.getGamesByCodes = exports.markTournamentAsEndedAndCompleted = exports.getMatchLoser = exports.isTournamentMatch = exports.updateGamePlayersScores = exports.getMatchWinner = exports.updateGamesPlayedForGamePlayers = exports.markGameAsEndedAndForfeited = exports.markGameAsEndedAndCompleted = exports.updateLoserWinningStreak = exports.updateWinnerWonCount = void 0;
+exports.getGamesByCodes = exports.markTournamentAsEndedAndCompleted = exports.getMatchLoser = exports.isTournamentMatch = exports.updateGamePlayersScores = exports.getMatchWinner = exports.updateGamesPlayedForGamePlayers = exports.markGameAsEndedAndForfeited = exports.markGameAsEndedAndCompleted = exports.updateLoserWinningStreak = exports.updateWinnerWonCount = void 0;
 const _1 = require(".");
 const db_1 = __importDefault(require("./config/db"));
 const updateWinnerWonCount = (winnerId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -146,10 +146,3 @@ const getGamesByCodes = (codes) => __awaiter(void 0, void 0, void 0, function* (
     }
 });
 exports.getGamesByCodes = getGamesByCodes;
-const createNotification = (userId, type, title, message, action) => __awaiter(void 0, void 0, void 0, function* () {
-    yield (0, db_1.default) `
-    INSERT INTO notifications (user_id, type, title, message, action)
-    VALUES (${userId}, ${type}, ${title}, ${message}, ${action})
-  `;
-});
-exports.createNotification = createNotification;

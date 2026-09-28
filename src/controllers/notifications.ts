@@ -23,6 +23,8 @@ export const getUserNotifications = expressAsyncHandler(async(req: Authenticated
             n.message,
             n.is_read,
             n.action,
+            n.reference_id,
+            n.actor_id,
             n.created_at
         FROM notifications n
         WHERE n.user_id = ${id}
