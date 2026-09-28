@@ -422,7 +422,7 @@ const sendFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, functi
         const notificationTitle = 'New Friend Request';
         const notificationMessage = `${requesterName[0].username} sent you a friend request`;
         yield (0, notification_1.createNotification)(addresseeId, 'friend', notificationTitle, notificationMessage, 'friend_request', requesterId, newFriendship[0].id);
-        yield (0, notification_1.sendNotificationToUser)(addresseeId, notificationTitle, notificationMessage, 'www.sparplay.com/notifications');
+        yield (0, notification_1.sendNotificationToUser)(addresseeId, notificationTitle, notificationMessage, 'https://www.sparplay.com/friends');
         return res.status(201).json({
             message: "Friend request sent successfully",
             friendship: newFriendship[0],
@@ -537,7 +537,7 @@ const acceptFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, func
         const notificationTitle = 'Friend Request Accepted';
         const notificationMessage = `${addresseeName[0].username} accepted your friend request`;
         yield (0, notification_1.createNotification)(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request', updatedFriendship[0].addresee_id, updatedFriendship[0].id);
-        yield (0, notification_1.sendNotificationToUser)(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'www.sparplay.com/friends');
+        yield (0, notification_1.sendNotificationToUser)(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'https://www.sparplay.com/friends');
         return res.status(200).json({
             message: "Friend request accepted successfully",
             friendship,

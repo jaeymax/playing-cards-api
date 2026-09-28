@@ -450,7 +450,7 @@ const sendFriendRequest = async (req: Request, res: Response) => {
     const notificationTitle = 'New Friend Request'
     const notificationMessage = `${requesterName[0].username} sent you a friend request`
     await createNotification(addresseeId, 'friend', notificationTitle, notificationMessage, 'friend_request', requesterId, newFriendship[0].id);
-    await sendNotificationToUser(addresseeId, notificationTitle, notificationMessage, 'www.sparplay.com/notifications')
+    await sendNotificationToUser(addresseeId, notificationTitle, notificationMessage, 'https://www.sparplay.com/friends')
 
     return res.status(201).json({
       message: "Friend request sent successfully",
@@ -583,7 +583,7 @@ const acceptFriendRequest = async (req: Request, res: Response) => {
     const notificationTitle = 'Friend Request Accepted'
     const notificationMessage = `${addresseeName[0].username} accepted your friend request`
     await createNotification(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request', updatedFriendship[0].addresee_id, updatedFriendship[0].id);
-    await sendNotificationToUser(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'www.sparplay.com/friends')
+    await sendNotificationToUser(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'https://www.sparplay.com/friends')
 
     return res.status(200).json({
       message: "Friend request accepted successfully",

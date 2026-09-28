@@ -83,6 +83,9 @@ export const sendPushNotification = async (
     const response =
       await getMessaging().send(message);
 
+    console.log('response: ', response)
+    console.log('link: ', link)
+
     return {
       success: true,
       response,

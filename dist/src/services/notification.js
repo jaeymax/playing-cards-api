@@ -64,6 +64,8 @@ const sendPushNotification = (token_1, title_1, body_1, ...args_1) => __awaiter(
             },
         };
         const response = yield (0, messaging_1.getMessaging)().send(message);
+        console.log('response: ', response);
+        console.log('link: ', link);
         return {
             success: true,
             response,
