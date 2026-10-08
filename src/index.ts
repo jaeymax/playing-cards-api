@@ -26,6 +26,7 @@ import walletRoutes from "./routes/wallet";
 import payoutRoutes from "./routes/payout";
 import webhookRoutes from "./routes/webhook";
 import challengeRoutes from "./routes/challenges";
+import presenceRoutes from "./routes/presence"
 import Matchmaker from "./services/matchmaking";
 import { initializeSocketHandler } from "./socketHandler";
 import type { Game } from "../types";
@@ -458,6 +459,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/payout-method", payoutRoutes);
 app.use("/api/challenges", challengeRoutes);
+app.use("/api/presence", presenceRoutes)
 //app.use(notFoundMiddleware);
 
 app.post(

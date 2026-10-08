@@ -1,15 +1,26 @@
 import { Server, Socket } from "socket.io";
 import sql from "./config/db";
 import { matchmaker, redis } from "./index";
-import { createGamePlayer, dealCards, playCard, saveGame, shuffleDeck } from "./utils/gameFunctions";
+import {
+  createGamePlayer,
+  dealCards,
+  playCard,
+  saveGame,
+  shuffleDeck,
+} from "./utils/gameFunctions";
 import { gameExists } from "./utils/gameFunctions";
 import { getGameByCode } from "./utils/gameFunctions";
 import { Game } from "../types";
+import {
+  userConnected,
+  userDisconnected,
+  userHeartbeat,
+} from "./services/presenceService";
 
 export const userSocketMap = new Map();
 export const onlineUsers: any[] = [];
 
-async function acquireLock(gameCode:string, timeout = 5000) {
+async function acquireLock(gameCode: string, timeout = 5000) {
   const lockKey = `lock:${gameCode}`;
   // NX: Only set if it doesn't exist | PX: Expire after X milliseconds (prevents deadlocks)
   const result = await redis.set(lockKey, "locked", "EX", timeout, "NX");
@@ -17,48 +28,67 @@ async function acquireLock(gameCode:string, timeout = 5000) {
   return result === "OK";
 }
 
-async function releaseLock(gameCode:string) {
+async function releaseLock(gameCode: string) {
   await redis.del(`lock:${gameCode}`);
 }
 
+export const initializeSocketHandler = async (serverSocket: Server) => {
 
-
-export const initializeSocketHandler = (serverSocket: Server) => {
-  serverSocket.on("connection", (socket: Socket) => {
+  //await redis.flushall(); // Clear all keys in Redis on server start
+  serverSocket.on("connection", async (socket: Socket) => {
     const userId = socket.handshake.auth.userId;
     const username = socket.handshake.auth.username || "Unknown";
-    
-    if(!userId){
+
+    if (!userId) {
       socket.disconnect(true);
       return;
     }
 
-    //onlineUsers.push({ user_id: userId, username, socketId: socket.id, status:"Active" });
-
-    console.log(`User connected: ${userId} (socket ${socket.id})`);
+    console.log(
+      `User connected: ${userId} (${username}) (socket=${socket.id})`,
+    );
     userSocketMap.set(userId, socket.id);
 
-    // mark the user as online in the database
-    sql`UPDATE users SET online_status = true WHERE id = ${userId}`
-      .then(() => {
-        console.log(`Marked user ${userId} as online`);
-      })
-      .catch((err) => {
-        console.error(`Error marking user ${userId} as online:`, err);
+    try {
+      const result = await userConnected(userId, socket.id);
+
+      console.log(`Presence: ${userId} is now online`);
+
+      // Broadcast to everyone that this user came online
+      serverSocket.emit("presence:online", {
+        userId,
       });
 
+      serverSocket.emit("presence:status", {
+        userId,
+        status: result.status
+      });
 
-    // emit status change of online users to all clients
-    //serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
+      sql`UPDATE users SET online_status = true WHERE id = ${userId}`.then(
+        () => {
+          console.log(`Marked user ${userId} as online`);
+        },
+      );
+    } catch (error) {
+      console.error(`Error registering presence for user ${userId}:`, error);
+    }
 
-    // socket.on('getOnlineUsers', ()=>{
-    //   console.log('Online users requested');
-    //   socket.emit("onlineUsers", onlineUsers);
-    // })
-    
+    // mark the user as online in the database
+    // .catch((err) => {
+    //   console.error(`Error marking user ${userId} as online:`, err);
+    // });
+
+    const presenceHeartbeat = setInterval(async () => {
+      try {
+        await userHeartbeat(userId, socket.id);
+      } catch (error) {
+        console.error(`Presence heartbeat failed for ${userId}:`, error);
+      }
+    }, 10_000);
+
     socket.on("message", async (message) => {
       console.log(`Message received: ${message}`);
-      
+
       //store the message in global_chat_messages table
       try {
         await sql`insert into global_chat_messages (user_id, message) values (${message.sender_id}, ${message.text})`;
@@ -68,45 +98,43 @@ export const initializeSocketHandler = (serverSocket: Server) => {
 
       // Broadcast the message to all clients except the sender
       serverSocket.emit("message", message);
-
     });
 
     socket.on("dealCards", async (code) => {
-      try{
+      try {
         const lockAcquired = await acquireLock(code);
-        if(!lockAcquired){
-          console.log("Request blocked: Processing previous  move.")
+        if (!lockAcquired) {
+          console.log("Request blocked: Processing previous  move.");
           return;
         }
         console.log(`Deal cards request for game code: ${code}`);
-        if( await gameExists(code)){
+        if (await gameExists(code)) {
           const game = await getGameByCode(code);
           dealCards(game);
           serverSocket.to(code).emit("dealtCards", game?.cards);
           serverSocket.to(code).emit("updatedGameData", game);
-         await saveGame(code, game);
-      }else{
+          await saveGame(code, game);
+        } else {
           socket.emit("game-not-found");
         }
-      }catch(err){
-        console.error('Error in ShuffleDeck:', err)
-      }finally{
+      } catch (err) {
+        console.error("Error in ShuffleDeck:", err);
+      } finally {
         console.log("Releasing lock...");
         await releaseLock(code);
-        console.log('Lock Released');
+        console.log("Lock Released");
       }
-
     });
 
     socket.on("shuffleDeck", async (code) => {
-      try{
+      try {
         const lockAcquired = await acquireLock(code);
-        if(!lockAcquired){
-          console.log("Request blocked: Processing previous  move.")
+        if (!lockAcquired) {
+          console.log("Request blocked: Processing previous  move.");
           return;
         }
         console.log(`Shuffle deck request for game code: ${code}`);
-        if( await gameExists(code)){
+        if (await gameExists(code)) {
           const game = await getGameByCode(code);
           shuffleDeck(game);
           serverSocket.to(code).emit("shuffledDeck", game?.cards);
@@ -114,86 +142,83 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         } else {
           socket.emit("game-not-found");
         }
-      }catch(err){
-          console.error('Error in ShuffleDeck:', err)
-      }finally{
+      } catch (err) {
+        console.error("Error in ShuffleDeck:", err);
+      } finally {
         console.log("Releasing lock...");
         await releaseLock(code);
-        console.log('Lock Released');
+        console.log("Lock Released");
       }
-     
     });
 
-    socket.on("playCard", async ({game_code, card_id, player_id}) => {
-      try{
+    socket.on("playCard", async ({ game_code, card_id, player_id }) => {
+      try {
         const lockAcquired = await acquireLock(game_code);
-        if(!lockAcquired){
-          console.log("Request blocked: Processing previous  move.")
+        if (!lockAcquired) {
+          console.log("Request blocked: Processing previous  move.");
           return;
         }
         console.log("Playing card...", game_code, card_id, player_id);
-        if(await gameExists(game_code)){
+        if (await gameExists(game_code)) {
           const game = await getGameByCode(game_code);
           playCard(game, card_id, player_id, socket);
           await saveGame(game_code, game);
-        }else{
+        } else {
           socket.emit("game-not-found");
         }
-
-      }catch(error){
+      } catch (error) {
         console.error("Error in playCard:", error);
-      }finally{
+      } finally {
         console.log("Releasing lock...");
         await releaseLock(game_code);
-        console.log('Lock Released');
+        console.log("Lock Released");
       }
-
     });
 
-
-    socket.on("readyForNextHand", async ({code, winningPlayer}) => {
-      if( await gameExists(code)){
-        const game = await getGameByCode(code) as Game;
-        game.current_player_position = (winningPlayer.position);
+    socket.on("readyForNextHand", async ({ code, winningPlayer }) => {
+      if (await gameExists(code)) {
+        const game = (await getGameByCode(code)) as Game;
+        game.current_player_position = winningPlayer.position;
         game.status = "in_progress";
         game.started_at = new Date().toISOString();
         game.round_number = 1;
-        game.current_hand_number ++;
+        game.current_hand_number++;
         game.current_trick = null;
         game.completed_tricks = [];
 
         // set winning player to dealer
-        let next_dealer = game.players.find((player:any)=> player.id == winningPlayer.id)
+        let next_dealer = game.players.find(
+          (player: any) => player.id == winningPlayer.id,
+        );
 
-        game.players.forEach((player)=>player.is_dealer=false);
+        game.players.forEach((player) => (player.is_dealer = false));
 
-        if(next_dealer){
+        if (next_dealer) {
           next_dealer.is_dealer = true;
         }
 
         // reset game cards
-        game.cards.forEach((card)=>{
+        game.cards.forEach((card) => {
           card.hand_position = -1;
           card.player_id = 0;
-          card.status = 'in_deck';
-          
-        })
+          card.status = "in_deck";
+        });
 
-        game.current_turn_user_id = game.players.find((player:any)=>player.position == game.current_player_position)?.user?.id as number;
+        game.current_turn_user_id = game.players.find(
+          (player: any) => player.position == game.current_player_position,
+        )?.user?.id as number;
         await saveGame(code, game);
-        serverSocket.to(code).emit('startNewHand', game);
-
-      }else{
+        serverSocket.to(code).emit("startNewHand", game);
+      } else {
         socket.emit("game-not-found");
       }
-
     });
 
-    socket.on("rematch", async ({code, winningPlayer}) => {
-      if( await gameExists(code)){
-        const game = await getGameByCode(code) as Game;
-        console.log('winningPlayer', winningPlayer);
-        game.current_player_position = winningPlayer.position ;
+    socket.on("rematch", async ({ code, winningPlayer }) => {
+      if (await gameExists(code)) {
+        const game = (await getGameByCode(code)) as Game;
+        console.log("winningPlayer", winningPlayer);
+        game.current_player_position = winningPlayer.position;
         game.status = "in_progress";
         game.started_at = new Date().toISOString();
         game.round_number = 1;
@@ -202,90 +227,99 @@ export const initializeSocketHandler = (serverSocket: Server) => {
         game.completed_tricks = [];
 
         // set winning player to dealer
-        let next_dealer = game.players.find((player:any)=> player.id == winningPlayer.id)
+        let next_dealer = game.players.find(
+          (player: any) => player.id == winningPlayer.id,
+        );
 
-        game.players.forEach((player)=>player.is_dealer=false);
-        game.players.forEach((player)=>player.score=0);
+        game.players.forEach((player) => (player.is_dealer = false));
+        game.players.forEach((player) => (player.score = 0));
 
-        if(next_dealer){
+        if (next_dealer) {
           next_dealer.is_dealer = true;
         }
 
         // reset game cards
-        game.cards.forEach((card)=>{
+        game.cards.forEach((card) => {
           card.hand_position = -1;
           card.player_id = 0;
-          card.status = 'in_deck';
-          
-        })
+          card.status = "in_deck";
+        });
 
         await saveGame(code, game);
-        console.log('rematch', game.players);
-        serverSocket.to(code).emit('rematch', game);
-
-      }else{
+        console.log("rematch", game.players);
+        serverSocket.to(code).emit("rematch", game);
+      } else {
         socket.emit("game-not-found");
       }
-
     });
-
 
     socket.on("join-room", async (code) => {
       console.log(`User ${userId} joining game: ${code}`);
-      if ( await gameExists(code)) {
+      if (await gameExists(code)) {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
       }
     });
 
-    socket.on("joinTournamentRoom", async ({tournamentId, userId, gameCode}) => {
-      console.log(`User ${userId} joining tournament room: ${tournamentId} with gamecode ${gameCode}`);
-      socket.join(`tournament_${tournamentId}`);
-      if(gameCode)socket.join(`lobby_game_room:${gameCode}`)
-    });
-    
-    socket.on("leaveTournamentRoom", async({tournamentId, userId, gameCode})=>{
-      console.log(`User ${userId} leaving tournament room: ${tournamentId} with gamecode ${gameCode}`);
-      socket.leave(`tournament_${tournamentId}`);
-      if(gameCode)socket.leave(`lobby_game_room:${gameCode}`)
-    });
+    socket.on(
+      "joinTournamentRoom",
+      async ({ tournamentId, userId, gameCode }) => {
+        console.log(
+          `User ${userId} joining tournament room: ${tournamentId} with gamecode ${gameCode}`,
+        );
+        socket.join(`tournament_${tournamentId}`);
+        if (gameCode) socket.join(`lobby_game_room:${gameCode}`);
+      },
+    );
 
-    socket.on("playerJoin", async ({userId, gameCode}) => {
+    socket.on(
+      "leaveTournamentRoom",
+      async ({ tournamentId, userId, gameCode }) => {
+        console.log(
+          `User ${userId} leaving tournament room: ${tournamentId} with gamecode ${gameCode}`,
+        );
+        socket.leave(`tournament_${tournamentId}`);
+        if (gameCode) socket.leave(`lobby_game_room:${gameCode}`);
+      },
+    );
+
+    socket.on("playerJoin", async ({ userId, gameCode }) => {
       console.log(`User ${userId} joining game: ${gameCode}`);
-      if ( await gameExists(gameCode)) {
+      if (await gameExists(gameCode)) {
         const game = await getGameByCode(gameCode);
 
-        if(game){
+        if (game) {
+          const userAlreadyJoined = game.players.find(
+            (player: any) => player.user.id === userId,
+          );
+          console.log(
+            `${serverSocket.sockets.adapter.rooms.get(gameCode)?.size} players connected`,
+          );
 
-        
-        
-        const userAlreadyJoined = game.players.find(((player:any)=>player.user.id === userId));
-        console.log(`${serverSocket.sockets.adapter.rooms.get(gameCode)?.size} players connected`)
+          if (userAlreadyJoined) {
+            socket.join(gameCode);
+            console.log("userAlreadyJoined", userAlreadyJoined?.user?.username);
+            return;
+          }
 
-        if(userAlreadyJoined){
-          socket.join(gameCode);
-          console.log('userAlreadyJoined', userAlreadyJoined?.user?.username);
-          return;
+          if (game.players.length == game.player_count) {
+            console.log(`Room ${game.code} is full`);
+            return;
+          }
+
+          const player = await createGamePlayer(
+            game.id,
+            userId,
+            game.players.length,
+          );
+
+          if (player) {
+            game.players.push(player);
+            await saveGame(gameCode, game);
+            serverSocket.to(gameCode).emit("gameData", game);
+          }
         }
-
-        if(game.players.length == game.player_count){
-           console.log(`Room ${game.code} is full`);
-           return;
-        }
-
-
-
-        const player = await createGamePlayer(game.id, userId, game.players.length);
-
-         if(player){
-           game.players.push(player);
-           await saveGame(gameCode, game);
-           serverSocket.to(gameCode).emit('gameData', game)
-         }
       }
-
-    }
-
     });
 
     socket.on("leave-room", async (code) => {
@@ -297,8 +331,7 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
     socket.on("getGameData", async (code) => {
-
-      console.log('request for game data', code);
+      console.log("request for game data", code);
       const game = await getGameByCode(code);
       if (game) {
         socket.emit("gameData", game);
@@ -327,124 +360,283 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     });
 
     // game_chat_messages
-    socket.on('sendMessage', async ({game_code, user_id, type, avatar, username, message, timestamp})=>{
-      console.log(`Message received in game ${game_code} from user ${user_id}: ${message}`);
+    socket.on(
+      "sendMessage",
+      async ({
+        game_code,
+        user_id,
+        type,
+        avatar,
+        username,
+        message,
+        timestamp,
+      }) => {
+        console.log(
+          `Message received in game ${game_code} from user ${user_id}: ${message}`,
+        );
 
-      //store the message in game_chat_messages table
-      try {
-        await sql`insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${type}, ${timestamp})`;
-        await sql`insert into spectator_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
-      } catch (error: any) {
-        console.error("Error storing game message:", error.message);
-      }
+        //store the message in game_chat_messages table
+        try {
+          await sql`insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${type}, ${timestamp})`;
+          await sql`insert into spectator_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+        } catch (error: any) {
+          console.error("Error storing game message:", error.message);
+        }
 
-      // Broadcast the message to all clients in the game room
-      socket.to(game_code).emit("chatMessage", {user_id, type:"text", username, avatar, timestamp, message, game_code});
-      socket.to(game_code).emit("spectatorChatMessage", {user_id, avatar, username, message, timestamp, game_code});
-      console.log({user_id, username, avatar, timestamp, message, game_code})
-
-    });
+        // Broadcast the message to all clients in the game room
+        socket.to(game_code).emit("chatMessage", {
+          user_id,
+          type: "text",
+          username,
+          avatar,
+          timestamp,
+          message,
+          game_code,
+        });
+        socket.to(game_code).emit("spectatorChatMessage", {
+          user_id,
+          avatar,
+          username,
+          message,
+          timestamp,
+          game_code,
+        });
+        console.log({
+          user_id,
+          username,
+          avatar,
+          timestamp,
+          message,
+          game_code,
+        });
+      },
+    );
 
     // typing game_chat_messages
-    socket.on('typingGameChat', async({game_code, user_id, username, avatar})=>{
-      socket.to(game_code).emit('typingGameChat', {user_id, username, avatar, game_code});
-    })
+    socket.on(
+      "typingGameChat",
+      async ({ game_code, user_id, username, avatar }) => {
+        socket
+          .to(game_code)
+          .emit("typingGameChat", { user_id, username, avatar, game_code });
+      },
+    );
 
+    socket.on(
+      "voiceMessage",
+      async ({
+        user_id,
+        username,
+        avatar,
+        mime_type,
+        timestamp,
+        audio,
+        game_code,
+      }) => {
+        console.log(
+          `Voice message received in game ${game_code} from user ${user_id}`,
+        );
 
-    socket.on("voiceMessage", async ({user_id, username, avatar, mime_type, timestamp, audio, game_code})=>{
-      console.log(`Voice message received in game ${game_code} from user ${user_id}`);
+        // Broadcast the voice message to all clients in the game room
+        socket.to(game_code).emit("voiceMessage", {
+          user_id,
+          username,
+          type: "audio",
+          avatar,
+          mime_type,
+          timestamp,
+          audio,
+          game_code,
+        });
+        console.log({
+          user_id,
+          username,
+          avatar,
+          mime_type,
+          timestamp,
+          audio,
+          game_code,
+        });
+      },
+    );
 
-      // Broadcast the voice message to all clients in the game room
-      socket.to(game_code).emit("voiceMessage", {user_id, username, type:"audio", avatar, mime_type, timestamp, audio, game_code});
-      console.log({user_id, username, avatar, mime_type, timestamp, audio, game_code});
-    });
+    socket.on(
+      "tournamentChatMessage",
+      async ({
+        tournament_id,
+        user_id,
+        avatar,
+        username,
+        message,
+        timestamp,
+      }) => {
+        console.log(
+          `Message received in tournament ${tournament_id} from user ${user_id}: ${message}`,
+        );
 
-    socket.on("tournamentChatMessage", async ({tournament_id, user_id, avatar, username, message, timestamp})=>{
-      console.log(`Message received in tournament ${tournament_id} from user ${user_id}: ${message}`);
+        //store the message in tournament_chat_messages table
+        try {
+          await sql`insert into tournament_chat_messages (tournament_id, user_id, username, message, created_at) values (${tournament_id}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+        } catch (error: any) {
+          console.error(
+            "Error storing tournament chat message:",
+            error.message,
+          );
+        }
 
-      //store the message in tournament_chat_messages table
-      try {
-        await sql`insert into tournament_chat_messages (tournament_id, user_id, username, message, created_at) values (${tournament_id}, ${user_id}, ${username}, ${message}, ${timestamp})`;
-      } catch (error: any) {
-        console.error("Error storing tournament chat message:", error.message);
-      }
+        // Broadcast the message to all clients in the tournament room
+        socket.to(`tournament_${tournament_id}`).emit("tournamentChatMessage", {
+          user_id,
+          avatar,
+          username,
+          message,
+          timestamp,
+          tournament_id,
+        });
+        console.log({
+          user_id,
+          avatar,
+          username,
+          message,
+          timestamp,
+          tournament_id,
+        });
+      },
+    );
 
-      // Broadcast the message to all clients in the tournament room
-      socket.to(`tournament_${tournament_id}`).emit("tournamentChatMessage", {user_id, avatar, username, message, timestamp, tournament_id});
-      console.log({user_id, avatar, username, message, timestamp, tournament_id})
-
-    });
-
-    socket.on('typingTournamentChat', ({tournament_id, user_id, avatar, username})=>{
-      socket.to(`tournament_${tournament_id}`).emit('typingTournamentChat', {user_id, avatar, username, tournament_id});
-    });
+    socket.on(
+      "typingTournamentChat",
+      ({ tournament_id, user_id, avatar, username }) => {
+        socket.to(`tournament_${tournament_id}`).emit("typingTournamentChat", {
+          user_id,
+          avatar,
+          username,
+          tournament_id,
+        });
+      },
+    );
 
     // typing indicator for spectator chat
-    socket.on('typingSpectatorChat', ({game_code, user_id, avatar, username})=>{
-      socket.to(game_code).emit('typingSpectatorChat', {user_id, avatar, username, game_code});
-    });
-    
+    socket.on(
+      "typingSpectatorChat",
+      ({ game_code, user_id, avatar, username }) => {
+        socket.to(game_code).emit("typingSpectatorChat", {
+          user_id,
+          avatar,
+          username,
+          game_code,
+        });
+      },
+    );
+
     // spectator messages
-    socket.on('spectatorChatMessage', async ({game_code, avatar, user_id, username, message, timestamp})=>{
-      console.log(`Spectator message received in game ${game_code} from user ${user_id}: ${message}`);
-      
-      
-      
-      // Broadcast the spectator message to all clients in the game room
-      socket.to(game_code).emit("spectatorChatMessage", {user_id, avatar, username, message, timestamp, game_code});
-      socket.to(game_code).emit("chatMessage", {user_id, type:"text", username, avatar, timestamp, message, game_code});
-      console.log({user_id, avatar, username, message, timestamp, game_code})
+    socket.on(
+      "spectatorChatMessage",
+      async ({ game_code, avatar, user_id, username, message, timestamp }) => {
+        console.log(
+          `Spectator message received in game ${game_code} from user ${user_id}: ${message}`,
+        );
 
-      // store the spectator message in spectator_chat_messages table
-      try {
-        await sql`insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, 'text', ${timestamp})`;
-        await sql`insert into spectator_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
-      } catch (error: any) {
-        console.error("Error storing spectator chat message:", error.message);
-      }
+        // Broadcast the spectator message to all clients in the game room
+        socket.to(game_code).emit("spectatorChatMessage", {
+          user_id,
+          avatar,
+          username,
+          message,
+          timestamp,
+          game_code,
+        });
+        socket.to(game_code).emit("chatMessage", {
+          user_id,
+          type: "text",
+          username,
+          avatar,
+          timestamp,
+          message,
+          game_code,
+        });
+        console.log({
+          user_id,
+          avatar,
+          username,
+          message,
+          timestamp,
+          game_code,
+        });
 
-    });
+        // store the spectator message in spectator_chat_messages table
+        try {
+          await sql`insert into game_chat_messages (game_code, user_id, username, message, type, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, 'text', ${timestamp})`;
+          await sql`insert into spectator_chat_messages (game_code, user_id, username, message, created_at) values (${game_code}, ${user_id}, ${username}, ${message}, ${timestamp})`;
+        } catch (error: any) {
+          console.error("Error storing spectator chat message:", error.message);
+        }
+      },
+    );
 
     // spectator typing indicator
-    socket.on('typingSpectatorChat', ({game_code, user_id, username})=>{
-      socket.to(game_code).emit('typingSpectatorChat', {user_id, username, game_code});
+    socket.on("typingSpectatorChat", ({ game_code, user_id, username }) => {
+      socket
+        .to(game_code)
+        .emit("typingSpectatorChat", { user_id, username, game_code });
     });
-
 
     socket.on("disconnect", async () => {
-      console.log(`User ${userId} disconnected`)
+      clearInterval(presenceHeartbeat);
 
-      const index = onlineUsers.findIndex((user) => user.user_id === userId);
-      if (index !== -1) {
-        onlineUsers.splice(index, 1);
-      }
+      console.log(`User ${userId} disconnected`);
 
-      serverSocket.emit("onlineUsersStatusChanged", onlineUsers);
       userSocketMap.delete(userId);
 
+      try {
+        const wentOffline = await userDisconnected(userId, socket.id);
+
+        // Only broadcast offline if this was
+        // the user's LAST active connection.
+        if (wentOffline) {
+          serverSocket.emit("presence:offline", {
+            userId,
+          });
+
+          console.log(`Presence: ${userId} is now offline`);
+
+          await sql`
+          UPDATE users
+          SET
+            online_status = false,
+            last_active = NOW()
+          WHERE id = ${userId}
+        `;
+        } else {
+          console.log(`User ${userId} still has another active connection`);
+        }
+      } catch (error) {
+        console.error(`Error removing presence for ${userId}:`, error);
+      }
+
       // mark the last_active timestamp for the user in the database
-      await sql`UPDATE users SET last_active = NOW() WHERE id = ${userId}`
-        .then(() => {
-          console.log(`Updated last_active for user ${userId}`);
-        })
-        .catch((err) => {
-          console.error(`Error updating last_active for user ${userId}:`, err);
-        });
+      // await sql`UPDATE users SET last_active = NOW() WHERE id = ${userId}`
+      //   .then(() => {
+      //     console.log(`Updated last_active for user ${userId}`);
+      //   })
+      //   .catch((err) => {
+      //     console.error(`Error updating last_active for user ${userId}:`, err);
+      //   });
 
       // mark the user as offline in the database
-      await sql`UPDATE users SET online_status = false WHERE id = ${userId}`
-        .then(() => {
-          console.log(`Marked user ${userId} as offline`);
-        })
-        .catch((err) => {
-          console.error(`Error marking user ${userId} as offline:`, err);
-        });
+      // await sql`UPDATE users SET online_status = false WHERE id = ${userId}`
+      //   .then(() => {
+      //     console.log(`Marked user ${userId} as offline`);
+      //   })
+      //   .catch((err) => {
+      //     console.error(`Error marking user ${userId} as offline:`, err);
+      //   });
     });
   });
-  
+
   // Handle match found events
   matchmaker.on("matchFound", ({ gameCode, gameId, players }) => {
-    console.log('players',players)
+    console.log("players", players);
 
     for (const player of players) {
       const socketId = userSocketMap.get(player.id);
@@ -456,9 +648,8 @@ export const initializeSocketHandler = (serverSocket: Server) => {
     serverSocket.to(gameCode).emit("matchFound", {
       gameCode,
       gameId,
-      players
+      players,
     });
-
   });
 
   matchmaker.on("gameStarted", ({ gameCode }) => {

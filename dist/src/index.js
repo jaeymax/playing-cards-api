@@ -41,6 +41,7 @@ const wallet_1 = __importDefault(require("./routes/wallet"));
 const payout_1 = __importDefault(require("./routes/payout"));
 const webhook_1 = __importDefault(require("./routes/webhook"));
 const challenges_1 = __importDefault(require("./routes/challenges"));
+const presence_1 = __importDefault(require("./routes/presence"));
 const matchmaking_2 = __importDefault(require("./services/matchmaking"));
 const socketHandler_1 = require("./socketHandler");
 const ioredis_1 = __importDefault(require("ioredis"));
@@ -380,6 +381,7 @@ exports.app.use("/api/notifications", notifications_1.default);
 exports.app.use("/api/wallet", wallet_1.default);
 exports.app.use("/api/payout-method", payout_1.default);
 exports.app.use("/api/challenges", challenges_1.default);
+exports.app.use("/api/presence", presence_1.default);
 //app.use(notFoundMiddleware);
 exports.app.post("/api/test-sms", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { phone } = req.body;
