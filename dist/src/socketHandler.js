@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.initializeSocketHandler = exports.onlineUsers = exports.userSocketMap = void 0;
+exports.initializeSocketHandler = exports.onlineUsers = exports.userGameMap = exports.userSocketMap = void 0;
 const db_1 = __importDefault(require("./config/db"));
 const index_1 = require("./index");
 const gameFunctions_1 = require("./utils/gameFunctions");
@@ -20,6 +20,7 @@ const gameFunctions_2 = require("./utils/gameFunctions");
 const gameFunctions_3 = require("./utils/gameFunctions");
 const presenceService_1 = require("./services/presenceService");
 exports.userSocketMap = new Map();
+exports.userGameMap = new Map();
 exports.onlineUsers = [];
 function acquireLock(gameCode_1) {
     return __awaiter(this, arguments, void 0, function* (gameCode, timeout = 5000) {
@@ -237,6 +238,13 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
             if (yield (0, gameFunctions_2.gameExists)(code)) {
                 socket.join(code);
                 serverSocket.to(code).emit("userJoined", { userId, code });
+                exports.userGameMap.set(userId, code);
+                (0, presenceService_1.setUserStatus)(userId, 'in_match');
+                serverSocket.emit("presence:status", {
+                    userId,
+                    status: 'in_match',
+                    game_code: code
+                });
             }
         }));
         socket.on("joinTournamentRoom", (_a) => __awaiter(void 0, [_a], void 0, function* ({ tournamentId, userId, gameCode }) {
@@ -282,6 +290,12 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
             if (yield (0, gameFunctions_2.gameExists)(code)) {
                 socket.leave(code);
                 serverSocket.to(code).emit("userLeft", { userId, code });
+                (0, presenceService_1.setUserStatus)(userId, 'idle');
+                serverSocket.emit("presence:status", {
+                    userId,
+                    status: 'idle'
+                });
+                exports.userGameMap.delete(userId);
             }
         }));
         socket.on("getGameData", (code) => __awaiter(void 0, void 0, void 0, function* () {

@@ -17,6 +17,7 @@ const express_async_handler_1 = __importDefault(require("express-async-handler")
 const presenceService_1 = require("../services/presenceService");
 const db_1 = __importDefault(require("../config/db"));
 const users_1 = require("./users");
+const socketHandler_1 = require("../socketHandler");
 exports.getOnlineUsers = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userIds = yield (0, presenceService_1.getOnlineUserIds)();
     if (userIds.length === 0) {
@@ -70,7 +71,7 @@ exports.getOnlineUsersWithStatusController = (0, express_async_handler_1.default
     `;
     const playersWithStatus = players.map((player) => {
         const userStatus = userIds.find((user) => Number(user.userId) === player.id);
-        return Object.assign(Object.assign(Object.assign({}, player), (0, users_1.getDivisionInfo)(player.rating)), { status: userStatus === null || userStatus === void 0 ? void 0 : userStatus.status });
+        return Object.assign(Object.assign(Object.assign({}, player), (0, users_1.getDivisionInfo)(player.rating)), { status: userStatus === null || userStatus === void 0 ? void 0 : userStatus.status, game_code: socketHandler_1.userGameMap.get(player.id) || null });
     });
     res.status(200).json({
         success: true,
