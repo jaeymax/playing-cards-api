@@ -7,6 +7,7 @@ import {
 } from "../services/presenceService";
 import sql from "../config/db";
 import { getDivisionInfo } from "./users";
+import { userGameMap } from "../socketHandler";
 
 export const getOnlineUsers = expressAsyncHandler(
   async (req: Request, res: Response) => {
@@ -79,6 +80,7 @@ export const getOnlineUsersWithStatusController = expressAsyncHandler(
         ...player,
         ...getDivisionInfo(player.rating),
         status: userStatus?.status,
+        game_code: userGameMap.get(player.id) || null,
       };
     });
 

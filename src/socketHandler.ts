@@ -12,12 +12,14 @@ import { gameExists } from "./utils/gameFunctions";
 import { getGameByCode } from "./utils/gameFunctions";
 import { Game } from "../types";
 import {
+  setUserStatus,
   userConnected,
   userDisconnected,
   userHeartbeat,
 } from "./services/presenceService";
 
 export const userSocketMap = new Map();
+export const userGameMap = new Map();
 export const onlineUsers: any[] = [];
 
 async function acquireLock(gameCode: string, timeout = 5000) {
@@ -258,6 +260,13 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
       if (await gameExists(code)) {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
+        userGameMap.set(userId, code);
+        setUserStatus(userId, 'in_match');
+          serverSocket.emit("presence:status", {
+          userId,
+          status: 'in_match',
+          game_code: code
+        });
       }
     });
 
@@ -327,6 +336,12 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
       if (await gameExists(code)) {
         socket.leave(code);
         serverSocket.to(code).emit("userLeft", { userId, code });
+        setUserStatus(userId, 'idle');
+        serverSocket.emit("presence:status", {
+          userId,
+          status: 'idle'
+        });
+        userGameMap.delete(userId);
       }
     });
 
