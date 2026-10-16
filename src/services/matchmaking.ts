@@ -1,161 +1,240 @@
+
 import { EventEmitter } from "events";
-import sql from "../config/db";
-import asyncHandler from "express-async-handler";
+import type Redis from "ioredis";
+import { saveGame } from "../utils/gameFunctions";
+import { setUserStatus } from "./presenceService";
+import { serverSocket } from "..";
+
+interface QueueEntry {
+  userId: number;
+  rating: number;
+  joinedAt: number;
+}
+
+interface MatchFoundPayload {
+  gameCode: string;
+  gameId: number;
+  players: any[];
+  positions: Record<number, number>;
+}
+
+type CreateMatchFn = (
+  player1Id: number,
+  player2Id: number
+) => Promise<MatchFoundPayload>;
 
 class Matchmaker extends EventEmitter {
-  private interval: ReturnType<typeof setInterval> | null = null;
-  private readonly checkInterval: number = 5000;
-  private readonly ratingRange: number = 0;
+  private readonly queueKey = "matchmaking:queue";
+  private readonly ratingsKey = "matchmaking:ratings";
 
-  constructor() {
+  // 0 means any rating difference is allowed.
+  private readonly ratingRange = 0;
+
+  private matching = false;
+
+  constructor(
+    private readonly redis: Redis,
+    private readonly createMatchFn:any
+  ) {
     super();
-    //this.start();
   }
 
-  addToQueue = async (userId: number, rating: number): Promise<void> => {
+  /**
+   * Atomically finds two eligible players and removes them
+   * from the queue so they cannot be paired again.
+   *
+   * Queue scores represent their original joining timestamps.
+   */
+  private readonly reserveMatchScript = `
+    local queueKey = KEYS[1]
+    local ratingsKey = KEYS[2]
+    local ratingRange = tonumber(ARGV[1])
+
+    local entries = redis.call(
+      "ZRANGE", queueKey, 0, -1, "WITHSCORES"
+    )
+
+    if #entries < 4 then
+      return {}
+    end
+
+    local selectedFirst = nil
+    local selectedSecond = nil
+    local bestDifference = nil
+
+    -- The first player is the longest-waiting player.
+    local firstId = entries[1]
+    local firstRating = tonumber(
+      redis.call("HGET", ratingsKey, firstId)
+    )
+
+    if not firstRating then
+      redis.call("ZREM", queueKey, firstId)
+      redis.call("HDEL", ratingsKey, firstId)
+      return {}
+    end
+
+    selectedFirst = firstId
+
+    -- Find the closest-rated eligible opponent.
+    for i = 3, #entries, 2 do
+      local candidateId = entries[i]
+      local candidateRating = tonumber(
+        redis.call("HGET", ratingsKey, candidateId)
+      )
+
+      if candidateRating then
+        local difference = math.abs(firstRating - candidateRating)
+
+        if (ratingRange == 0 or difference <= ratingRange)
+          and (
+            bestDifference == nil
+            or difference < bestDifference
+          ) then
+          selectedSecond = candidateId
+          bestDifference = difference
+        end
+      end
+    end
+
+    if not selectedSecond then
+      return {}
+    end
+
+    local firstScore = redis.call("ZSCORE", queueKey, selectedFirst)
+    local secondScore = redis.call("ZSCORE", queueKey, selectedSecond)
+
+    redis.call("ZREM", queueKey, selectedFirst, selectedSecond)
+
+    return {
+      selectedFirst,
+      tostring(firstRating),
+      firstScore,
+      selectedSecond,
+      tostring(redis.call("HGET", ratingsKey, selectedSecond)),
+      secondScore
+    }
+  `;
+
+  addToQueue = async (
+    userId: number,
+    rating: number
+  ): Promise<void> => {
     try {
-      await sql`
-        INSERT INTO matchmaking_queue (user_id, rating) 
-        VALUES (${userId}, ${rating}) 
-        ON CONFLICT (user_id) DO UPDATE 
-        SET joined_at = NOW()
-      `;
-      this.checkMatches();
+      const joinedAt = Date.now();
+
+      // Preserve the original joining time if already queued.
+      const existingScore = await this.redis.zscore(
+        this.queueKey,
+        String(userId)
+      );
+
+      if (existingScore === null) {
+        await this.redis
+          .multi()
+          .zadd(this.queueKey, joinedAt, String(userId))
+          .hset(this.ratingsKey, String(userId), rating)
+          .exec();
+      } else {
+        // Refresh the rating without resetting queue position.
+        await this.redis.hset(this.ratingsKey, String(userId), rating);
+      }
+
+      console.log(`User ${userId} added to matchmaking queue with rating ${rating}.`);
+      await setUserStatus(userId, "looking_for_game");
+      serverSocket.emit("presence:status", { userId, status: "looking_for_game" });
+      await this.checkMatches();
     } catch (error) {
-      console.error('Error adding user to matchmaking queue:', error);
-      //throw error; // Re-throw the original error for proper handling
+      console.error("Error adding user to matchmaking queue:", error);
+       await setUserStatus(userId, "idle");
+       serverSocket.emit("presence:status", { userId, status: "idle" });
+      throw error;
     }
   };
 
   removeFromQueue = async (userId: number): Promise<void> => {
     try {
-      await sql`DELETE FROM matchmaking_queue WHERE user_id = ${userId}`;
+      await this.redis
+      .multi()
+      .zrem(this.queueKey, String(userId))
+      .hdel(this.ratingsKey, String(userId))
+      .exec();
+      await setUserStatus(userId, "idle");
+      serverSocket.emit("presence:status", { userId, status: "idle" });
     } catch (error) {
-      console.error('Error removing user from matchmaking queue:', error);
-     // throw error; // Re-throw the original error for proper handling
+      console.error("Error removing user from matchmaking queue:", error);
+      throw error;
     }
   };
 
-  private async checkMatches(): Promise<void> {
+  private checkMatches = async (): Promise<void> => {
+    if (this.matching) return;
+
+    this.matching = true;
+
     try {
-      const potentialMatches = await sql`
-        WITH potential_matches AS (
-          SELECT 
-            a.user_id AS user1, 
-            a.joined_at AS joined_at1,
-            b.user_id AS user2,
-            b.joined_at AS joined_at2,
-            ABS(a.rating - b.rating) AS rating_diff
-          FROM matchmaking_queue a
-          JOIN matchmaking_queue b ON a.user_id < b.user_id
-          WHERE ABS(a.rating - b.rating) >= ${this.ratingRange}
-          ORDER BY rating_diff, a.joined_at
-          LIMIT 1
-        )
-        SELECT * FROM potential_matches
-      `;
+      while (true) {
+        const result = (await this.redis.eval(
+          this.reserveMatchScript,
+          2,
+          this.queueKey,
+          this.ratingsKey,
+          this.ratingRange
+        )) as string[];
 
-      console.log("Checking for matches:", potentialMatches);
-      if (potentialMatches.length > 0) {
-        const { user1, joined_at1, user2, joined_at2 } = potentialMatches[0];
+        console.log("Matchmaking result:", result);
 
-        console.log("potential_matches", potentialMatches);
-        if (joined_at1 < joined_at2) {
-          await this.createMatch(user1, user2);
-        } else {
-          await this.createMatch(user2, user1);
+        if (!result || result.length < 6) {
+          break;
+        }
+
+        const [
+          firstId,
+          firstRating,
+          firstScore,
+          secondId,
+          secondRating,
+          secondScore,
+        ] = result;
+
+        const user1 = Number(firstId);
+        const user2 = Number(secondId);
+
+        try {
+          // Use your existing game-creation and initialization flow here.
+          const match = await this.createMatchFn(user1, user2);
+
+          this.emit("matchFound", {
+            ...match,
+          });
+
+          await saveGame(match.code, match);
+
+          console.log(
+            `Match created: Game ${match.code} for players ${user1}, ${user2}`
+          );
+        } catch (error) {
+          console.error("Match creation failed:", error);
+
+          // Put both players back in their original queue positions.
+          await this.redis
+            .multi()
+            .zadd(this.queueKey, Number(firstScore), firstId)
+            .zadd(this.queueKey, Number(secondScore), secondId)
+            .hset(this.ratingsKey, firstId, firstRating)
+            .hset(this.ratingsKey, secondId, secondRating)
+            .exec();
+
+          // Stop here to avoid repeatedly retrying the same failed pair.
+          break;
         }
       }
     } catch (error) {
-      console.error('Error checking for matches:', error);
-      // Don't throw here as this is called internally and shouldn't crash the service
+      console.error("Error checking for matches:", error);
+    } finally {
+      this.matching = false;
     }
-  }
-
-  private async createMatch(userId1: number, userId2: number): Promise<void> {
-    try {
-      const gameCode = Math.random().toString(36).substring(2, 12);
-
-      // Get full user data for both players
-      // const players = await sql`
-      //   SELECT id, username, email, image_url, rating, location, games_played, games_won
-      //   FROM users
-      //   WHERE id IN (${userId1}, ${userId2})
-      // `;
-
-      const result = await sql.transaction((sql) => [
-        sql`
-          INSERT INTO games (code, created_by, status, player_count, current_player_position, is_rated) 
-          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 1, true) 
-          RETURNING id
-        `,
-        sql`
-          WITH new_game_id AS (SELECT lastval() AS game_id)
-          INSERT INTO game_players (game_id, user_id, position, is_dealer)
-          VALUES 
-            ((SELECT game_id FROM new_game_id), ${userId1}::integer, 0, true),
-            ((SELECT game_id FROM new_game_id), ${userId2}::integer, 1, false)
-          RETURNING 
-            user_id as id,
-            id as player_id,
-            position,
-            is_dealer,
-            (SELECT username FROM users WHERE users.id = user_id) as username,
-            (SELECT image_url FROM users WHERE users.id = user_id) as image_url,
-            (SELECT rating FROM users WHERE users.id = user_id) as rating
-        `,
-        sql`
-          DELETE FROM matchmaking_queue 
-          WHERE user_id IN (${userId1}, ${userId2})
-        `,
-      ]);
-
-      const cards = await sql`
-        SELECT card_id FROM cards ORDER BY RANDOM()`;
-
-      const gameId = result[0][0].id;
-      const players = result[1];
-
-      const dealer = players.find((player)=> player.is_dealer);
-
-      cards.forEach( async(card)=>{
-        await sql`INSERT INTO game_cards (game_id, card_id, player_id, hand_position) 
-        VALUES (${gameId}, ${card.card_id}, ${dealer?.player_id}, ${-1})`
-
-      })
-
-      this.emit("matchFound", {
-        gameCode,
-        gameId,
-        players,
-        positions: players.reduce((acc: any, p: any) => {
-          acc[p.user_id] = p.position;
-          return acc;
-        }, {}),
-      });
-
-      console.log(`Match created: Game ID ${gameId} for players:`, players);
-    } catch (error) {
-      console.error("Match creation failed:", error);
-      // Don't throw here as this is called internally and shouldn't crash the service
-    }
-  }
-
-  start(): void {
-    if (!this.interval) {
-      this.interval = setInterval(
-        () => this.checkMatches(),
-        this.checkInterval
-      );
-    }
-  }
-
-  stop(): void {
-    if (this.interval) {
-      clearInterval(this.interval as NodeJS.Timeout);
-      this.interval = null;
-    }
-  }
+  };
 }
 
 export default Matchmaker;

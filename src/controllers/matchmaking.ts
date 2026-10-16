@@ -7,19 +7,22 @@ import { saveGame } from "../utils/gameFunctions";
 import { mixpanel } from "..";
 
 export const joinQueue = asyncHandler(async (req: Request, res: Response) => {
-  const { userId, rating } = req.body;
+  
+  const userId = req.user.userId;
+  let rating = await sql`SELECT rating FROM users WHERE id = ${userId}`;
+
 
   if (!userId || !rating) {
     res.status(400).json({ error: "User ID and rating are required" });
     return;
   }
 
-  await matchmaker.addToQueue(userId, rating || 1000);
+  await matchmaker.addToQueue(userId, rating[0].rating);
   res.json({ success: true });
 });
 
 export const leaveQueue = asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.body;
+  const userId = req.user.userId;
   await matchmaker.removeFromQueue(userId);
   res.json({ success: true });
 });

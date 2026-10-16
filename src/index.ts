@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Server } from "socket.io";
-import https from "https";
 import path from "path";
 import http from "http";
 import authRoutes from "./routes/auth";
@@ -26,15 +25,12 @@ import walletRoutes from "./routes/wallet";
 import payoutRoutes from "./routes/payout";
 import webhookRoutes from "./routes/webhook";
 import challengeRoutes from "./routes/challenges";
-import presenceRoutes from "./routes/presence"
+import presenceRoutes from "./routes/presence";
 import Matchmaker from "./services/matchmaking";
 import { initializeSocketHandler } from "./socketHandler";
-import type { Game } from "../types";
 import Redis from "ioredis";
 import sql from "./config/db";
-import authMiddleware from "./middlewares/authMiddleware";
 import Mixpanel from "mixpanel";
-import fs from "fs";
 import MatchForfeiter from "./services/matchForfeiter";
 import { monitorEventLoopDelay } from "perf_hooks";
 //import { TwilioClient } from "./config/twilio";
@@ -47,6 +43,10 @@ import {
 } from "./services/tournament";
 import ExpiredChallenges from "./services/matchExpired";
 import { sendNotificationToUser } from "./services/notification";
+import { createChallengeGame, createEmitToUser, createMatchmakerMatch, getPlayerProfile } from "./utils";
+import { connectionsKey } from "./services/presenceService";
+import { assert } from "console";
+import { ChallengeService } from "./services/challengeService";
 //import admin from "firebase-admin"
 
 const cron = require("node-cron");
@@ -459,7 +459,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/payout-method", payoutRoutes);
 app.use("/api/challenges", challengeRoutes);
-app.use("/api/presence", presenceRoutes)
+app.use("/api/presence", presenceRoutes);
 //app.use(notFoundMiddleware);
 
 app.post(
@@ -747,13 +747,88 @@ async function uploadFileToS3(
 const port = process.env.PORT || 5000;
 
 server.listen(port, () => {
-  console.log(`[server]: Server is running at https://localhost:${port}`);
+  console.log(`[server]: Server is running at http://localhost:${port}`);
   console.log(`[server]: Environment: ${process.env.NODE_ENV}`);
 });
 
-export const matchmaker = new Matchmaker();
+
+export const matchmaker = new Matchmaker(redis, createMatchmakerMatch);
 export const matchForfeiter = new MatchForfeiter(serverSocket);
 export const expiredChallenges = new ExpiredChallenges(serverSocket);
+export const emitToUser = createEmitToUser(serverSocket, redis);
+export const challengeService = new ChallengeService({
+  redis,
+  emitToUser,
+  getPlayerProfile,
+  createChallengeGame,
+});
+
+matchmaker.on("matchFound", async (match) => {
+  console.log(
+    `Match found for users ${match.user1} and ${match.user2}. Game code: ${match.code}`,
+  );
+
+  console.log("match", match.code);
+
+  const players = match.players.map((player:any) => ({
+    user_id: player.user.id,
+    username:player.user.username,
+    rating: player.user.rating,
+    image_url: player.user.image_url,
+    position: player.position,
+  }));
+
+  assert(players.length === 2, "Expected exactly 2 players in the match");
+  const [player1, player2] = players;
+  console.log("players", players);
+  console.log("player1", player1);
+  console.log("player2", player2);
+  // You can add additional logic here, such as notifying the users via WebSocket or other means.
+
+  const matchMakingResult = {
+    code: match.code,
+    players: [
+      {
+        user_id: player1.user_id,
+        rating: player1.rating,
+        username: player1.username,
+        image_url: player1.image_url,
+        position: player1.position,
+      },
+      {
+        user_id: player2.user_id,
+        rating: player2.rating,
+        username: player2.username,
+        image_url: player2.image_url,
+        position: player2.position,
+      },
+    ],
+  };
+
+  console.log("matchMakingResult", matchMakingResult);
+
+  // Get user connection IDs from Redis
+  const user1Connections = await redis.zrange(
+    connectionsKey(String(player1.user_id)),
+    0,
+    -1,
+  );
+
+  const user2Connections = await redis.zrange(
+    connectionsKey(String(player2.user_id)),
+    0,
+    -1,
+  );
+
+  // Emit match found to all active connections for both users
+  for (const socketId of user1Connections) {
+    serverSocket.to(socketId).emit("matchmaking:found", matchMakingResult);
+  }
+
+  for (const socketId of user2Connections) {
+    serverSocket.to(socketId).emit("matchmaking:found", matchMakingResult);
+  }
+});
 
 initializeSocketHandler(serverSocket);
 

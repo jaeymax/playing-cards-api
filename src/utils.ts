@@ -1,6 +1,16 @@
+import type { Server } from "socket.io";
+import type { Redis } from "ioredis";
 import { redis } from ".";
 import { Game } from "../types";
 import sql from "./config/db";
+import {
+  createGameCardsForMatch,
+  createTwoPlayerMatch,
+  createTwoPlayerMatchGamePlayers,
+} from "./utils/tournament";
+import { connectionsKey } from "./services/presenceService";
+import { ChallengerProfile } from "./services/challengeService";
+import { saveGame } from "./utils/gameFunctions";
 
 const updateWinnerWonCount = async (winnerId: number) => {
   await sql`
@@ -9,8 +19,8 @@ const updateWinnerWonCount = async (winnerId: number) => {
       WHERE id = ${winnerId}
    `;
 
-   // update winning streak for winner, add 1 to current winning streak, and update max winning streak if current winning streak is greater than max winning streak
-   await sql`
+  // update winning streak for winner, add 1 to current winning streak, and update max winning streak if current winning streak is greater than max winning streak
+  await sql`
       UPDATE users
       SET current_winning_streak = current_winning_streak + 1,
           max_winning_streak = GREATEST(current_winning_streak + 1, max_winning_streak)
@@ -34,14 +44,14 @@ const markGameAsEndedAndCompleted = async (gameId: number) => {
    `;
 };
 
-const markGameAsEndedAndForfeited = async (gameId: number) =>{
+const markGameAsEndedAndForfeited = async (gameId: number) => {
   await sql`
       UPDATE games
       SET status = 'forfeited', ended_at = NOW()
       WHERE id = ${gameId}
    `;
-   console.log('updated game with game_id', gameId, 'as forfeited')
-}
+  console.log("updated game with game_id", gameId, "as forfeited");
+};
 
 const markTournamentAsEndedAndCompleted = async (tournamentId: number) => {
   await sql`
@@ -65,7 +75,7 @@ const updateGamesPlayedForGamePlayers = async (gameId: number) => {
 const getMatchWinner = (game: Game) => {
   const final_trick = game.completed_tricks[game.completed_tricks.length - 1];
   return game.players.find(
-    (player) => player.position == final_trick.leader_position
+    (player) => player.position == final_trick.leader_position,
   );
 };
 
@@ -139,7 +149,92 @@ const getGamesByCodes = async (codes: string[]) => {
   }
 };
 
+const createMatchmakerMatch = async (user1: number, user2: number) => {
+  const game = await createTwoPlayerMatch(user1);
 
+  const { gameplayer1, gameplayer2 } = await createTwoPlayerMatchGamePlayers(
+    game.id,
+    user1,
+    user2,
+  );
+
+  const gameCards = await createGameCardsForMatch(game.id, gameplayer1.id);
+
+  const newGame = {
+    ...game,
+    players: [gameplayer1, gameplayer2],
+    cards: gameCards,
+  };
+  return newGame;
+};
+
+const createChallengeGame = async (user1Id: number, user2Id: number): Promise<any> => {
+  const game = await createTwoPlayerMatch(user1Id);
+
+  const { gameplayer1, gameplayer2 } = await createTwoPlayerMatchGamePlayers(
+    game.id,
+    user1Id,
+    user2Id,
+  );
+
+  const gameCards = await createGameCardsForMatch(game.id, gameplayer1.id);
+
+  const newGame = {
+    ...game,
+    players: [gameplayer1, gameplayer2],
+    cards: gameCards,
+  };
+
+  await saveGame(game.code, newGame);
+
+  return game.code; // Return the game code instead of the entire game object
+}
+
+const createEmitToUser = (serverSocket: Server, redis: Redis) => {
+  return async (
+    userId: number,
+    event: string,
+    payload: unknown,
+  ): Promise<void> => {
+    const userIdString = String(userId);
+    const key = connectionsKey(userIdString);
+    const now = Date.now();
+
+    // Remove expired socket connections.
+    await redis.zremrangebyscore(key, "-inf", now);
+
+    // Retrieve all active socket IDs for this user.
+    const socketIds = await redis.zrange(key, 0, -1);
+
+    if (socketIds.length === 0) {
+      return;
+    }
+
+    // Emit to every active device/tab belonging to this user.
+    const emissions = socketIds.map((socketId) =>
+      serverSocket.to(socketId).emit(event, payload),
+    );
+
+    // Socket.IO emit() is synchronous; it doesn't confirm delivery.
+    void emissions;
+  };
+};
+
+const getPlayerProfile = async (
+  userId: number,
+): Promise<ChallengerProfile | null> => {
+  const result = await sql`
+    SELECT id, username, image_url, rating, games_played, games_won, current_winning_streak, max_winning_streak
+    FROM users
+    WHERE id = ${userId}
+  `;
+
+  if (result.length === 0) {
+    throw new Error(`User with ID ${userId} not found`);
+  }
+
+  return result[0] as ChallengerProfile;
+};
 
 export {
   updateWinnerWonCount,
@@ -153,4 +248,8 @@ export {
   getMatchLoser,
   markTournamentAsEndedAndCompleted,
   getGamesByCodes,
+  createMatchmakerMatch,
+  createEmitToUser,
+  getPlayerProfile,
+  createChallengeGame,
 };

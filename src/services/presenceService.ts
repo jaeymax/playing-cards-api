@@ -9,7 +9,7 @@ export type PlayerStatus =
 const ONLINE_USERS_KEY = "presence:online";
 const USERS_STATUS_KEY = "presence:status"
 
-const connectionsKey = (userId: number | string) =>
+export const connectionsKey = (userId: number | string) =>
   `presence:user:${userId}:connections`;
 
 
@@ -56,7 +56,7 @@ export async function userConnected(
 ) {
 
   const userIdString = String(userId);
-  const connections = connectionsKey(userIdString);
+const connections = connectionsKey(userIdString);
   const expiresAt = Date.now() + PRESENCE_TTL;
 
 
@@ -234,13 +234,13 @@ export async function setUserStatus(
   /*
    * Avoid unnecessary writes/events.
    */
-  if (previousStatus === status) {
-    return {
-      changed: false,
-      previousStatus,
-      status,
-    };
-  }
+  // if (previousStatus === status) {
+  //   return {
+  //     changed: false,
+  //     previousStatus,
+  //     status,
+  //   };
+  // }
 
   await redis.hset(
     USERS_STATUS_KEY,

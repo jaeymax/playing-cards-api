@@ -500,9 +500,9 @@ const createSingleEliminationMatch = async (
 
 const createTwoPlayerMatch = async (
   player1Id: number,
-  status: string,
-  isFinalRound: boolean,
-  is_rated: boolean,
+  status: string = 'waiting',
+  isFinalRound: boolean = false,
+  is_rated: boolean = false,
 ) => {
   const match = await sql`
       INSERT INTO games (

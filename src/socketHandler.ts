@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import sql from "./config/db";
-import { matchmaker, redis } from "./index";
+import { challengeService, emitToUser, matchmaker, redis } from "./index";
 import {
   createGamePlayer,
   dealCards,
@@ -12,6 +12,7 @@ import { gameExists } from "./utils/gameFunctions";
 import { getGameByCode } from "./utils/gameFunctions";
 import { Game } from "../types";
 import {
+  getUserStatus,
   setUserStatus,
   userConnected,
   userDisconnected,
@@ -35,7 +36,6 @@ async function releaseLock(gameCode: string) {
 }
 
 export const initializeSocketHandler = async (serverSocket: Server) => {
-
   //await redis.flushall(); // Clear all keys in Redis on server start
   serverSocket.on("connection", async (socket: Socket) => {
     const userId = socket.handshake.auth.userId;
@@ -63,7 +63,7 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
 
       serverSocket.emit("presence:status", {
         userId,
-        status: result.status
+        status: result.status,
       });
 
       sql`UPDATE users SET online_status = true WHERE id = ${userId}`.then(
@@ -261,11 +261,15 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
         socket.join(code);
         serverSocket.to(code).emit("userJoined", { userId, code });
         userGameMap.set(userId, code);
-        setUserStatus(userId, 'in_match');
-          serverSocket.emit("presence:status", {
+        let status = await getUserStatus(userId);
+        console.log(`User before set ${userId} status: ${status} in join-room`);
+        await setUserStatus(userId, "in_match");
+        status = await getUserStatus(userId);
+        console.log(`User after set ${userId} status: ${status} in join-room`);
+        serverSocket.emit("presence:status", {
           userId,
-          status: 'in_match',
-          game_code: code
+          status: "in_match",
+          game_code: code,
         });
       }
     });
@@ -336,10 +340,16 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
       if (await gameExists(code)) {
         socket.leave(code);
         serverSocket.to(code).emit("userLeft", { userId, code });
-        setUserStatus(userId, 'idle');
+        let status = await getUserStatus(userId);
+        console.log(
+          `User before set ${userId} status: ${status} in leave-room`,
+        );
+        await setUserStatus(userId, "idle");
+        status = await getUserStatus(userId);
+        console.log(`User after set ${userId} status: ${status} in leave-room`);
         serverSocket.emit("presence:status", {
           userId,
-          status: 'idle'
+          status: "idle",
         });
         userGameMap.delete(userId);
       }
@@ -595,6 +605,92 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
         .to(game_code)
         .emit("typingSpectatorChat", { user_id, username, game_code });
     });
+
+    // challenge events and handlers
+    socket.on("challenge:send", async (payload, ack) => {
+      try {
+        // emit challenge received event to the target user if they are online
+        console.log(
+          `Sending challenge from ${userId} to ${payload.targetUserId}`,
+        );
+
+        const result = await challengeService.sendChallenge(
+          userId,
+          payload.targetUserId,
+        );
+
+        console.log("Challenge sent result:", result);
+
+        ack(result);
+
+        console.log(`Challenge sent from ${userId} to ${payload.targetUserId}`);
+      } catch (err) {
+        console.error("Error sending challenge:", err);
+        ack?.({
+          success: false,
+          error: "Failed to send challenge.",
+        });
+      }
+    });
+
+    socket.on(
+      "challenge:accept",
+      async (payload: { challengeId: string }, ack) => {
+        try {
+          const result = await challengeService.acceptChallenge(
+            userId,
+            payload.challengeId,
+          );
+
+          ack?.(result);
+
+          console.log(
+            `Challenge accepted by ${userId} for challenge ${payload.challengeId}`,
+          );
+        } catch (err) {
+          console.error("Error accepting challenge:", err);
+          ack?.({
+            success: false,
+            error: "Failed to accept challenge.",
+          });
+        }
+      },
+    );
+
+    socket.on(
+      "challenge:decline",
+      async (payload: { challengeId: string; challengerId: string }, ack) => {
+        try {
+          
+          const result = await challengeService.declineChallenge(
+            userId,
+            payload.challengeId,
+          );
+
+          ack?.(result);
+
+          console.log(
+            `Challenge declined by ${userId} for challenge ${payload.challengeId} and challenger ${payload.challengerId}`,
+          );
+        } catch (err) {
+          console.error("Error declining challenge:", err);
+          ack?.({
+            success: false,
+            error: "Failed to decline challenge.",
+          });
+        }
+      },
+    );
+
+    socket.on(
+      "challenge:cancel",
+      async (payload: { challengeId: string; reason: string }, ack) => {
+        console.log(
+          `Challenge cancelled for challenge ${payload.challengeId} with reason: ${payload.reason}`,
+        );
+        serverSocket.emit("challenge:cancelled", payload);
+      },
+    );
 
     socket.on("disconnect", async () => {
       clearInterval(presenceHeartbeat);
