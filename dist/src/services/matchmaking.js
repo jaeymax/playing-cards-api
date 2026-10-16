@@ -8,153 +8,183 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const events_1 = require("events");
-const db_1 = __importDefault(require("../config/db"));
+const gameFunctions_1 = require("../utils/gameFunctions");
+const presenceService_1 = require("./presenceService");
+const __1 = require("..");
 class Matchmaker extends events_1.EventEmitter {
-    constructor() {
+    constructor(redis, createMatchFn) {
         super();
-        this.interval = null;
-        this.checkInterval = 5000;
+        this.redis = redis;
+        this.createMatchFn = createMatchFn;
+        this.queueKey = "matchmaking:queue";
+        this.ratingsKey = "matchmaking:ratings";
+        // 0 means any rating difference is allowed.
         this.ratingRange = 0;
+        this.matching = false;
+        /**
+         * Atomically finds two eligible players and removes them
+         * from the queue so they cannot be paired again.
+         *
+         * Queue scores represent their original joining timestamps.
+         */
+        this.reserveMatchScript = `
+    local queueKey = KEYS[1]
+    local ratingsKey = KEYS[2]
+    local ratingRange = tonumber(ARGV[1])
+
+    local entries = redis.call(
+      "ZRANGE", queueKey, 0, -1, "WITHSCORES"
+    )
+
+    if #entries < 4 then
+      return {}
+    end
+
+    local selectedFirst = nil
+    local selectedSecond = nil
+    local bestDifference = nil
+
+    -- The first player is the longest-waiting player.
+    local firstId = entries[1]
+    local firstRating = tonumber(
+      redis.call("HGET", ratingsKey, firstId)
+    )
+
+    if not firstRating then
+      redis.call("ZREM", queueKey, firstId)
+      redis.call("HDEL", ratingsKey, firstId)
+      return {}
+    end
+
+    selectedFirst = firstId
+
+    -- Find the closest-rated eligible opponent.
+    for i = 3, #entries, 2 do
+      local candidateId = entries[i]
+      local candidateRating = tonumber(
+        redis.call("HGET", ratingsKey, candidateId)
+      )
+
+      if candidateRating then
+        local difference = math.abs(firstRating - candidateRating)
+
+        if (ratingRange == 0 or difference <= ratingRange)
+          and (
+            bestDifference == nil
+            or difference < bestDifference
+          ) then
+          selectedSecond = candidateId
+          bestDifference = difference
+        end
+      end
+    end
+
+    if not selectedSecond then
+      return {}
+    end
+
+    local firstScore = redis.call("ZSCORE", queueKey, selectedFirst)
+    local secondScore = redis.call("ZSCORE", queueKey, selectedSecond)
+
+    redis.call("ZREM", queueKey, selectedFirst, selectedSecond)
+
+    return {
+      selectedFirst,
+      tostring(firstRating),
+      firstScore,
+      selectedSecond,
+      tostring(redis.call("HGET", ratingsKey, selectedSecond)),
+      secondScore
+    }
+  `;
         this.addToQueue = (userId, rating) => __awaiter(this, void 0, void 0, function* () {
             try {
-                yield (0, db_1.default) `
-        INSERT INTO matchmaking_queue (user_id, rating) 
-        VALUES (${userId}, ${rating}) 
-        ON CONFLICT (user_id) DO UPDATE 
-        SET joined_at = NOW()
-      `;
-                this.checkMatches();
+                const joinedAt = Date.now();
+                // Preserve the original joining time if already queued.
+                const existingScore = yield this.redis.zscore(this.queueKey, String(userId));
+                if (existingScore === null) {
+                    yield this.redis
+                        .multi()
+                        .zadd(this.queueKey, joinedAt, String(userId))
+                        .hset(this.ratingsKey, String(userId), rating)
+                        .exec();
+                }
+                else {
+                    // Refresh the rating without resetting queue position.
+                    yield this.redis.hset(this.ratingsKey, String(userId), rating);
+                }
+                console.log(`User ${userId} added to matchmaking queue with rating ${rating}.`);
+                yield (0, presenceService_1.setUserStatus)(userId, "looking_for_game");
+                __1.serverSocket.emit("presence:status", { userId, status: "looking_for_game" });
+                yield this.checkMatches();
             }
             catch (error) {
-                console.error('Error adding user to matchmaking queue:', error);
-                //throw error; // Re-throw the original error for proper handling
+                console.error("Error adding user to matchmaking queue:", error);
+                yield (0, presenceService_1.setUserStatus)(userId, "idle");
+                __1.serverSocket.emit("presence:status", { userId, status: "idle" });
+                throw error;
             }
         });
         this.removeFromQueue = (userId) => __awaiter(this, void 0, void 0, function* () {
             try {
-                yield (0, db_1.default) `DELETE FROM matchmaking_queue WHERE user_id = ${userId}`;
+                yield this.redis
+                    .multi()
+                    .zrem(this.queueKey, String(userId))
+                    .hdel(this.ratingsKey, String(userId))
+                    .exec();
+                yield (0, presenceService_1.setUserStatus)(userId, "idle");
+                __1.serverSocket.emit("presence:status", { userId, status: "idle" });
             }
             catch (error) {
-                console.error('Error removing user from matchmaking queue:', error);
-                // throw error; // Re-throw the original error for proper handling
+                console.error("Error removing user from matchmaking queue:", error);
+                throw error;
             }
         });
-        //this.start();
-    }
-    checkMatches() {
-        return __awaiter(this, void 0, void 0, function* () {
+        this.checkMatches = () => __awaiter(this, void 0, void 0, function* () {
+            if (this.matching)
+                return;
+            this.matching = true;
             try {
-                const potentialMatches = yield (0, db_1.default) `
-        WITH potential_matches AS (
-          SELECT 
-            a.user_id AS user1, 
-            a.joined_at AS joined_at1,
-            b.user_id AS user2,
-            b.joined_at AS joined_at2,
-            ABS(a.rating - b.rating) AS rating_diff
-          FROM matchmaking_queue a
-          JOIN matchmaking_queue b ON a.user_id < b.user_id
-          WHERE ABS(a.rating - b.rating) >= ${this.ratingRange}
-          ORDER BY rating_diff, a.joined_at
-          LIMIT 1
-        )
-        SELECT * FROM potential_matches
-      `;
-                console.log("Checking for matches:", potentialMatches);
-                if (potentialMatches.length > 0) {
-                    const { user1, joined_at1, user2, joined_at2 } = potentialMatches[0];
-                    console.log("potential_matches", potentialMatches);
-                    if (joined_at1 < joined_at2) {
-                        yield this.createMatch(user1, user2);
+                while (true) {
+                    const result = (yield this.redis.eval(this.reserveMatchScript, 2, this.queueKey, this.ratingsKey, this.ratingRange));
+                    console.log("Matchmaking result:", result);
+                    if (!result || result.length < 6) {
+                        break;
                     }
-                    else {
-                        yield this.createMatch(user2, user1);
+                    const [firstId, firstRating, firstScore, secondId, secondRating, secondScore,] = result;
+                    const user1 = Number(firstId);
+                    const user2 = Number(secondId);
+                    try {
+                        // Use your existing game-creation and initialization flow here.
+                        const match = yield this.createMatchFn(user1, user2);
+                        this.emit("matchFound", Object.assign({}, match));
+                        yield (0, gameFunctions_1.saveGame)(match.code, match);
+                        console.log(`Match created: Game ${match.code} for players ${user1}, ${user2}`);
+                    }
+                    catch (error) {
+                        console.error("Match creation failed:", error);
+                        // Put both players back in their original queue positions.
+                        yield this.redis
+                            .multi()
+                            .zadd(this.queueKey, Number(firstScore), firstId)
+                            .zadd(this.queueKey, Number(secondScore), secondId)
+                            .hset(this.ratingsKey, firstId, firstRating)
+                            .hset(this.ratingsKey, secondId, secondRating)
+                            .exec();
+                        // Stop here to avoid repeatedly retrying the same failed pair.
+                        break;
                     }
                 }
             }
             catch (error) {
-                console.error('Error checking for matches:', error);
-                // Don't throw here as this is called internally and shouldn't crash the service
+                console.error("Error checking for matches:", error);
+            }
+            finally {
+                this.matching = false;
             }
         });
-    }
-    createMatch(userId1, userId2) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const gameCode = Math.random().toString(36).substring(2, 12);
-                // Get full user data for both players
-                // const players = await sql`
-                //   SELECT id, username, email, image_url, rating, location, games_played, games_won
-                //   FROM users
-                //   WHERE id IN (${userId1}, ${userId2})
-                // `;
-                const result = yield db_1.default.transaction((sql) => [
-                    sql `
-          INSERT INTO games (code, created_by, status, player_count, current_player_position, is_rated) 
-          VALUES (${gameCode}, ${userId1}, 'waiting', 2, 1, true) 
-          RETURNING id
-        `,
-                    sql `
-          WITH new_game_id AS (SELECT lastval() AS game_id)
-          INSERT INTO game_players (game_id, user_id, position, is_dealer)
-          VALUES 
-            ((SELECT game_id FROM new_game_id), ${userId1}::integer, 0, true),
-            ((SELECT game_id FROM new_game_id), ${userId2}::integer, 1, false)
-          RETURNING 
-            user_id as id,
-            id as player_id,
-            position,
-            is_dealer,
-            (SELECT username FROM users WHERE users.id = user_id) as username,
-            (SELECT image_url FROM users WHERE users.id = user_id) as image_url,
-            (SELECT rating FROM users WHERE users.id = user_id) as rating
-        `,
-                    sql `
-          DELETE FROM matchmaking_queue 
-          WHERE user_id IN (${userId1}, ${userId2})
-        `,
-                ]);
-                const cards = yield (0, db_1.default) `
-        SELECT card_id FROM cards ORDER BY RANDOM()`;
-                const gameId = result[0][0].id;
-                const players = result[1];
-                const dealer = players.find((player) => player.is_dealer);
-                cards.forEach((card) => __awaiter(this, void 0, void 0, function* () {
-                    yield (0, db_1.default) `INSERT INTO game_cards (game_id, card_id, player_id, hand_position) 
-        VALUES (${gameId}, ${card.card_id}, ${dealer === null || dealer === void 0 ? void 0 : dealer.player_id}, ${-1})`;
-                }));
-                this.emit("matchFound", {
-                    gameCode,
-                    gameId,
-                    players,
-                    positions: players.reduce((acc, p) => {
-                        acc[p.user_id] = p.position;
-                        return acc;
-                    }, {}),
-                });
-                console.log(`Match created: Game ID ${gameId} for players:`, players);
-            }
-            catch (error) {
-                console.error("Match creation failed:", error);
-                // Don't throw here as this is called internally and shouldn't crash the service
-            }
-        });
-    }
-    start() {
-        if (!this.interval) {
-            this.interval = setInterval(() => this.checkMatches(), this.checkInterval);
-        }
-    }
-    stop() {
-        if (this.interval) {
-            clearInterval(this.interval);
-            this.interval = null;
-        }
     }
 }
 exports.default = Matchmaker;

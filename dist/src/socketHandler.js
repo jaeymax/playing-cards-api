@@ -56,7 +56,7 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
             });
             serverSocket.emit("presence:status", {
                 userId,
-                status: result.status
+                status: result.status,
             });
             (0, db_1.default) `UPDATE users SET online_status = true WHERE id = ${userId}`.then(() => {
                 console.log(`Marked user ${userId} as online`);
@@ -239,11 +239,15 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
                 socket.join(code);
                 serverSocket.to(code).emit("userJoined", { userId, code });
                 exports.userGameMap.set(userId, code);
-                (0, presenceService_1.setUserStatus)(userId, 'in_match');
+                let status = yield (0, presenceService_1.getUserStatus)(userId);
+                console.log(`User before set ${userId} status: ${status} in join-room`);
+                yield (0, presenceService_1.setUserStatus)(userId, "in_match");
+                status = yield (0, presenceService_1.getUserStatus)(userId);
+                console.log(`User after set ${userId} status: ${status} in join-room`);
                 serverSocket.emit("presence:status", {
                     userId,
-                    status: 'in_match',
-                    game_code: code
+                    status: "in_match",
+                    game_code: code,
                 });
             }
         }));
@@ -290,10 +294,14 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
             if (yield (0, gameFunctions_2.gameExists)(code)) {
                 socket.leave(code);
                 serverSocket.to(code).emit("userLeft", { userId, code });
-                (0, presenceService_1.setUserStatus)(userId, 'idle');
+                let status = yield (0, presenceService_1.getUserStatus)(userId);
+                console.log(`User before set ${userId} status: ${status} in leave-room`);
+                yield (0, presenceService_1.setUserStatus)(userId, "idle");
+                status = yield (0, presenceService_1.getUserStatus)(userId);
+                console.log(`User after set ${userId} status: ${status} in leave-room`);
                 serverSocket.emit("presence:status", {
                     userId,
-                    status: 'idle'
+                    status: "idle",
                 });
                 exports.userGameMap.delete(userId);
             }
@@ -482,6 +490,56 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
                 .to(game_code)
                 .emit("typingSpectatorChat", { user_id, username, game_code });
         });
+        // challenge events and handlers
+        socket.on("challenge:send", (payload, ack) => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                // emit challenge received event to the target user if they are online
+                console.log(`Sending challenge from ${userId} to ${payload.targetUserId}`);
+                const result = yield index_1.challengeService.sendChallenge(userId, payload.targetUserId);
+                console.log("Challenge sent result:", result);
+                ack(result);
+                console.log(`Challenge sent from ${userId} to ${payload.targetUserId}`);
+            }
+            catch (err) {
+                console.error("Error sending challenge:", err);
+                ack === null || ack === void 0 ? void 0 : ack({
+                    success: false,
+                    error: "Failed to send challenge.",
+                });
+            }
+        }));
+        socket.on("challenge:accept", (payload, ack) => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                const result = yield index_1.challengeService.acceptChallenge(userId, payload.challengeId);
+                ack === null || ack === void 0 ? void 0 : ack(result);
+                console.log(`Challenge accepted by ${userId} for challenge ${payload.challengeId}`);
+            }
+            catch (err) {
+                console.error("Error accepting challenge:", err);
+                ack === null || ack === void 0 ? void 0 : ack({
+                    success: false,
+                    error: "Failed to accept challenge.",
+                });
+            }
+        }));
+        socket.on("challenge:decline", (payload, ack) => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                const result = yield index_1.challengeService.declineChallenge(userId, payload.challengeId);
+                ack === null || ack === void 0 ? void 0 : ack(result);
+                console.log(`Challenge declined by ${userId} for challenge ${payload.challengeId} and challenger ${payload.challengerId}`);
+            }
+            catch (err) {
+                console.error("Error declining challenge:", err);
+                ack === null || ack === void 0 ? void 0 : ack({
+                    success: false,
+                    error: "Failed to decline challenge.",
+                });
+            }
+        }));
+        socket.on("challenge:cancel", (payload, ack) => __awaiter(void 0, void 0, void 0, function* () {
+            console.log(`Challenge cancelled for challenge ${payload.challengeId} with reason: ${payload.reason}`);
+            serverSocket.emit("challenge:cancelled", payload);
+        }));
         socket.on("disconnect", () => __awaiter(void 0, void 0, void 0, function* () {
             clearInterval(presenceHeartbeat);
             console.log(`User ${userId} disconnected`);

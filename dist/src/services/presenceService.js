@@ -9,6 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.connectionsKey = void 0;
 exports.userConnected = userConnected;
 exports.userHeartbeat = userHeartbeat;
 exports.userDisconnected = userDisconnected;
@@ -22,6 +23,7 @@ const index_1 = require("../index");
 const ONLINE_USERS_KEY = "presence:online";
 const USERS_STATUS_KEY = "presence:status";
 const connectionsKey = (userId) => `presence:user:${userId}:connections`;
+exports.connectionsKey = connectionsKey;
 const PRESENCE_TTL = 30000;
 /**
  * Remove stale socket connections for a user.
@@ -31,7 +33,7 @@ const PRESENCE_TTL = 30000;
  */
 function cleanupUserConnections(userId) {
     return __awaiter(this, void 0, void 0, function* () {
-        const key = connectionsKey(userId);
+        const key = (0, exports.connectionsKey)(userId);
         yield index_1.redis.zremrangebyscore(key, 0, Date.now());
         return index_1.redis.zcard(key);
     });
@@ -49,7 +51,7 @@ function cleanupOnlineUsers() {
 function userConnected(userId, socketId) {
     return __awaiter(this, void 0, void 0, function* () {
         const userIdString = String(userId);
-        const connections = connectionsKey(userIdString);
+        const connections = (0, exports.connectionsKey)(userIdString);
         const expiresAt = Date.now() + PRESENCE_TTL;
         /*
         * Remove any dead connections before registering
@@ -73,7 +75,11 @@ function userConnected(userId, socketId) {
          * This is important when a user reconnects while they
          * still have an active lobby or match.
          */
-        const existingStatus = yield index_1.redis.hget(USERS_STATUS_KEY, userIdString);
+        // const existingStatus = await redis.hget(
+        //   USERS_STATUS_KEY,
+        //   userIdString
+        // );
+        const existingStatus = null;
         if (!existingStatus) {
             yield index_1.redis.hset(USERS_STATUS_KEY, userIdString, "idle");
         }
@@ -89,7 +95,7 @@ function userConnected(userId, socketId) {
 function userHeartbeat(userId, socketId) {
     return __awaiter(this, void 0, void 0, function* () {
         const userIdString = String(userId);
-        const connections = connectionsKey(userIdString);
+        const connections = (0, exports.connectionsKey)(userIdString);
         const expiresAt = Date.now() + PRESENCE_TTL;
         /*
        * Refresh this socket's expiration.
@@ -113,7 +119,7 @@ function userHeartbeat(userId, socketId) {
 function userDisconnected(userId, socketId) {
     return __awaiter(this, void 0, void 0, function* () {
         const userIdString = String(userId);
-        const connections = connectionsKey(userIdString);
+        const connections = (0, exports.connectionsKey)(userIdString);
         /*
        * Remove this socket immediately.
        */
@@ -157,13 +163,13 @@ function setUserStatus(userId, status) {
         /*
          * Avoid unnecessary writes/events.
          */
-        if (previousStatus === status) {
-            return {
-                changed: false,
-                previousStatus,
-                status,
-            };
-        }
+        // if (previousStatus === status) {
+        //   return {
+        //     changed: false,
+        //     previousStatus,
+        //     status,
+        //   };
+        // }
         yield index_1.redis.hset(USERS_STATUS_KEY, userIdString, status);
         return {
             changed: true,

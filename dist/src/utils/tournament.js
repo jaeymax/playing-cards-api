@@ -310,7 +310,7 @@ const createSingleEliminationMatch = (tournamentId, matchId, roundId, player1Id,
     return match[0];
 });
 exports.createSingleEliminationMatch = createSingleEliminationMatch;
-const createTwoPlayerMatch = (player1Id, status, isFinalRound, is_rated) => __awaiter(void 0, void 0, void 0, function* () {
+const createTwoPlayerMatch = (player1Id_1, ...args_1) => __awaiter(void 0, [player1Id_1, ...args_1], void 0, function* (player1Id, status = 'waiting', isFinalRound = false, is_rated = false) {
     const match = yield (0, db_1.default) `
       INSERT INTO games (
         code,

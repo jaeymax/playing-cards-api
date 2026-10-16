@@ -19,16 +19,17 @@ const index_1 = require("../index");
 const gameFunctions_1 = require("../utils/gameFunctions");
 const __1 = require("..");
 exports.joinQueue = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { userId, rating } = req.body;
+    const userId = req.user.userId;
+    let rating = yield (0, db_1.default) `SELECT rating FROM users WHERE id = ${userId}`;
     if (!userId || !rating) {
         res.status(400).json({ error: "User ID and rating are required" });
         return;
     }
-    yield index_1.matchmaker.addToQueue(userId, rating || 1000);
+    yield index_1.matchmaker.addToQueue(userId, rating[0].rating);
     res.json({ success: true });
 }));
 exports.leaveQueue = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { userId } = req.body;
+    const userId = req.user.userId;
     yield index_1.matchmaker.removeFromQueue(userId);
     res.json({ success: true });
 }));

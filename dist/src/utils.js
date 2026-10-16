@@ -12,9 +12,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getGamesByCodes = exports.markTournamentAsEndedAndCompleted = exports.getMatchLoser = exports.isTournamentMatch = exports.updateGamePlayersScores = exports.getMatchWinner = exports.updateGamesPlayedForGamePlayers = exports.markGameAsEndedAndForfeited = exports.markGameAsEndedAndCompleted = exports.updateLoserWinningStreak = exports.updateWinnerWonCount = void 0;
+exports.createChallengeGame = exports.getPlayerProfile = exports.createEmitToUser = exports.createMatchmakerMatch = exports.getGamesByCodes = exports.markTournamentAsEndedAndCompleted = exports.getMatchLoser = exports.isTournamentMatch = exports.updateGamePlayersScores = exports.getMatchWinner = exports.updateGamesPlayedForGamePlayers = exports.markGameAsEndedAndForfeited = exports.markGameAsEndedAndCompleted = exports.updateLoserWinningStreak = exports.updateWinnerWonCount = void 0;
 const _1 = require(".");
 const db_1 = __importDefault(require("./config/db"));
+const tournament_1 = require("./utils/tournament");
+const presenceService_1 = require("./services/presenceService");
+const gameFunctions_1 = require("./utils/gameFunctions");
 const updateWinnerWonCount = (winnerId) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, db_1.default) `
       UPDATE users
@@ -52,7 +55,7 @@ const markGameAsEndedAndForfeited = (gameId) => __awaiter(void 0, void 0, void 0
       SET status = 'forfeited', ended_at = NOW()
       WHERE id = ${gameId}
    `;
-    console.log('updated game with game_id', gameId, 'as forfeited');
+    console.log("updated game with game_id", gameId, "as forfeited");
 });
 exports.markGameAsEndedAndForfeited = markGameAsEndedAndForfeited;
 const markTournamentAsEndedAndCompleted = (tournamentId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -146,3 +149,51 @@ const getGamesByCodes = (codes) => __awaiter(void 0, void 0, void 0, function* (
     }
 });
 exports.getGamesByCodes = getGamesByCodes;
+const createMatchmakerMatch = (user1, user2) => __awaiter(void 0, void 0, void 0, function* () {
+    const game = yield (0, tournament_1.createTwoPlayerMatch)(user1);
+    const { gameplayer1, gameplayer2 } = yield (0, tournament_1.createTwoPlayerMatchGamePlayers)(game.id, user1, user2);
+    const gameCards = yield (0, tournament_1.createGameCardsForMatch)(game.id, gameplayer1.id);
+    const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
+    return newGame;
+});
+exports.createMatchmakerMatch = createMatchmakerMatch;
+const createChallengeGame = (user1Id, user2Id) => __awaiter(void 0, void 0, void 0, function* () {
+    const game = yield (0, tournament_1.createTwoPlayerMatch)(user1Id);
+    const { gameplayer1, gameplayer2 } = yield (0, tournament_1.createTwoPlayerMatchGamePlayers)(game.id, user1Id, user2Id);
+    const gameCards = yield (0, tournament_1.createGameCardsForMatch)(game.id, gameplayer1.id);
+    const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
+    yield (0, gameFunctions_1.saveGame)(game.code, newGame);
+    return game.code; // Return the game code instead of the entire game object
+});
+exports.createChallengeGame = createChallengeGame;
+const createEmitToUser = (serverSocket, redis) => {
+    return (userId, event, payload) => __awaiter(void 0, void 0, void 0, function* () {
+        const userIdString = String(userId);
+        const key = (0, presenceService_1.connectionsKey)(userIdString);
+        const now = Date.now();
+        // Remove expired socket connections.
+        yield redis.zremrangebyscore(key, "-inf", now);
+        // Retrieve all active socket IDs for this user.
+        const socketIds = yield redis.zrange(key, 0, -1);
+        if (socketIds.length === 0) {
+            return;
+        }
+        // Emit to every active device/tab belonging to this user.
+        const emissions = socketIds.map((socketId) => serverSocket.to(socketId).emit(event, payload));
+        // Socket.IO emit() is synchronous; it doesn't confirm delivery.
+        void emissions;
+    });
+};
+exports.createEmitToUser = createEmitToUser;
+const getPlayerProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield (0, db_1.default) `
+    SELECT id, username, image_url, rating, games_played, games_won, current_winning_streak, max_winning_streak
+    FROM users
+    WHERE id = ${userId}
+  `;
+    if (result.length === 0) {
+        throw new Error(`User with ID ${userId} not found`);
+    }
+    return result[0];
+});
+exports.getPlayerProfile = getPlayerProfile;
