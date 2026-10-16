@@ -96,10 +96,12 @@ const connections = connectionsKey(userIdString);
    * This is important when a user reconnects while they
    * still have an active lobby or match.
    */
-  const existingStatus = await redis.hget(
-    USERS_STATUS_KEY,
-    userIdString
-  );
+  // const existingStatus = await redis.hget(
+  //   USERS_STATUS_KEY,
+  //   userIdString
+  // );
+
+  const existingStatus = null;
 
   if (!existingStatus) {
     await redis.hset(
