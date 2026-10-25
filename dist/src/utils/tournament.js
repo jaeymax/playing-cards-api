@@ -103,7 +103,7 @@ const createNextSwissRoundMatches = (roundNumber, tournamentId) => __awaiter(voi
             //sendPushNotification(player1.push_token, title, body, link);
             title = `${player2.username}! Your Match is Ready`;
             body = `You vs ${player1.username}`;
-            yield (0, notification_1.sendPushNotification)(player2.id, title, body, link);
+            yield (0, notification_1.sendNotificationToUser)(player2.id, title, body, link);
         }
     }
     catch (error) {

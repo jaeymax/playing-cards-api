@@ -185,7 +185,7 @@ const createNextSwissRoundMatches = async (
       
         title = `${player2.username}! Your Match is Ready`;
         body = `You vs ${player1.username}`;
-        await sendPushNotification(player2.id, title, body, link);
+        await sendNotificationToUser(player2.id, title, body, link);
       
     }
   } catch (error) {
