@@ -282,13 +282,13 @@ cron.schedule("30 18 * * *", () => __awaiter(void 0, void 0, void 0, function* (
 const sendTournamentStartPushNotifications = (tournament) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const users = yield (0, db_1.default) `
-        SELECT username, phone, push_token FROM users WHERE phone IS NOT NULL
+        SELECT id, username FROM users
     `;
+        //sendPushNotification(user.push_token, tournament.name , `Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, link)
+        const link = `https://sparplay.com/tournaments/${tournament.id}`;
+        const message = `Just a reminder that the ${tournament.name} starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
         for (const user of users) {
-            if (user.push_token) {
-                const link = `https://sparplay.com/tournaments/${tournament.id}`;
-                //sendPushNotification(user.push_token, tournament.name , `Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, link)
-            }
+            (0, notification_1.sendNotificationToUser)(user.id, tournament.name, message, link);
         }
     }
     catch (error) {
@@ -423,70 +423,6 @@ exports.app.post("/api/send-tournament-notification", (0, express_async_handler_
     catch (error) {
         console.error("Error sending tournament notifications:", error);
     }
-})));
-exports.app.post("/api/tournament-failed-notification", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { tournamentName } = req.body;
-    // list of phone numbers to send the notification to, you can fetch this from your database based on your requirements
-    const phoneNumbers = [
-        "233544136394",
-        "233538599553",
-        "233503145542",
-        "233242825836",
-        "233559187525",
-        "233505954496",
-        "233241586158",
-        "233542169953",
-        "233542901511",
-        "233592409107",
-        "233554839565",
-        "233552262000",
-        "233507726059",
-        "233205479345",
-        "233558384883",
-        "233552700648",
-        "233538159551",
-        "233503408628",
-        "233508793292",
-        "233544296549",
-        "233503860625",
-        "233503020301",
-        "233538776736",
-        "233206870946",
-        "233598064978",
-        "233200397987",
-        "233542697025",
-        "233550350303",
-        "233595329956",
-        "233544159671",
-        "233508742502",
-        "233206508435",
-        "233555503026",
-        "233257772464",
-        "233507252222",
-        "233257509994",
-        "233504063271",
-    ]; // replace with actual phone numbers
-    try {
-        for (const user of phoneNumbers) {
-            const messageTemplate = `Hi! Just a reminder that the Sunday Community Tournament starts today at 08:00PM. 
-             
-        Format: Swiss
-        Entry: Free
-
-        This is our free community tournament. No cash prizes, just fun, bragging rights, and a chance to sharpen your skills! Join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/34 if you want to participate!
-        `;
-            //  const phone = "233" + user.phone.substr(1);// Assuming the phone numbers in the list are already in the correct format with country code
-            // console.log("realphone", phone);
-            //await sendSMS(phone, messageTemplate);
-        }
-    }
-    catch (error) {
-        console.error("Error sending tournament reminder notifications:", error);
-    }
-    res.json({
-        success: true,
-        message: "Tournament reminder notifications sent successfully",
-    });
 })));
 exports.app.post("/api/tournament-notification-reminder", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { tournamentName } = req.body;

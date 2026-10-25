@@ -79,9 +79,7 @@ const dealCards = (game) => __awaiter(void 0, void 0, void 0, function* () {
     game.current_player_position =
         (game.current_player_position + 1) % game.player_count;
     game.current_turn_user_id = (_b = (_a = game.players.find((player) => player.position == game.current_player_position)) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.id;
-    if (game.is_rated || game.challenge) {
-        yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
-    }
+    yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
 });
 exports.dealCards = dealCards;
 const fisherYatesShuffle = (array) => {
@@ -160,9 +158,7 @@ const playCard = (game, card_id, player_id, socket) => __awaiter(void 0, void 0,
     game.turn_started_at = Date.now();
     const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
     game.turn_ends_at = turn_ends_at;
-    if (game.is_rated || game.challenge) {
-        yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
-    }
+    yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
     if (game.current_trick.cards.length === game.players.length) {
         completeTrick(game);
     }
@@ -231,8 +227,7 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
     if (winner.score >= game.win_points) {
         game.status = "completed";
         game.ended_at = Date.now();
-        if (game.is_rated || game.challenge)
-            yield index_1.matchForfeiter.cancelForfeit(game.code);
+        yield index_1.matchForfeiter.cancelForfeit(game.code);
         winner.games_won += 1;
         console.log("game challenge", game.challenge);
         //console.log('game challenge_id', game.challenge.id)

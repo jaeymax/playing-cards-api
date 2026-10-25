@@ -93,7 +93,7 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
             try {
                 const lockAcquired = yield acquireLock(code);
                 if (!lockAcquired) {
-                    console.log("Request blocked: Processing previous  move.");
+                    console.log("Request blocked: Processing previous move.");
                     return;
                 }
                 console.log(`Deal cards request for game code: ${code}`);
@@ -249,6 +249,46 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
                     status: "in_match",
                     game_code: code,
                 });
+                const game = yield (0, gameFunctions_3.getGameByCode)(code);
+                const isSpectator = !game.players.some((player) => player.user.id == userId);
+                console.log("join_is_spectator", isSpectator);
+                if (isSpectator) {
+                    if (!(game === null || game === void 0 ? void 0 : game.spectators))
+                        game.spectators = [];
+                    if (game.spectators.indexOf(userId) == -1) {
+                        game.spectators.push(userId);
+                    }
+                    yield (0, gameFunctions_1.saveGame)(code, game);
+                }
+            }
+        }));
+        socket.on("leave-room", (code) => __awaiter(void 0, void 0, void 0, function* () {
+            console.log(`User ${userId} leaving game: ${code}`);
+            if (yield (0, gameFunctions_2.gameExists)(code)) {
+                socket.leave(code);
+                serverSocket.to(code).emit("userLeft", { userId, code });
+                let status = yield (0, presenceService_1.getUserStatus)(userId);
+                console.log(`User before set ${userId} status: ${status} in leave-room`);
+                yield (0, presenceService_1.setUserStatus)(userId, "idle");
+                status = yield (0, presenceService_1.getUserStatus)(userId);
+                console.log(`User after set ${userId} status: ${status} in leave-room`);
+                serverSocket.emit("presence:status", {
+                    userId,
+                    status: "idle",
+                });
+                const game = yield (0, gameFunctions_3.getGameByCode)(code);
+                exports.userGameMap.delete(userId);
+                const isSpectator = !game.players.some((player) => player.user.id == userId);
+                console.log("leave_is_spectator", isSpectator);
+                if (isSpectator) {
+                    if (!(game === null || game === void 0 ? void 0 : game.spectators))
+                        game.spectators = [];
+                    const index = game.spectators.indexOf(userId);
+                    if (index !== -1) {
+                        game.spectators.splice(index, 1);
+                        yield (0, gameFunctions_1.saveGame)(code, game);
+                    }
+                }
             }
         }));
         socket.on("joinTournamentRoom", (_a) => __awaiter(void 0, [_a], void 0, function* ({ tournamentId, userId, gameCode }) {
@@ -287,23 +327,6 @@ const initializeSocketHandler = (serverSocket) => __awaiter(void 0, void 0, void
                         serverSocket.to(gameCode).emit("gameData", game);
                     }
                 }
-            }
-        }));
-        socket.on("leave-room", (code) => __awaiter(void 0, void 0, void 0, function* () {
-            console.log(`User ${userId} leaving game: ${code}`);
-            if (yield (0, gameFunctions_2.gameExists)(code)) {
-                socket.leave(code);
-                serverSocket.to(code).emit("userLeft", { userId, code });
-                let status = yield (0, presenceService_1.getUserStatus)(userId);
-                console.log(`User before set ${userId} status: ${status} in leave-room`);
-                yield (0, presenceService_1.setUserStatus)(userId, "idle");
-                status = yield (0, presenceService_1.getUserStatus)(userId);
-                console.log(`User after set ${userId} status: ${status} in leave-room`);
-                serverSocket.emit("presence:status", {
-                    userId,
-                    status: "idle",
-                });
-                exports.userGameMap.delete(userId);
             }
         }));
         socket.on("getGameData", (code) => __awaiter(void 0, void 0, void 0, function* () {

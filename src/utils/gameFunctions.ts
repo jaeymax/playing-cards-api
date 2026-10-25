@@ -91,12 +91,10 @@ export const dealCards = async (game: any) => {
   game.current_turn_user_id = game.players.find(
     (player: any) => player.position == game.current_player_position,
   )?.user?.id;
-  if (game.is_rated || game.challenge) {
-    await matchForfeiter.scheduleForfeit(
-      game.code,
-      game.turn_timeout_seconds * 1000,
-    );
-  }
+  await matchForfeiter.scheduleForfeit(
+    game.code,
+    game.turn_timeout_seconds * 1000,
+  );
 };
 
 export const fisherYatesShuffle = (array: any[]) => {
@@ -200,12 +198,10 @@ export const playCard = async (
   const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
   game.turn_ends_at = turn_ends_at;
 
-  if (game.is_rated || game.challenge) {
-    await matchForfeiter.scheduleForfeit(
-      game.code,
-      game.turn_timeout_seconds * 1000,
-    );
-  }
+  await matchForfeiter.scheduleForfeit(
+    game.code,
+    game.turn_timeout_seconds * 1000,
+  );
 
   if (game.current_trick.cards.length === game.players.length) {
     completeTrick(game);
@@ -309,8 +305,7 @@ const endGame = async (game: any) => {
   if (winner.score >= game.win_points) {
     game.status = "completed";
     game.ended_at = Date.now();
-    if (game.is_rated || game.challenge)
-      await matchForfeiter.cancelForfeit(game.code);
+    await matchForfeiter.cancelForfeit(game.code);
 
     winner.games_won += 1;
     console.log("game challenge", game.challenge);

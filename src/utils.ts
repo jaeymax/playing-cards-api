@@ -150,7 +150,7 @@ const getGamesByCodes = async (codes: string[]) => {
 };
 
 const createMatchmakerMatch = async (user1: number, user2: number) => {
-  const game = await createTwoPlayerMatch(user1);
+  const game = await createTwoPlayerMatch(user1, 'in_progress');
 
   const { gameplayer1, gameplayer2 } = await createTwoPlayerMatchGamePlayers(
     game.id,
@@ -169,7 +169,7 @@ const createMatchmakerMatch = async (user1: number, user2: number) => {
 };
 
 const createChallengeGame = async (user1Id: number, user2Id: number): Promise<any> => {
-  const game = await createTwoPlayerMatch(user1Id);
+  const game = await createTwoPlayerMatch(user1Id, 'in_progress');
 
   const { gameplayer1, gameplayer2 } = await createTwoPlayerMatchGamePlayers(
     game.id,

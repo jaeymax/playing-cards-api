@@ -43,7 +43,12 @@ import {
 } from "./services/tournament";
 import ExpiredChallenges from "./services/matchExpired";
 import { sendNotificationToUser } from "./services/notification";
-import { createChallengeGame, createEmitToUser, createMatchmakerMatch, getPlayerProfile } from "./utils";
+import {
+  createChallengeGame,
+  createEmitToUser,
+  createMatchmakerMatch,
+  getPlayerProfile,
+} from "./utils";
 import { connectionsKey } from "./services/presenceService";
 import { assert } from "console";
 import { ChallengeService } from "./services/challengeService";
@@ -337,14 +342,14 @@ cron.schedule("30 18 * * *", async () => {
 const sendTournamentStartPushNotifications = async (tournament: any) => {
   try {
     const users = await sql`
-        SELECT username, phone, push_token FROM users WHERE phone IS NOT NULL
+        SELECT id, username FROM users
     `;
 
+    //sendPushNotification(user.push_token, tournament.name , `Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, link)
+    const link = `https://sparplay.com/tournaments/${tournament.id}`;
+    const message = `Just a reminder that the ${tournament.name} starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
     for (const user of users) {
-      if (user.push_token) {
-        const link = `https://sparplay.com/tournaments/${tournament.id}`;
-        //sendPushNotification(user.push_token, tournament.name , `Just a reminder that the ${tournament.name} tournament starts today at ${new Date(tournament.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, link)
-      }
+      sendNotificationToUser(user.id, tournament.name, message, link);
     }
   } catch (error) {
     console.error("Error sending tournament start push notifications:", error);
@@ -525,75 +530,7 @@ app.post(
   }),
 );
 
-app.post(
-  "/api/tournament-failed-notification",
-  expressAsyncHandler(async (req, res) => {
-    const { tournamentName } = req.body;
 
-    // list of phone numbers to send the notification to, you can fetch this from your database based on your requirements
-    const phoneNumbers = [
-      "233544136394",
-      "233538599553",
-      "233503145542",
-      "233242825836",
-      "233559187525",
-      "233505954496",
-      "233241586158",
-      "233542169953",
-      "233542901511",
-      "233592409107",
-      "233554839565",
-      "233552262000",
-      "233507726059",
-      "233205479345",
-      "233558384883",
-      "233552700648",
-      "233538159551",
-      "233503408628",
-      "233508793292",
-      "233544296549",
-      "233503860625",
-      "233503020301",
-      "233538776736",
-      "233206870946",
-      "233598064978",
-      "233200397987",
-      "233542697025",
-      "233550350303",
-      "233595329956",
-      "233544159671",
-      "233508742502",
-      "233206508435",
-      "233555503026",
-      "233257772464",
-      "233507252222",
-      "233257509994",
-      "233504063271",
-    ]; // replace with actual phone numbers
-
-    try {
-      for (const user of phoneNumbers) {
-        const messageTemplate = `Hi! Just a reminder that the Sunday Community Tournament starts today at 08:00PM. 
-             
-        Format: Swiss
-        Entry: Free
-
-        This is our free community tournament. No cash prizes, just fun, bragging rights, and a chance to sharpen your skills! Join the lobby before 8PM to avoid forfeiting. Register now: sparplay.com/tournaments/34 if you want to participate!
-        `;
-        //  const phone = "233" + user.phone.substr(1);// Assuming the phone numbers in the list are already in the correct format with country code
-        // console.log("realphone", phone);
-        //await sendSMS(phone, messageTemplate);
-      }
-    } catch (error) {
-      console.error("Error sending tournament reminder notifications:", error);
-    }
-
-    res.json({
-      success: true,
-      message: "Tournament reminder notifications sent successfully",
-    });
-  }),
-);
 
 app.post(
   "/api/tournament-notification-reminder",
@@ -751,7 +688,6 @@ server.listen(port, () => {
   console.log(`[server]: Environment: ${process.env.NODE_ENV}`);
 });
 
-
 export const matchmaker = new Matchmaker(redis, createMatchmakerMatch);
 export const matchForfeiter = new MatchForfeiter(serverSocket);
 export const expiredChallenges = new ExpiredChallenges(serverSocket);
@@ -770,9 +706,9 @@ matchmaker.on("matchFound", async (match) => {
 
   console.log("match", match.code);
 
-  const players = match.players.map((player:any) => ({
+  const players = match.players.map((player: any) => ({
     user_id: player.user.id,
-    username:player.user.username,
+    username: player.user.username,
     rating: player.user.rating,
     image_url: player.user.image_url,
     position: player.position,

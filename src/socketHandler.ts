@@ -106,7 +106,7 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
       try {
         const lockAcquired = await acquireLock(code);
         if (!lockAcquired) {
-          console.log("Request blocked: Processing previous  move.");
+          console.log("Request blocked: Processing previous move.");
           return;
         }
         console.log(`Deal cards request for game code: ${code}`);
@@ -271,6 +271,51 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
           status: "in_match",
           game_code: code,
         });
+        const game = await getGameByCode(code);
+        const isSpectator = !game.players.some(
+          (player: any) => player.user.id == userId,
+        );
+        console.log("join_is_spectator", isSpectator);
+        if (isSpectator) {
+          if (!game?.spectators) game.spectators = [];
+          if (game.spectators.indexOf(userId) == -1) {
+            game.spectators.push(userId);
+          }
+          await saveGame(code, game);
+        }
+      }
+    });
+
+    socket.on("leave-room", async (code) => {
+      console.log(`User ${userId} leaving game: ${code}`);
+      if (await gameExists(code)) {
+        socket.leave(code);
+        serverSocket.to(code).emit("userLeft", { userId, code });
+        let status = await getUserStatus(userId);
+        console.log(
+          `User before set ${userId} status: ${status} in leave-room`,
+        );
+        await setUserStatus(userId, "idle");
+        status = await getUserStatus(userId);
+        console.log(`User after set ${userId} status: ${status} in leave-room`);
+        serverSocket.emit("presence:status", {
+          userId,
+          status: "idle",
+        });
+        const game = await getGameByCode(code);
+        userGameMap.delete(userId);
+        const isSpectator = !game.players.some(
+          (player: any) => player.user.id == userId,
+        );
+        console.log("leave_is_spectator", isSpectator);
+        if (isSpectator) {
+          if (!game?.spectators) game.spectators = [];
+          const index = game.spectators.indexOf(userId);
+          if (index !== -1) {
+            game.spectators.splice(index, 1)
+            await saveGame(code, game);
+          }
+        }
       }
     });
 
@@ -332,26 +377,6 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
             serverSocket.to(gameCode).emit("gameData", game);
           }
         }
-      }
-    });
-
-    socket.on("leave-room", async (code) => {
-      console.log(`User ${userId} leaving game: ${code}`);
-      if (await gameExists(code)) {
-        socket.leave(code);
-        serverSocket.to(code).emit("userLeft", { userId, code });
-        let status = await getUserStatus(userId);
-        console.log(
-          `User before set ${userId} status: ${status} in leave-room`,
-        );
-        await setUserStatus(userId, "idle");
-        status = await getUserStatus(userId);
-        console.log(`User after set ${userId} status: ${status} in leave-room`);
-        serverSocket.emit("presence:status", {
-          userId,
-          status: "idle",
-        });
-        userGameMap.delete(userId);
       }
     });
 
@@ -661,7 +686,6 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
       "challenge:decline",
       async (payload: { challengeId: string; challengerId: string }, ack) => {
         try {
-          
           const result = await challengeService.declineChallenge(
             userId,
             payload.challengeId,

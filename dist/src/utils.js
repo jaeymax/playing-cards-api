@@ -150,7 +150,7 @@ const getGamesByCodes = (codes) => __awaiter(void 0, void 0, void 0, function* (
 });
 exports.getGamesByCodes = getGamesByCodes;
 const createMatchmakerMatch = (user1, user2) => __awaiter(void 0, void 0, void 0, function* () {
-    const game = yield (0, tournament_1.createTwoPlayerMatch)(user1);
+    const game = yield (0, tournament_1.createTwoPlayerMatch)(user1, 'in_progress');
     const { gameplayer1, gameplayer2 } = yield (0, tournament_1.createTwoPlayerMatchGamePlayers)(game.id, user1, user2);
     const gameCards = yield (0, tournament_1.createGameCardsForMatch)(game.id, gameplayer1.id);
     const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
@@ -158,7 +158,7 @@ const createMatchmakerMatch = (user1, user2) => __awaiter(void 0, void 0, void 0
 });
 exports.createMatchmakerMatch = createMatchmakerMatch;
 const createChallengeGame = (user1Id, user2Id) => __awaiter(void 0, void 0, void 0, function* () {
-    const game = yield (0, tournament_1.createTwoPlayerMatch)(user1Id);
+    const game = yield (0, tournament_1.createTwoPlayerMatch)(user1Id, 'in_progress');
     const { gameplayer1, gameplayer2 } = yield (0, tournament_1.createTwoPlayerMatchGamePlayers)(game.id, user1Id, user2Id);
     const gameCards = yield (0, tournament_1.createGameCardsForMatch)(game.id, gameplayer1.id);
     const newGame = Object.assign(Object.assign({}, game), { players: [gameplayer1, gameplayer2], cards: gameCards });
