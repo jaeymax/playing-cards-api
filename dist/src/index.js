@@ -33,6 +33,7 @@ const messages_1 = __importDefault(require("./routes/messages"));
 const cards_1 = __importDefault(require("./routes/cards"));
 const matchmaking_1 = __importDefault(require("./routes/matchmaking"));
 const leaderboard_1 = __importDefault(require("./routes/leaderboard"));
+const analytics_1 = __importDefault(require("./routes/analytics"));
 const tournaments_1 = __importDefault(require("./routes/tournaments"));
 const notifications_1 = __importDefault(require("./routes/notifications"));
 const matchhistory_1 = __importDefault(require("./routes/matchhistory"));
@@ -386,6 +387,7 @@ exports.app.use("/api/wallet", wallet_1.default);
 exports.app.use("/api/payout-method", payout_1.default);
 exports.app.use("/api/challenges", challenges_1.default);
 exports.app.use("/api/presence", presence_1.default);
+exports.app.use("/api/analytics", analytics_1.default);
 //app.use(notFoundMiddleware);
 exports.app.post("/api/test-sms", (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { phone } = req.body;

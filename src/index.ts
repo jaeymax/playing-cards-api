@@ -17,6 +17,7 @@ import messageRoute from "./routes/messages";
 import cardRoutes from "./routes/cards";
 import matchmakingRoutes from "./routes/matchmaking";
 import leaderboardRoutes from "./routes/leaderboard";
+import analyticsRoutes from "./routes/analytics"
 import tournamentRoutes from "./routes/tournaments";
 import notificationRoutes from "./routes/notifications";
 import matchhistoryRoutes from "./routes/matchhistory";
@@ -465,6 +466,7 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/payout-method", payoutRoutes);
 app.use("/api/challenges", challengeRoutes);
 app.use("/api/presence", presenceRoutes);
+app.use("/api/analytics", analyticsRoutes);
 //app.use(notFoundMiddleware);
 
 app.post(
