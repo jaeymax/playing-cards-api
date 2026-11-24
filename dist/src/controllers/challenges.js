@@ -612,6 +612,22 @@ const getChallenges = (0, express_async_handler_1.default)((req, res) => __await
     }
 }));
 exports.getChallenges = getChallenges;
+const getUserDirectChallenges = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { user_id } = req.body;
+    try {
+        const challenges = yield (0, db_1.default) `
+      SELECT c.id, c.creator_id, u.image_url, c.game_id, c.stake, c.platform_fee, c.winner_payout, c.win_points, c.include_sixed, c.include_aces, c.status, c.expires_at, c.created_at, c.type, c.is_rated, c.player_count FROM challenges c JOIN users u ON c.creator.id = u.id
+      WHERE status = 'waiting' and challenge_mode = 'direct'`;
+        res.json({ success: true, challenges });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Error fetching challenges",
+            error: error.message,
+        });
+    }
+}));
 const acceptChallenge = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { challenge_id } = req.body;

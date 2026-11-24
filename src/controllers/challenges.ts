@@ -723,6 +723,27 @@ const getChallenges = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
+const getUserDirectChallenges = asyncHandler(async (req: Request, res: Response) => {
+  const { user_id } = req.body;
+
+  try {
+    const challenges = await sql`
+      SELECT c.id, c.creator_id, u.image_url, c.game_id, c.stake, c.platform_fee, c.winner_payout, c.win_points, c.include_sixed, c.include_aces, c.status, c.expires_at, c.created_at, c.type, c.is_rated, c.player_count FROM challenges c JOIN users u ON c.creator.id = u.id
+      WHERE status = 'waiting' and challenge_mode = 'direct'`;
+
+    
+
+
+    res.json({ success: true, challenges });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching challenges",
+      error: error.message,
+    });
+  }
+});
+
 const acceptChallenge = asyncHandler(async (req: Request, res: Response) => {
   const { challenge_id } = req.body;
   const user_id = req.user?.userId;

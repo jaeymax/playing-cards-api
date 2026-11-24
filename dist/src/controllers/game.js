@@ -17,6 +17,7 @@ const express_async_handler_1 = __importDefault(require("express-async-handler")
 const db_1 = __importDefault(require("../config/db"));
 const gameFunctions_1 = require("../utils/gameFunctions");
 const __1 = require("..");
+const presenceService_1 = require("../services/presenceService");
 const createGame = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { userId, winPoints, numPlayers, includeSixes, includeAces, isStakeGame, stake, } = req.body;
@@ -568,6 +569,15 @@ const joinGame = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (gamePlayers.length + 1 == game[0].player_count) {
         yield (0, db_1.default) `UPDATE games SET status = 'in_progress' where id = ${game[0].id}`;
         gameInMemory.status = 'in_progress';
+        // set status of all players to in_match
+        gameInMemory.players.forEach((player) => __awaiter(void 0, void 0, void 0, function* () {
+            yield (0, presenceService_1.setUserStatus)(player.user.id, "in_match");
+            __1.serverSocket.emit("presence:status", {
+                userId: player.user.id,
+                status: "in_match",
+                game_code: gameCode,
+            });
+        }));
     }
     __1.serverSocket.to(gameCode).emit('gameData', gameInMemory);
     yield (0, gameFunctions_1.saveGame)(gameCode, gameInMemory);

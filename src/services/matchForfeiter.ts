@@ -4,10 +4,17 @@ import {
   getGameByCode,
   saveGame,
   getSingleEliminationTournamentLobbyData,
+  getNextActivePosition,
+  completeTrick,
+  getActivePlayers,
 } from "../utils/gameFunctions";
 import Redis from "ioredis";
 import sql from "../config/db";
-import { isTournamentMatch, markGameAsEndedAndForfeited, updateGamePlayersScores } from "../utils";
+import {
+  isTournamentMatch,
+  markGameAsEndedAndForfeited,
+  updateGamePlayersScores,
+} from "../utils";
 import {
   advanceSingleEliminationTournamentToNextRound,
   advanceSwissTournamentToNextRound,
@@ -25,7 +32,7 @@ export default class MatchForfeiter {
     this.serverSocket = serverSocket;
 
     this.queue = new Queue("forfeitQueue");
-    console.log('Creating MatchForfeiter worker...', process.pid, Date.now());
+    console.log("Creating MatchForfeiter worker...", process.pid, Date.now());
     this.worker = new Worker(
       "forfeitQueue",
       async (job: Job) => {
@@ -99,24 +106,21 @@ export default class MatchForfeiter {
     const winnerId = match.players.find(
       (p: any) => p.user.id !== match.current_turn_user_id,
     )?.user.id;
-    const loserId = match.current_turn_user_id;
+    const forfeiterId = match.current_turn_user_id;
 
-    const winner = match.players.find((p: any) => p.user.id === winnerId);
-    const loser = match.players.find((p: any) => p.user.id === loserId);
+
+   
     console.log(
-      `Forfeit processed for match ${gameCode}. Winner: ${winnerId}, Loser: ${loserId}`,
+      `Forfeit processed for match ${gameCode}. Forfeiter: ${forfeiterId}`,
     );
 
-    if(match.challenge && match.challenge.type == 'stake') {
+    if (match.player_count === 2 && match.challenge && match.challenge.type == "stake") {
       // update the challenge status to forfeited and update the challenge table with the winner
       await sql`UPDATE challenges SET status = 'forfeited', winner_id = ${winnerId} WHERE id = ${match.challenge_id}`;
 
       // credit the winner with the stake amount and update the challenge table with the winner and deduct the stake from the locked balance of the winner
       await settleCashChallenge(match.challenge.id, winnerId);
-
     }
-    ;
-
     // Notify Game Room
 
     const tournament = await isTournamentMatch(match.id);
@@ -140,13 +144,13 @@ export default class MatchForfeiter {
           const eliminateLoser = tx`
                 UPDATE tournament_participants 
                 SET status = 'eliminated' 
-                WHERE tournament_id = (SELECT tournament_id FROM tournament_matches WHERE game_id = ${match.id}) AND user_id = ${loserId}
+                WHERE tournament_id = (SELECT tournament_id FROM tournament_matches WHERE game_id = ${match.id}) AND user_id = ${forfeiterId}
               `;
 
           // 3. Update User Stats (Batch these!)
           const updateUserStats = tx`
                 UPDATE users SET games_played = games_played + 1 
-                WHERE id IN (${winnerId}, ${loserId})
+                WHERE id IN (${winnerId}, ${forfeiterId})
               `;
           const updateWinnerStats = tx`UPDATE users SET games_won = games_won + 1 WHERE id = ${winnerId}`;
 
@@ -160,7 +164,7 @@ export default class MatchForfeiter {
 
         this.serverSocket
           .to(`lobby_game_room:${gameCode}`)
-          .emit("matchForfeit", { winnerId, loserId });
+          .emit("matchForfeit", { winnerId, loserId: forfeiterId });
 
         //  await saveGame(gameCode, match); // Save the updated match state with timeouts and scores
         console.log(`event sent to lobby_game_room:${gameCode}`);
@@ -198,18 +202,18 @@ export default class MatchForfeiter {
           const loser = tx`
             UPDATE tournament_participants 
             SET losses = losses + 1
-            WHERE tournament_id = (SELECT tournament_id FROM tournament_matches WHERE game_id = ${match.id}) AND user_id = ${loserId}
+            WHERE tournament_id = (SELECT tournament_id FROM tournament_matches WHERE game_id = ${match.id}) AND user_id = ${forfeiterId}
           `;
 
           // 3. Update User Stats (Batch these!)
           const updateUserStats = tx`
               UPDATE users SET games_played = games_played + 1 
-              WHERE id IN (${winnerId}, ${loserId})
+              WHERE id IN (${winnerId}, ${forfeiterId})
             `;
           const updateWinnerStats = tx`UPDATE users SET games_won = games_won + 1 WHERE id = ${winnerId}`;
 
           // 4. Update Game Players
-          //const updateGamePlayers = tx`UPDATE game_players SET status = 'forfeited' WHERE game_id = ${match.id} AND user_id = ${loserId}`;
+          //const updateGamePlayers = tx`UPDATE game_players SET status = 'forfeited' WHERE game_id = ${match.id} AND user_id = ${forfeiterId}`;
 
           queries.push(winner, loser, updateUserStats, updateWinnerStats);
 
@@ -218,7 +222,7 @@ export default class MatchForfeiter {
 
         this.serverSocket
           .to(`lobby_game_room:${gameCode}`)
-          .emit("matchForfeit", { winnerId, loserId });
+          .emit("matchForfeit", { winnerId, loserId: forfeiterId });
         console.log(`event sent to lobby_game_room:${gameCode}`);
         const tournamentId = results[0][0].tournament_id;
         console.log("before lobby update");
@@ -236,17 +240,40 @@ export default class MatchForfeiter {
       }
     }
 
-    this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId, loserId });
+    this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId, loserId: forfeiterId });
 
     // Update Memory/Redis State
 
-    match.winner_id = winnerId;
-    match.status = "forfeited";
-    match.forfeited_by = loserId;
-    match.ended_at = Date.now();
-    await markGameAsEndedAndForfeited(match.id);
+  
+    const forfeitPlayer = match.players.find((p: any) => p.user.id === forfeiterId);
+    if (forfeitPlayer) {
+      forfeitPlayer.status = "forfeited";
+    }
+    
+    if (match.current_trick?.cards.length === getActivePlayers(match).length) {
+      console.log("current trick complete, completing trick");
+      completeTrick(match);
+    }else{
+      getNextActivePosition(match);
+      console.log("current trick not complete, setting next active position");
+    }
 
-    this.serverSocket.to(gameCode).emit('updatedGameData', match)
+    if(getActivePlayers(match).length === 1){
+      console.log("only one active player left, completing match");
+      match.status = "forfeited";
+      match.forfeited_by = forfeiterId;
+      match.winner_id = getActivePlayers(match)[0].user.id;
+      match.ended_at = Date.now();
+      await markGameAsEndedAndForfeited(match.id);
+      this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId, loserId: forfeiterId });
+    }else{
+       this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId:null, loserId: forfeiterId });
+    }
+
+
+
+
+    this.serverSocket.to(gameCode).emit("updatedGameData", match);
 
     if (match.is_rated) {
       const players = updateRatings(match.players, winnerId);
@@ -263,8 +290,8 @@ export default class MatchForfeiter {
         await sql`INSERT INTO rating_changes (user_id, tournament_id, rating_change) VALUES (${player.user.id}, ${tournament?.id}, ${ratingChange})`;
       }
     }
-
+    
+    
     await saveGame(gameCode, match);
-
   }
 }

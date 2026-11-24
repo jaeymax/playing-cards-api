@@ -255,38 +255,80 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
       }
     });
 
-    socket.on("join-room", async (code) => {
+    socket.on("join-room", async (code, user) => {
       console.log(`User ${userId} joining game: ${code}`);
       if (await gameExists(code)) {
         socket.join(code);
-        serverSocket.to(code).emit("userJoined", { userId, code });
+       // serverSocket.to(code).emit("userJoined", { userId, code });
         userGameMap.set(userId, code);
-        let status = await getUserStatus(userId);
-        console.log(`User before set ${userId} status: ${status} in join-room`);
-        await setUserStatus(userId, "in_match");
-        status = await getUserStatus(userId);
-        console.log(`User after set ${userId} status: ${status} in join-room`);
+        //let status = await getUserStatus(userId);
+        //console.log(`User before set ${userId} status: ${status} in join-room`);
+       // await setUserStatus(userId, "in_match");
+
+        //status = await getUserStatus(userId);
+        //console.log(`User after set ${userId} status: ${status} in join-room`);
         serverSocket.emit("presence:status", {
           userId,
           status: "in_match",
           game_code: code,
         });
         const game = await getGameByCode(code);
-        const isSpectator = !game.players.some(
+        const notInGame = !game.players.some(
           (player: any) => player.user.id == userId,
         );
-        console.log("join_is_spectator", isSpectator);
-        if (isSpectator) {
+
+        if(game.status == "in_progress" && notInGame) {
+          // If the game is in progress and the user is not a player, add them as a spectator
+          await setUserStatus(userId, "spectating_match");
+          serverSocket.emit("presence:status", {
+            userId,
+            status: "spectating_match",
+            game_code: code,
+          });
+
+          // fetch the user from the database to get their username and avatar
+          const userRow = await sql`SELECT id, username, image_url FROM users WHERE id = ${userId}`;
+          const userData = userRow[0];  
+
           if (!game?.spectators) game.spectators = [];
-          if (game.spectators.indexOf(userId) == -1) {
-            game.spectators.push(userId);
+          if (!game.spectators.some((spectator: any) => spectator.id == userId)) {
+            game.spectators.push(userData);
           }
           await saveGame(code, game);
+
         }
+        else if(game.status == "in_progress" && !notInGame) {
+          // If the game is in progress and the user is a player, mark them as in match
+          await setUserStatus(userId, "in_match");
+          serverSocket.emit("presence:status", {
+            userId,
+            status: "in_match",
+            game_code: code,
+          });
+        }
+        else if (game.status == "waiting") {
+          // if the game is waiting for players mark the user as in lobby
+          await setUserStatus(userId, "in_lobby");
+          serverSocket.emit("presence:status", {
+            userId,
+            status: "in_lobby",
+            game_code: code,
+          });
+
+        }
+
+        // console.log("join_not_in_game", notInGame);
+        // if (notInGame && game.status == "in_progress") {
+        //   if (!game?.spectators) game.spectators = [];
+        //   if (game.spectators.indexOf(userId) == -1) {
+        //     game.spectators.push(userId);
+        //   }
+        //   await saveGame(code, game);
+        // }
       }
     });
 
-    socket.on("leave-room", async (code) => {
+    socket.on("leave-room", async (code, user) => {
       console.log(`User ${userId} leaving game: ${code}`);
       if (await gameExists(code)) {
         socket.leave(code);
@@ -304,13 +346,13 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
         });
         const game = await getGameByCode(code);
         userGameMap.delete(userId);
-        const isSpectator = !game.players.some(
+        const notInGame = !game.players.some(
           (player: any) => player.user.id == userId,
         );
-        console.log("leave_is_spectator", isSpectator);
-        if (isSpectator) {
+        console.log("leave_not_in_game", notInGame);
+        if (notInGame && game.status == "in_progress") {
           if (!game?.spectators) game.spectators = [];
-          const index = game.spectators.indexOf(userId);
+          const index = game.spectators.findIndex((spectator: any) => spectator.id == userId);
           if (index !== -1) {
             game.spectators.splice(index, 1)
             await saveGame(code, game);
@@ -742,6 +784,24 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
             last_active = NOW()
           WHERE id = ${userId}
         `;
+
+        // remove the user from any game they were in
+        const gameCode = userGameMap.get(userId);
+        if (gameCode) {
+          const game = await getGameByCode(gameCode);
+          if (game) {
+            // Remove the user from spectators
+
+            if (game?.spectators) {
+              game.spectators = game.spectators.filter(
+                (spectator: any) => spectator.id !== userId,
+              );
+            }
+            await saveGame(gameCode, game);
+          }
+          userGameMap.delete(userId);
+        }
+
         } else {
           console.log(`User ${userId} still has another active connection`);
         }
@@ -749,23 +809,6 @@ export const initializeSocketHandler = async (serverSocket: Server) => {
         console.error(`Error removing presence for ${userId}:`, error);
       }
 
-      // mark the last_active timestamp for the user in the database
-      // await sql`UPDATE users SET last_active = NOW() WHERE id = ${userId}`
-      //   .then(() => {
-      //     console.log(`Updated last_active for user ${userId}`);
-      //   })
-      //   .catch((err) => {
-      //     console.error(`Error updating last_active for user ${userId}:`, err);
-      //   });
-
-      // mark the user as offline in the database
-      // await sql`UPDATE users SET online_status = false WHERE id = ${userId}`
-      //   .then(() => {
-      //     console.log(`Marked user ${userId} as offline`);
-      //   })
-      //   .catch((err) => {
-      //     console.error(`Error marking user ${userId} as offline:`, err);
-      //   });
     });
   });
 

@@ -382,9 +382,10 @@ export class ChallengeService {
       };
     }
 
-    const targetProfile = await this.getPlayerProfile(targetUserId);
+    const challengerProfile = await this.getPlayerProfile(challengerId);
+    //const targetProfile = await this.getPlayerProfile(targetUserId);
 
-    if (!targetProfile) {
+    if (!challengerProfile) {
       return {
         success: false,
         error: "That player could not be found.",
@@ -422,7 +423,7 @@ export class ChallengeService {
     await this.emitToUser(targetUserId, "challenge:received", {
       id,
       challengeId: id,
-      challenger: targetProfile,
+      challenger: challengerProfile,
       expiresAt,
     });
 

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.gameExists = exports.getSingleEliminationTournamentLobbyData = exports.hasSuit = exports.getNextPlayerPosition = exports.getPlayerHand = exports.playCard = exports.shuffleDeck = exports.fisherYatesShuffle = exports.dealCards = exports.getDealingSequence = void 0;
+exports.gameExists = exports.getSingleEliminationTournamentLobbyData = exports.hasSuit = exports.getNextActivePosition = exports.getNextPlayerPosition = exports.getPlayerHand = exports.getActivePlayers = exports.completeTrick = exports.playCard = exports.shuffleDeck = exports.fisherYatesShuffle = exports.dealCards = exports.getDealingSequence = void 0;
 exports.saveGame = saveGame;
 exports.getGameByCode = getGameByCode;
 exports.createGamePlayer = createGamePlayer;
@@ -30,8 +30,14 @@ const getDealingSequence = (game) => {
     let currentPlayerPosition = dealerPosition;
     while (true) {
         let nextPlayerPosition = (currentPlayerPosition + 1) % game.player_count;
-        const player = game.players.find((player) => player.position == nextPlayerPosition).id;
-        dealingSequence.push(player);
+        const player = game.players.find((player) => player.position == nextPlayerPosition);
+        if (player.status === "forfeited") {
+            currentPlayerPosition = nextPlayerPosition;
+            if (nextPlayerPosition == dealerPosition)
+                break;
+            continue; // Skip forfeited players
+        }
+        dealingSequence.push(player.id);
         currentPlayerPosition = nextPlayerPosition;
         if (nextPlayerPosition == dealerPosition)
             break;
@@ -76,8 +82,7 @@ const dealCards = (game) => __awaiter(void 0, void 0, void 0, function* () {
     }
     game.turn_started_at = Date.now();
     game.turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
-    game.current_player_position =
-        (game.current_player_position + 1) % game.player_count;
+    (0, exports.getNextActivePosition)(game);
     game.current_turn_user_id = (_b = (_a = game.players.find((player) => player.position == game.current_player_position)) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.id;
     yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
 });
@@ -106,6 +111,11 @@ const playCard = (game, card_id, player_id, socket) => __awaiter(void 0, void 0,
     if (player.position !== game.current_player_position) {
         console.log(`${player.user.username} it is not your turn to play`);
         socket.emit("gameMessage", "It's not your turn to play");
+        return;
+    }
+    if (player.status === "forfeited") {
+        console.log(`${player.user.username} you have forfeited and cannot play`);
+        socket.emit("gameMessage", "You have forfeited and cannot play");
         return;
     }
     const played_card = game.cards.find((card) => card.id === card_id);
@@ -159,11 +169,11 @@ const playCard = (game, card_id, player_id, socket) => __awaiter(void 0, void 0,
     const turn_ends_at = game.turn_started_at + game.turn_timeout_seconds * 1000;
     game.turn_ends_at = turn_ends_at;
     yield index_1.matchForfeiter.scheduleForfeit(game.code, game.turn_timeout_seconds * 1000);
-    if (game.current_trick.cards.length === game.players.length) {
-        completeTrick(game);
+    if (game.current_trick.cards.length === (0, exports.getActivePlayers)(game).length) {
+        (0, exports.completeTrick)(game);
     }
     else {
-        (0, exports.getNextPlayerPosition)(game);
+        (0, exports.getNextActivePosition)(game);
     }
     const before_player = (_b = game.players.find((p) => p.user.id == game.current_turn_user_id)) === null || _b === void 0 ? void 0 : _b.user.username;
     const current_turn_user_id = (_c = game.players.find((p) => p.position === game.current_player_position)) === null || _c === void 0 ? void 0 : _c.user.id;
@@ -200,8 +210,17 @@ const completeTrick = (game) => __awaiter(void 0, void 0, void 0, function* () {
         leader_position: current_trick.leader_position,
     };
     game.current_player_position = current_trick.leader_position;
+    const current_player = game.players.find((player) => player.position === game.current_player_position);
+    if (current_player.status === "forfeited") {
+        game.current_player_position = (0, exports.getNextActivePosition)(game);
+    }
     game.round_number++;
 });
+exports.completeTrick = completeTrick;
+const getActivePlayers = (game) => {
+    return game.players.filter((player) => player.status === "active");
+};
+exports.getActivePlayers = getActivePlayers;
 const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
     const final_trick = game.completed_tricks[game.completed_tricks.length - 1];
     const winning_card = final_trick.cards.find((card) => card.player_position === final_trick.leader_position);
@@ -321,7 +340,9 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
 });
 const allCardsPlayed = (game) => {
     const dealt_cards = game.cards.filter((card) => card.status !== "in_drawpile");
-    return dealt_cards.every((card) => card.status === "played");
+    const activePlayers = (0, exports.getActivePlayers)(game);
+    const activePlayersCards = dealt_cards.filter((card) => activePlayers.some((player) => player.id === card.player_id));
+    return activePlayersCards.every((card) => card.status === "played");
 };
 const getPlayerHand = (game, player_id) => {
     const hand = game.cards.filter((card) => card.player_id === player_id && card.status === "in_hand");
@@ -334,6 +355,22 @@ const getNextPlayerPosition = (game) => {
     return game.current_player_position;
 };
 exports.getNextPlayerPosition = getNextPlayerPosition;
+const getNextActivePosition = (game) => {
+    const currentPosition = game.current_player_position;
+    const players = game.players;
+    const playerCount = game.player_count;
+    let nextPosition = currentPosition;
+    do {
+        nextPosition = (nextPosition + 1) % playerCount;
+        const nextPlayer = players.find((p) => p.position === nextPosition);
+        if (nextPlayer && nextPlayer.status !== "forfeited") {
+            game.current_player_position = nextPosition;
+            return nextPosition;
+        }
+    } while (nextPosition !== currentPosition);
+    return null;
+};
+exports.getNextActivePosition = getNextActivePosition;
 const hasSuit = (player_hand, suit) => {
     return player_hand.some((card) => getSuit(card) === suit);
 };

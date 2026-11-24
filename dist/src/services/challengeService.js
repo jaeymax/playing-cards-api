@@ -281,8 +281,9 @@ class ChallengeService {
                     error: "You cannot challenge yourself.",
                 };
             }
-            const targetProfile = yield this.getPlayerProfile(targetUserId);
-            if (!targetProfile) {
+            const challengerProfile = yield this.getPlayerProfile(challengerId);
+            //const targetProfile = await this.getPlayerProfile(targetUserId);
+            if (!challengerProfile) {
                 return {
                     success: false,
                     error: "That player could not be found.",
@@ -301,7 +302,7 @@ class ChallengeService {
             yield this.emitToUser(targetUserId, "challenge:received", {
                 id,
                 challengeId: id,
-                challenger: targetProfile,
+                challenger: challengerProfile,
                 expiresAt,
             });
             yield this.emitToUser(challengerId, "challenge:sent", {

@@ -4,7 +4,8 @@ export type PlayerStatus =
   | "idle"
   | "looking_for_game"
   | "in_lobby"
-  | "in_match";
+  | "in_match"
+  | "spectating_match";
 
 const ONLINE_USERS_KEY = "presence:online";
 const USERS_STATUS_KEY = "presence:status"

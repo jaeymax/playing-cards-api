@@ -3,6 +3,7 @@ import asyncHandler from "express-async-handler";
 import sql from "../config/db";
 import { createGamePlayer, getGameByCode, saveGame } from "../utils/gameFunctions";
 import { expiredChallenges, mixpanel, serverSocket } from "..";
+import { setUserStatus } from "../services/presenceService";
 
 const createGame = asyncHandler(async (req: Request, res: Response) => {
   const {
@@ -654,6 +655,15 @@ const joinGame = async (req: Request, res: Response) => {
   if(gamePlayers.length + 1 == game[0].player_count){
      await sql`UPDATE games SET status = 'in_progress' where id = ${game[0].id}`;
      gameInMemory.status = 'in_progress';
+     // set status of all players to in_match
+     gameInMemory.players.forEach(async (player:any) => {
+        await setUserStatus(player.user.id, "in_match");
+        serverSocket.emit("presence:status", {
+          userId: player.user.id,
+          status: "in_match",
+          game_code: gameCode,
+        });
+     });
   }
 
 
