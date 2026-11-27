@@ -236,6 +236,58 @@ const getPlayerProfile = async (
   return result[0] as ChallengerProfile;
 };
 
+
+const updateRivalH2H = async (winnerId: number, loserId: number) => {
+  try {
+    if (winnerId === loserId) {
+      throw new Error("Winner and loser cannot be the same player");
+    }
+
+    const player1Id = Math.min(winnerId, loserId);
+    const player2Id = Math.max(winnerId, loserId);
+
+    const player1Won = winnerId === player1Id;
+
+    await sql`
+      INSERT INTO rivals (
+        player_1_id,
+        player_2_id,
+        player_1_wins,
+        player_2_wins,
+        total_matches,
+        last_match_at
+      )
+      VALUES (
+        ${player1Id},
+        ${player2Id},
+        ${player1Won ? 1 : 0},
+        ${player1Won ? 0 : 1},
+        1,
+        NOW()
+      )
+      ON CONFLICT (player_1_id, player_2_id)
+      DO UPDATE SET
+        player_1_wins = rivals.player_1_wins +
+          ${player1Won ? 1 : 0},
+
+        player_2_wins = rivals.player_2_wins +
+          ${player1Won ? 0 : 1},
+
+        total_matches = rivals.total_matches + 1,
+
+        last_match_at = NOW(),
+        updated_at = NOW();
+    `;
+
+    return true;
+
+  } catch (error) {
+    console.error("Error updating Rival H2H:", error);
+    throw error;
+  }
+};
+
+
 export {
   updateWinnerWonCount,
   updateLoserWinningStreak,
@@ -252,4 +304,5 @@ export {
   createEmitToUser,
   getPlayerProfile,
   createChallengeGame,
+  updateRivalH2H
 };

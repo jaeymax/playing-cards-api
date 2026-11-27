@@ -9,6 +9,7 @@ const authMiddleware_1 = __importDefault(require("../middlewares/authMiddleware"
 // https://expressjs.com/en/guide/routing.html
 const router = (0, express_1.Router)();
 router.get("/", authMiddleware_1.default, friends_1.getFriends);
+router.get("/rivals", authMiddleware_1.default, friends_1.getRivals);
 router.get("/requests", authMiddleware_1.default, friends_1.getFriendRequests);
 router.get("/sent-requests", authMiddleware_1.default, friends_1.getSentFriendRequests);
 router.get("/status/:friend_id", authMiddleware_1.default, friends_1.getFriendshipStatus);

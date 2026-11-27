@@ -23,20 +23,52 @@ exports.getUserNotifications = (0, express_async_handler_1.default)((req, res) =
         return;
     }
     const notifications = yield (0, db_1.default) `
-        SELECT 
-            n.id,
-            n.type,
-            n.title,
-            n.message,
-            n.is_read,
-            n.action,
-            n.reference_id,
-            n.actor_id,
-            n.created_at
-        FROM notifications n
-        WHERE n.user_id = ${id}
-        ORDER BY n.created_at DESC
-    `;
+    SELECT 
+        n.id,
+        n.type,
+        n.title,
+        n.message,
+        n.is_read,
+        n.action,
+        n.reference_id,
+        n.actor_id,
+        n.created_at,
+
+        CASE
+            WHEN n.type = 'friend' THEN
+                json_build_object(
+                    'id', u.id,
+                    'username', u.username,
+                    'image_url', u.image_url
+                )
+            ELSE NULL
+        END AS actor,
+
+        CASE
+            WHEN n.type = 'achievement' THEN
+                json_build_object(
+                    'id', a.id,
+                    'name', a.name,
+                    'description', a.description,
+                    'icon', a.icon
+                )
+            ELSE NULL
+        END AS reference
+
+    FROM notifications n
+
+    LEFT JOIN users u
+        ON u.id = n.actor_id
+        AND n.type = 'friend'
+
+    LEFT JOIN achievements a
+        ON a.id = n.reference_id
+        AND n.type = 'achievement'
+
+    WHERE n.user_id = ${id}
+
+    ORDER BY n.created_at DESC
+`;
     res.json(notifications);
 }));
 exports.markNotificationAsRead = (0, express_async_handler_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {

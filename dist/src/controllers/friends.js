@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchUsers = exports.removeFriend = exports.cancelFriendRequest = exports.sendFriendRequest = exports.declineFriendRequest = exports.acceptFriendRequest = exports.getSentFriendRequests = exports.getFriendshipStatus = exports.getFriendRequests = exports.getFriends = void 0;
+exports.getRivals = exports.searchUsers = exports.removeFriend = exports.cancelFriendRequest = exports.sendFriendRequest = exports.declineFriendRequest = exports.acceptFriendRequest = exports.getSentFriendRequests = exports.getFriendshipStatus = exports.getFriendRequests = exports.getFriends = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const users_1 = require("./users");
 const notification_1 = require("../services/notification");
@@ -536,7 +536,7 @@ const acceptFriendRequest = (req, res) => __awaiter(void 0, void 0, void 0, func
         const friendship = updatedFriendship[0];
         const notificationTitle = 'Friend Request Accepted';
         const notificationMessage = `${addresseeName[0].username} accepted your friend request`;
-        yield (0, notification_1.createNotification)(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request', updatedFriendship[0].addresee_id, updatedFriendship[0].id);
+        yield (0, notification_1.createNotification)(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request_accepted', userId, updatedFriendship[0].id);
         yield (0, notification_1.sendNotificationToUser)(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'https://www.sparplay.com/friends');
         return res.status(200).json({
             message: "Friend request accepted successfully",
@@ -958,3 +958,60 @@ const searchUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.searchUsers = searchUsers;
+const getRivals = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = req.user.userId;
+        const rivals = yield (0, db_1.default) `
+      SELECT
+        r.id,
+        r.player_1_id,
+        r.player_2_id,
+        r.player_1_wins,
+        r.player_2_wins,
+        r.total_matches,
+        r.last_match_at,
+
+        u.id AS rival_id,
+        u.username,
+        u.image_url,
+
+        CASE
+          WHEN r.player_1_id = ${userId}
+            THEN r.player_1_wins
+          ELSE r.player_2_wins
+        END AS user_wins,
+
+        CASE
+          WHEN r.player_1_id = ${userId}
+            THEN r.player_2_wins
+          ELSE r.player_1_wins
+        END AS rival_wins
+
+      FROM rivals r
+
+      JOIN users u
+        ON u.id = CASE
+          WHEN r.player_1_id = ${userId}
+            THEN r.player_2_id
+          ELSE r.player_1_id
+        END
+
+      WHERE
+        (r.player_1_id = ${userId}
+          OR r.player_2_id = ${userId})
+        AND r.total_matches >= 3
+
+      ORDER BY r.last_match_at DESC;
+    `;
+        return res.status(200).json({
+            rivals,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching rivals:", error);
+        return res.status(500).json({
+            message: "Failed to fetch rivals",
+        });
+    }
+});
+exports.getRivals = getRivals;

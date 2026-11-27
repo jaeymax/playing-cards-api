@@ -267,6 +267,7 @@ const endGame = (game) => __awaiter(void 0, void 0, void 0, function* () {
         yield (0, utils_1.updateWinnerWonCount)(winner.user.id);
         if (loser) {
             yield (0, utils_1.updateLoserWinningStreak)(loser.user.id);
+            yield (0, utils_1.updateRivalH2H)(winner.user.id, loser.user.id);
         }
         game.status = "completed";
         yield saveGame(game.code, game);

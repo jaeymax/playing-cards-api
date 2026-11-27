@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createChallengeGame = exports.getPlayerProfile = exports.createEmitToUser = exports.createMatchmakerMatch = exports.getGamesByCodes = exports.markTournamentAsEndedAndCompleted = exports.getMatchLoser = exports.isTournamentMatch = exports.updateGamePlayersScores = exports.getMatchWinner = exports.updateGamesPlayedForGamePlayers = exports.markGameAsEndedAndForfeited = exports.markGameAsEndedAndCompleted = exports.updateLoserWinningStreak = exports.updateWinnerWonCount = void 0;
+exports.updateRivalH2H = exports.createChallengeGame = exports.getPlayerProfile = exports.createEmitToUser = exports.createMatchmakerMatch = exports.getGamesByCodes = exports.markTournamentAsEndedAndCompleted = exports.getMatchLoser = exports.isTournamentMatch = exports.updateGamePlayersScores = exports.getMatchWinner = exports.updateGamesPlayedForGamePlayers = exports.markGameAsEndedAndForfeited = exports.markGameAsEndedAndCompleted = exports.updateLoserWinningStreak = exports.updateWinnerWonCount = void 0;
 const _1 = require(".");
 const db_1 = __importDefault(require("./config/db"));
 const tournament_1 = require("./utils/tournament");
@@ -197,3 +197,49 @@ const getPlayerProfile = (userId) => __awaiter(void 0, void 0, void 0, function*
     return result[0];
 });
 exports.getPlayerProfile = getPlayerProfile;
+const updateRivalH2H = (winnerId, loserId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (winnerId === loserId) {
+            throw new Error("Winner and loser cannot be the same player");
+        }
+        const player1Id = Math.min(winnerId, loserId);
+        const player2Id = Math.max(winnerId, loserId);
+        const player1Won = winnerId === player1Id;
+        yield (0, db_1.default) `
+      INSERT INTO rivals (
+        player_1_id,
+        player_2_id,
+        player_1_wins,
+        player_2_wins,
+        total_matches,
+        last_match_at
+      )
+      VALUES (
+        ${player1Id},
+        ${player2Id},
+        ${player1Won ? 1 : 0},
+        ${player1Won ? 0 : 1},
+        1,
+        NOW()
+      )
+      ON CONFLICT (player_1_id, player_2_id)
+      DO UPDATE SET
+        player_1_wins = rivals.player_1_wins +
+          ${player1Won ? 1 : 0},
+
+        player_2_wins = rivals.player_2_wins +
+          ${player1Won ? 0 : 1},
+
+        total_matches = rivals.total_matches + 1,
+
+        last_match_at = NOW(),
+        updated_at = NOW();
+    `;
+        return true;
+    }
+    catch (error) {
+        console.error("Error updating Rival H2H:", error);
+        throw error;
+    }
+});
+exports.updateRivalH2H = updateRivalH2H;

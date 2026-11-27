@@ -22,6 +22,7 @@ import {
 } from "../utils/tournament";
 import { updateRatings } from "../utils/rating";
 import { settleCashChallenge } from "./cashChallengeSettlerService";
+import { setUserStatus } from "./presenceService";
 
 export default class MatchForfeiter {
   private queue: Queue;
@@ -265,6 +266,11 @@ export default class MatchForfeiter {
       match.winner_id = getActivePlayers(match)[0].user.id;
       match.ended_at = Date.now();
       await markGameAsEndedAndForfeited(match.id);
+      // const gamePlayers = match.players;
+      // for(let player of gamePlayers){
+      //   await setUserStatus(player.user.id, 'idle');
+      //   this.serverSocket.emit('presence:status', {userId: player.user.id, status:'idle'})
+      // }
       this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId, loserId: forfeiterId });
     }else{
        this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId:null, loserId: forfeiterId });

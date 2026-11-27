@@ -21,6 +21,7 @@ import {
   updateGamePlayersScores,
   updateGamesPlayedForGamePlayers,
   updateLoserWinningStreak,
+  updateRivalH2H,
   updateWinnerWonCount,
 } from "../utils";
 import { settleCashChallenge } from "../services/cashChallengeSettlerService";
@@ -346,11 +347,13 @@ const endGame = async (game: any) => {
       });
     }, 1000);
 
+
     await markGameAsEndedAndCompleted(game.id);
     await updateGamesPlayedForGamePlayers(game.id);
     await updateWinnerWonCount(winner.user.id);
     if (loser) {
       await updateLoserWinningStreak(loser.user.id);
+      await updateRivalH2H(winner.user.id, loser.user.id);
     }
 
     game.status = "completed";

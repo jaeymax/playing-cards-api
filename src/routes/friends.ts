@@ -9,7 +9,8 @@ import {
   removeFriend,
   getSentFriendRequests,
   getFriendshipStatus,
-  searchUsers
+  searchUsers,
+  getRivals
 } from "../controllers/friends";
 import authMiddleware from "../middlewares/authMiddleware";
 
@@ -18,6 +19,7 @@ import authMiddleware from "../middlewares/authMiddleware";
 const router = Router();
 
 router.get("/", authMiddleware, getFriends);
+router.get("/rivals", authMiddleware, getRivals)
 router.get("/requests", authMiddleware, getFriendRequests);
 router.get("/sent-requests", authMiddleware, getSentFriendRequests);
 router.get("/status/:friend_id", authMiddleware, getFriendshipStatus);

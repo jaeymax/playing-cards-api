@@ -204,6 +204,11 @@ class MatchForfeiter {
                 match.winner_id = (0, gameFunctions_1.getActivePlayers)(match)[0].user.id;
                 match.ended_at = Date.now();
                 yield (0, utils_1.markGameAsEndedAndForfeited)(match.id);
+                // const gamePlayers = match.players;
+                // for(let player of gamePlayers){
+                //   await setUserStatus(player.user.id, 'idle');
+                //   this.serverSocket.emit('presence:status', {userId: player.user.id, status:'idle'})
+                // }
                 this.serverSocket.to(gameCode).emit("matchForfeit", { winnerId, loserId: forfeiterId });
             }
             else {

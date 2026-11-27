@@ -582,7 +582,7 @@ const acceptFriendRequest = async (req: Request, res: Response) => {
 
     const notificationTitle = 'Friend Request Accepted'
     const notificationMessage = `${addresseeName[0].username} accepted your friend request`
-    await createNotification(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request', updatedFriendship[0].addresee_id, updatedFriendship[0].id);
+    await createNotification(updatedFriendship[0].requester_id, 'friend', notificationTitle, notificationMessage, 'friend_request_accepted', userId, updatedFriendship[0].id);
     await sendNotificationToUser(updatedFriendship[0].requester_id, notificationTitle, notificationMessage, 'https://www.sparplay.com/friends')
 
     return res.status(200).json({
@@ -1052,6 +1052,66 @@ const searchUsers = async (req: Request, res: Response) => {
   }
 };
 
+const getRivals = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.userId;
+
+    const rivals = await sql`
+      SELECT
+        r.id,
+        r.player_1_id,
+        r.player_2_id,
+        r.player_1_wins,
+        r.player_2_wins,
+        r.total_matches,
+        r.last_match_at,
+
+        u.id AS rival_id,
+        u.username,
+        u.image_url,
+
+        CASE
+          WHEN r.player_1_id = ${userId}
+            THEN r.player_1_wins
+          ELSE r.player_2_wins
+        END AS user_wins,
+
+        CASE
+          WHEN r.player_1_id = ${userId}
+            THEN r.player_2_wins
+          ELSE r.player_1_wins
+        END AS rival_wins
+
+      FROM rivals r
+
+      JOIN users u
+        ON u.id = CASE
+          WHEN r.player_1_id = ${userId}
+            THEN r.player_2_id
+          ELSE r.player_1_id
+        END
+
+      WHERE
+        (r.player_1_id = ${userId}
+          OR r.player_2_id = ${userId})
+        AND r.total_matches >= 3
+
+      ORDER BY r.last_match_at DESC;
+    `;
+
+    return res.status(200).json({
+      rivals,
+    });
+  } catch (error) {
+    console.error("Error fetching rivals:", error);
+
+    return res.status(500).json({
+      message: "Failed to fetch rivals",
+    });
+  }
+};
+
+
 export {
   getFriends,
   getFriendRequests,
@@ -1062,5 +1122,6 @@ export {
   sendFriendRequest,
   cancelFriendRequest,
   removeFriend,
-  searchUsers
+  searchUsers,
+  getRivals
 };

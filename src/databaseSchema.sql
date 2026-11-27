@@ -517,3 +517,142 @@ CREATE TABLE user_fcm_tokens (
 
     UNIQUE (user_id, installation_id)
 );
+
+CREATE TABLE achievements (
+    id SERIAL PRIMARY KEY,
+
+    code VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+
+    category VARCHAR(50) NOT NULL,
+    
+    points INTEGER NOT NULL DEFAULT 0,
+
+    target_value INTEGER DEFAULT 0,
+
+    type VARCHAR(20) NOT NULL,
+
+    icon VARCHAR(100),
+    
+    rarity VARCHAR(20) NOT NULL DEFAULT 'common',
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+
+    repeatable BOOLEAN NOT NULL DEFAULT FALSE,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT achievements_points_check
+        CHECK (points >= 0),
+
+    CONSTRAINT achievements_rarity_check
+        CHECK (
+            rarity IN (
+                'common',
+                'uncommon',
+                'rare',
+                'epic',
+                'legendary'
+            )
+        )
+
+    CONSTRAINT achievements_type_check
+        CHECK (
+            type IN (
+                'counter',
+                'threshold',
+                'event',
+                'streak',
+                'record'
+            )
+        )
+)
+
+/*
+
+Achievement category
+
+skill
+winning
+streak
+tournament
+progression
+games
+social
+special
+seasonal
+
+Achievment category
+
+counter
+threshold
+event
+streak
+record
+
+Achievement Icon
+sword
+broom
+flame
+trophy
+crown
+shield
+star
+
+
+
+*/
+
+
+CREATE TABLE user_achievements (
+    id SERIAL PRIMARY KEY,
+
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    achievement_id INTEGER NOT NULL REFERENCES achievements(id) ON DELETE CASCADE,
+
+    unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    progress INTEGER NOT NULL DEFAULT 0,
+
+    current_value INTEGER NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE(user_id, achievement_id)
+);
+
+CREATE TABLE achievement_unlocks (
+    id SERIAL PRIMARY KEY,
+
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    achievement_id INTEGER NOT NULL REFERENCES achievements(id) ON DELETE CASCADE,
+
+    unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    source_type VARCHAR(50),
+    source_id INTEGER
+);
+
+CREATE TABLE rivals (
+    id BIGSERIAL PRIMARY KEY,
+
+    player_1_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    player_2_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    player_1_wins INT NOT NULL DEFAULT 0,
+    player_2_wins INT NOT NULL DEFAULT 0,
+
+    total_matches INT NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_match_at TIMESTAMPTZ NOT NULL,
+
+    CHECK (player_1_id < player_2_id),
+    CHECK (player_1_id <> player_2_id),
+
+    UNIQUE (player_1_id, player_2_id)
+);
