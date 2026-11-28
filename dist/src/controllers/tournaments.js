@@ -75,7 +75,7 @@ exports.getLatestSwissTournamentWinners = (0, express_async_handler_1.default)((
         res.status(400).json({ message: "No tournament found" });
         return;
     }
-    const results = yield (0, db_1.default) `SELECT u.id, u.username as name, u.image_url, tp.score, tp.losses FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournament_id[0].id} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC LIMIT 3`;
+    const results = yield (0, db_1.default) `SELECT u.id, u.username as name, u.image_url, tp.score, tp.losses FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournament_id[0].id} ORDER BY tp.score DESC, tp.buchholz_score DESC, tp.sonneborn_berger_score DESC, u.rating DESC LIMIT 3`;
     res.status(200).json({
         tournamentId: tournament_id[0].id,
         winners: results,

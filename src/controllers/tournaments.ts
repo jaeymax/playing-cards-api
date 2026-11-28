@@ -119,7 +119,7 @@ export const getLatestSwissTournamentWinners = expressAsyncHandler(
     }
 
     const results =
-      await sql`SELECT u.id, u.username as name, u.image_url, tp.score, tp.losses FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournament_id[0].id} ORDER BY tp.score DESC, tp.buchholz_score DESC, u.rating DESC LIMIT 3`;
+      await sql`SELECT u.id, u.username as name, u.image_url, tp.score, tp.losses FROM users u JOIN tournament_participants tp ON u.id = tp.user_id WHERE tp.tournament_id = ${tournament_id[0].id} ORDER BY tp.score DESC, tp.buchholz_score DESC, tp.sonneborn_berger_score DESC, u.rating DESC LIMIT 3`;
 
     res.status(200).json({
       tournamentId: tournament_id[0].id,
